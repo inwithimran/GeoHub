@@ -1,0 +1,68 @@
+rules_version = '2';
+
+// ============================================================
+// FIRESTORE SECURITY RULES for GeoHub
+// Paste this into: Firebase Console -> Firestore Database -> Rules
+//
+// IMPORTANT: replace the emails in isAdmin() below with the same
+// list you put in ADMIN_EMAILS inside js/firebase-config.js.
+// ============================================================
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.email in [
+        "in.with.imran@gmail.com"
+      ];
+    }
+
+    // ---- Student profiles (also powers the Classmate Directory) ----
+    match /users/{uid} {
+      allow read: if isSignedIn();               // any classmate can view the directory
+      allow create: if isOwner(uid);              // only during signup, by that student
+      allow update: if isOwner(uid);              // students can edit only their own profile
+      allow delete: if false;
+    }
+
+    // ---- Student Wall posts ----
+    match /posts/{postId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.authorUid == request.auth.uid;
+      // Allow the author to edit their own post, OR anyone signed in to toggle the "likes" array
+      allow update: if isSignedIn();
+      allow delete: if isOwner(resource.data.authorUid);
+
+      match /comments/{commentId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && request.resource.data.authorUid == request.auth.uid;
+        allow update, delete: if isOwner(resource.data.authorUid);
+      }
+    }
+
+    // ---- Notes & Sheet Hub resources ----
+    match /resources/{resId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.contributorUid == request.auth.uid;
+      allow update, delete: if isOwner(resource.data.contributorUid);
+    }
+
+    // ---- Notice board: only CR/admin can write, everyone can read ----
+    match /notices/{noticeId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    // ---- Weekly class routine: only CR/admin can write, everyone can read ----
+    match /routine/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+  }
+}
