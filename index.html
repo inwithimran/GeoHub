@@ -2,9 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
 <title>GeoHub · Geography &amp; Environment Dept.</title>
-<meta name="theme-color" content="#14532d" />
+<meta name="theme-color" content="#0d3b20" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
@@ -13,53 +16,75 @@
        LOADING SCREEN — shown while Firebase checks auth state
   ============================================================= -->
   <div id="loading-screen" class="loading-screen">
-    <div class="loader-ring"></div>
-    <p>Loading GeoHub…</p>
+    <div class="loader-mark-wrap">
+      <div class="loader-ring"></div>
+      <div class="loader-ring ring-2"></div>
+      <div class="loader-mark">GH</div>
+    </div>
+    <p><span id="loading-label">Loading GeoHub</span><span class="loading-dots"><span></span><span></span><span></span></span></p>
   </div>
 
   <!-- ============================================================
-       AUTH SCREENS (Login / Sign Up) — shown when logged out.
-       No boxed "card" container — the hero blends straight into
-       the form area as one continuous page, Android onboarding-style.
+       AUTH SCREENS (Login / Sign Up)
   ============================================================= -->
   <div id="auth-screen" class="auth-screen hidden">
 
-    <!-- ---------- HERO: brand + topographic contour motif ---------- -->
+    <!-- ---------- HERO: brand + clean topographic contour-line motif ---------- -->
     <div class="auth-hero">
-      <div class="contour-field" aria-hidden="true"></div>
+      <svg class="contour-lines" viewBox="0 0 400 220" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M-20,150 C 60,110 110,190 200,140 S 340,90 420,130" />
+        <path d="M-20,180 C 70,145 130,215 210,170 S 350,125 420,165" />
+        <path d="M-20,40 C 90,10 140,70 230,35 S 360,-10 420,25" />
+      </svg>
       <div class="auth-hero-inner">
         <div class="auth-logo-mark">GH</div>
-        <h1>GeoHub</h1>
-        <p class="auth-tagline">Geography &amp; Environment · 1st Year Honors</p>
-        <p class="auth-college">Govt. Michael Madhusudan College, Jessore</p>
+        <div class="auth-hero-text">
+          <h1>GeoHub</h1>
+          <p class="auth-tagline">Geography &amp; Environment · Govt. Michael Madhusudan College, Jessore</p>
+        </div>
       </div>
-      <!-- Wave divider so the hero doesn't end in a hard rectangle -->
-      <svg class="auth-wave" viewBox="0 0 500 40" preserveAspectRatio="none" aria-hidden="true">
-        <path d="M0,20 C 125,45 375,-5 500,20 L500,40 L0,40 Z" fill="var(--bg)"></path>
-      </svg>
     </div>
 
-    <!-- ---------- Sliding tab switch ---------- -->
-    <div class="auth-tabs" id="auth-tabs">
-      <button class="auth-tab active" data-tab="login">Log In</button>
-      <button class="auth-tab" data-tab="signup">Sign Up</button>
-      <span class="auth-tab-indicator"></span>
-    </div>
+    <!-- ---------- Forms sheet, with an integrated underline tab switch ---------- -->
+    <div class="auth-sheet">
+      <div class="auth-tabs" id="auth-tabs">
+        <button class="auth-tab active" data-tab="login">Log In</button>
+        <button class="auth-tab" data-tab="signup">Sign Up</button>
+        <span class="auth-tab-indicator"></span>
+      </div>
 
-    <!-- ---------- Forms — plain fields on the page, no panel/box ---------- -->
-    <div class="auth-body">
+      <div class="auth-body">
       <!-- LOGIN FORM -->
       <form id="login-form" class="auth-form">
         <label class="field-line">
           <span>Email</span>
-          <input type="email" id="login-email" required placeholder="you@example.com" />
+          <input type="email" id="login-email" required placeholder="you@example.com" autocomplete="email" />
         </label>
-        <label class="field-line">
+        <label class="field-line field-line-password">
           <span>Password</span>
-          <input type="password" id="login-password" required placeholder="••••••••" />
+          <div class="pw-wrap">
+            <input type="password" id="login-password" required placeholder="••••••••" autocomplete="current-password" />
+            <button type="button" class="pw-toggle" data-input="login-password" aria-label="Show password">
+              <svg class="eye-on" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7.5 11-7.5S23 12 23 12s-4 7.5-11 7.5S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg class="eye-off" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 19.5c-7 0-11-7.5-11-7.5a21.4 21.4 0 0 1 5.06-6.02M9.9 4.74A10.6 10.6 0 0 1 12 4.5c7 0 11 7.5 11 7.5a21.4 21.4 0 0 1-2.16 3.19M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            </button>
+          </div>
         </label>
         <p id="login-error" class="form-error"></p>
         <button type="submit" class="btn-primary full raised">Log In</button>
+
+        <div class="auth-divider"><span>or continue with</span></div>
+        <button type="button" id="google-signin-btn" class="btn-google full">
+          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+            <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.91c1.7-1.57 2.69-3.88 2.69-6.62z"/>
+            <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.91-2.26c-.81.54-1.84.86-3.05.86-2.35 0-4.34-1.58-5.05-3.71H.9v2.33A9 9 0 0 0 9 18z"/>
+            <path fill="#FBBC05" d="M3.95 10.71A5.4 5.4 0 0 1 3.67 9c0-.6.1-1.18.28-1.71V4.96H.9A9 9 0 0 0 0 9c0 1.45.35 2.83.9 4.04l3.05-2.33z"/>
+            <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .9 4.96l3.05 2.33C4.66 5.16 6.65 3.58 9 3.58z"/>
+          </svg>
+          <span>Continue with Google</span>
+        </button>
+        <p id="google-auth-error" class="form-error"></p>
+
         <p class="auth-switch-hint">New here? <button type="button" class="link-btn" data-tab="signup">Create an account</button></p>
       </form>
 
@@ -67,7 +92,7 @@
       <form id="signup-form" class="auth-form hidden">
         <label class="field-line">
           <span>Full Name</span>
-          <input type="text" id="signup-name" required placeholder="e.g. Rafiul Islam" />
+          <input type="text" id="signup-name" required placeholder="e.g. Rafiul Islam" autocomplete="name" />
         </label>
         <label class="field-line">
           <span>Roll / Registration No.</span>
@@ -84,21 +109,50 @@
           </select>
         </label>
         <label class="field-line">
+          <span>Gender</span>
+          <select id="signup-gender" required>
+            <option value="" disabled selected>Select gender</option>
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+            <option value="other">Others</option>
+          </select>
+        </label>
+        <label class="field-line">
           <span>Phone Number</span>
           <input type="tel" id="signup-phone" required placeholder="e.g. 01XXXXXXXXX" />
         </label>
         <label class="field-line">
           <span>Email</span>
-          <input type="email" id="signup-email" required placeholder="you@example.com" />
+          <input type="email" id="signup-email" required placeholder="you@example.com" autocomplete="email" />
         </label>
-        <label class="field-line">
+        <label class="field-line field-line-password">
           <span>Password</span>
-          <input type="password" id="signup-password" required placeholder="At least 6 characters" />
+          <div class="pw-wrap">
+            <input type="password" id="signup-password" required minlength="8" placeholder="At least 8 characters" autocomplete="new-password" />
+            <button type="button" class="pw-toggle" data-input="signup-password" aria-label="Show password">
+              <svg class="eye-on" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7.5 11-7.5S23 12 23 12s-4 7.5-11 7.5S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg class="eye-off" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 19.5c-7 0-11-7.5-11-7.5a21.4 21.4 0 0 1 5.06-6.02M9.9 4.74A10.6 10.6 0 0 1 12 4.5c7 0 11 7.5 11 7.5a21.4 21.4 0 0 1-2.16 3.19M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            </button>
+          </div>
+          <small class="pw-hint">At least 8 characters, with a letter and a number.</small>
         </label>
         <p id="signup-error" class="form-error"></p>
         <button type="submit" class="btn-primary full raised">Create Account</button>
+
+        <div class="auth-divider"><span>or continue with</span></div>
+        <button type="button" class="btn-google full google-signin-trigger">
+          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+            <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.91c1.7-1.57 2.69-3.88 2.69-6.62z"/>
+            <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.91-2.26c-.81.54-1.84.86-3.05.86-2.35 0-4.34-1.58-5.05-3.71H.9v2.33A9 9 0 0 0 9 18z"/>
+            <path fill="#FBBC05" d="M3.95 10.71A5.4 5.4 0 0 1 3.67 9c0-.6.1-1.18.28-1.71V4.96H.9A9 9 0 0 0 0 9c0 1.45.35 2.83.9 4.04l3.05-2.33z"/>
+            <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .9 4.96l3.05 2.33C4.66 5.16 6.65 3.58 9 3.58z"/>
+          </svg>
+          <span>Continue with Google</span>
+        </button>
+
         <p class="auth-switch-hint">Already a member? <button type="button" class="link-btn" data-tab="login">Log in</button></p>
       </form>
+      </div>
     </div>
   </div>
 
@@ -113,7 +167,7 @@
         <div class="logo-mark-small">GH</div>
         <div>
           <strong>GeoHub</strong>
-          <small>Geo &amp; Env · 1st Yr</small>
+          <small>Geography &amp; Environment</small>
         </div>
       </div>
 
@@ -140,10 +194,19 @@
       </button>
     </aside>
 
-    <!-- ---------- TOP APP BAR (mobile + desktop) ---------- -->
+    <!-- ---------- TOP APP BAR ---------- -->
     <header class="topbar">
-      <h2 id="topbar-title">Student Wall</h2>
-      <div class="topbar-user" id="topbar-user">—</div>
+      <div class="topbar-left">
+        <div class="logo-mark-small topbar-logo">GH</div>
+        <div class="topbar-titles">
+          <h2 id="topbar-title">Student Wall</h2>
+          <small id="topbar-subtitle">Geography &amp; Environment</small>
+        </div>
+      </div>
+      <button type="button" class="topbar-user" id="topbar-user">
+        <span class="avatar avatar-sm" id="topbar-avatar"></span>
+        <span class="topbar-user-name" id="topbar-user-name">—</span>
+      </button>
     </header>
 
     <!-- ---------- MAIN CONTENT ---------- -->
@@ -151,42 +214,51 @@
 
       <!-- ===== SECTION 1: STUDENT WALL ===== -->
       <section id="section-wall" class="route-section">
-        <div class="composer">
-          <textarea id="post-input" placeholder="Ask a question or share something with the department…" rows="2"></textarea>
-          <button id="post-submit" class="btn-primary">Post</button>
-        </div>
-        <div id="wall-list" class="list-block">
+        <button type="button" id="composer-trigger" class="composer-trigger">
+          <span class="avatar" id="composer-avatar">…</span>
+          <span class="composer-trigger-text">Ask a question or share something with the department…</span>
+          <span class="composer-trigger-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </span>
+        </button>
+        <div id="wall-list">
           <p class="empty-state">No posts yet. Be the first to write on the wall.</p>
         </div>
       </section>
 
       <!-- ===== SECTION 2: NOTES & SHEET HUB ===== -->
-      <section id="section-resources" class="route-section hidden">
-        <div class="chip-row" id="resource-categories">
-          <!-- category chips injected by JS -->
+      <section id="section-resources" class="route-section">
+        <div class="chip-scroller">
+          <div class="chip-row" id="resource-categories">
+            <!-- category chips injected by JS -->
+          </div>
         </div>
 
-        <button id="add-resource-btn" class="btn-outline full">+ Share a Note / Sheet</button>
+        <button id="add-resource-btn" class="btn-outline full">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Share a Note / Sheet
+        </button>
 
-        <div id="resource-list" class="list-block">
+        <div id="resource-list">
           <p class="empty-state">No resources shared yet in this category.</p>
         </div>
       </section>
 
       <!-- ===== SECTION 3: CLASSMATE DIRECTORY ===== -->
-      <section id="section-directory" class="route-section hidden">
+      <section id="section-directory" class="route-section">
         <div class="search-bar">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <input type="text" id="directory-search" placeholder="Search by name or blood group (e.g. B+)" />
         </div>
-        <div id="directory-list" class="list-block">
+        <div id="directory-list">
           <p class="empty-state">Loading classmates…</p>
         </div>
       </section>
 
       <!-- ===== SECTION 4: ROUTINE & NOTICE BOARD ===== -->
-      <section id="section-routine" class="route-section hidden">
-        <h3 class="section-heading">📌 Notices</h3>
-        <div id="notice-list" class="list-block">
+      <section id="section-routine" class="route-section">
+        <h3 class="section-heading">Notices</h3>
+        <div id="notice-list">
           <p class="empty-state">No notices posted yet.</p>
         </div>
 
@@ -195,18 +267,18 @@
           <label class="checkbox-row">
             <input type="checkbox" id="notice-urgent" /> Mark as urgent
           </label>
-          <button id="notice-submit" class="btn-primary full">Post Notice</button>
+          <button id="notice-submit" type="button" class="btn-primary full">Post Notice</button>
         </div>
 
-        <h3 class="section-heading">🗓 Weekly Class Routine</h3>
+        <h3 class="section-heading">Weekly Class Routine</h3>
         <div id="routine-table" class="list-block">
           <p class="empty-state">Routine has not been published yet.</p>
         </div>
       </section>
 
       <!-- ===== SECTION 5: MY PROFILE ===== -->
-      <section id="section-profile" class="route-section hidden">
-        <div id="profile-card" class="list-block"></div>
+      <section id="section-profile" class="route-section">
+        <div id="profile-card" class="profile-card-panel"></div>
         <button id="logout-btn-mobile" class="btn-outline full danger">Log Out</button>
       </section>
 
@@ -233,7 +305,7 @@
   </div>
 
   <!-- ============================================================
-       MODAL — used for "Add Resource" and generic confirms
+       MODAL — used for "Add Resource", profile details, confirms
   ============================================================= -->
   <div id="modal-overlay" class="modal-overlay hidden">
     <div class="modal-sheet">
