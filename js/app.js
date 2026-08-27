@@ -5,17 +5,57 @@
 // between the 5 sections via the sidebar / bottom nav.
 // ============================================================
 import { DEPARTMENT_NAME, COLLEGE_NAME } from "./firebase-config.js";
-import { signUp, logIn, logOut, watchAuthState, friendlyAuthError, currentProfile } from "./auth.js";
+import {
+  signUp, logIn, logOut, watchAuthState, friendlyAuthError, currentProfile,
+  signInWithGoogle, updateProfileDetails
+} from "./auth.js";
 import { initWall, teardownWall } from "./wall.js";
 import { initResources, teardownResources } from "./resources.js";
 import { initDirectory, teardownDirectory } from "./directory.js";
 import { initRoutine, teardownRoutine } from "./routine.js";
-import { escapeHtml, initialsOf } from "./ui-utils.js";
+import {
+  escapeHtml, openModal, closeModal, showToast, setBtnLoading, fullDate,
+  avatarInner, nameWithBadge, isAdminEmail
+} from "./ui-utils.js";
 
 // ---------- Element references ----------
 const loadingScreen = document.getElementById("loading-screen");
+const loadingLabel = document.getElementById("loading-label");
 const authScreen = document.getElementById("auth-screen");
 const appShell = document.getElementById("app-shell");
+
+/** Swap the loading-screen's message ("Loading GeoHub" / "Logging out"). */
+function setLoadingLabel(text) {
+  if (loadingLabel) loadingLabel.textContent = text;
+}
+
+/** How long the loading overlay stays up before it's allowed to dismiss. */
+const LOADING_MIN_DISPLAY_MS = 700;
+
+/**
+ * Bring the loading overlay up. Shown INSTANTLY (transition disabled for a
+ * beat, then re-enabled) so it fully covers the screen before anything
+ * underneath it changes — otherwise the CSS fade-in lets the just-swapped
+ * screen (home page / login page) flash through the translucent overlay
+ * for a moment before it becomes opaque.
+ */
+function showLoadingScreen(text) {
+  setLoadingLabel(text);
+  loadingScreen.classList.add("no-transition");
+  loadingScreen.classList.remove("hidden");
+  void loadingScreen.offsetWidth; // force a reflow so the instant show is applied first
+  loadingScreen.classList.remove("no-transition");
+}
+
+/** Dismiss the loading overlay — this one IS animated (a smooth fade-out). */
+function hideLoadingScreen() {
+  loadingScreen.classList.add("hidden");
+}
+
+// True while a user-initiated logout is in flight, so the auth-state
+// listener knows to show the "Logging out" transition instead of
+// instantly snapping to the login screen.
+let loggingOut = false;
 
 const loginForm = document.getElementById("login-form");
 const signupForm = document.getElementById("signup-form");
@@ -40,10 +80,51 @@ function switchAuthTab(target) {
 }
 allTabTriggers.forEach(el => el.addEventListener("click", () => switchAuthTab(el.dataset.tab)));
 
+// ============================================================
+// PASSWORD SHOW / HIDE — works for every ".pw-toggle" button
+// (login password field, signup password field, etc.)
+// ============================================================
+document.querySelectorAll(".pw-toggle").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const input = document.getElementById(btn.dataset.input);
+    if (!input) return;
+    const revealing = input.type === "password";
+    input.type = revealing ? "text" : "password";
+    btn.querySelector(".eye-on").style.display = revealing ? "none" : "block";
+    btn.querySelector(".eye-off").style.display = revealing ? "block" : "none";
+    btn.setAttribute("aria-label", revealing ? "Hide password" : "Show password");
+  });
+});
+
+// ============================================================
+// GOOGLE SIGN-IN — available from both the Log In and Sign Up
+// tabs; Firebase figures out on its own whether this is a
+// returning student or a brand-new one.
+// ============================================================
+async function handleGoogleSignIn(btn) {
+  const errorEl = document.getElementById("google-auth-error");
+  if (errorEl) errorEl.textContent = "";
+  setBtnLoading(btn, true, "Connecting to Google…");
+  try {
+    await signInWithGoogle();
+    // no need to restore the button — a successful sign-in swaps the whole screen
+  } catch (err) {
+    const msg = friendlyAuthError(err);
+    if (errorEl) errorEl.textContent = msg;
+    else showToast(msg);
+    setBtnLoading(btn, false);
+  }
+}
+document.querySelectorAll("#google-signin-btn, .google-signin-trigger").forEach(btn => {
+  btn.addEventListener("click", () => handleGoogleSignIn(btn));
+});
+
 loginForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const errorEl = document.getElementById("login-error");
+  const submitBtn = loginForm.querySelector('button[type="submit"]');
   errorEl.textContent = "";
+  setBtnLoading(submitBtn, true, "Logging in…");
   try {
     await logIn(
       document.getElementById("login-email").value.trim(),
@@ -51,24 +132,42 @@ loginForm.addEventListener("submit", async (e) => {
     );
   } catch (err) {
     errorEl.textContent = friendlyAuthError(err);
+    setBtnLoading(submitBtn, false);
   }
 });
+
+/** A slightly-stronger-than-Firebase-default password rule: 8+ chars, at least one letter and one number. */
+function passwordStrengthError(password) {
+  if (password.length < 8) return "Password must be at least 8 characters.";
+  if (!/[A-Za-z]/.test(password)) return "Password must include at least one letter.";
+  if (!/[0-9]/.test(password)) return "Password must include at least one number.";
+  return null;
+}
 
 signupForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const errorEl = document.getElementById("signup-error");
+  const submitBtn = signupForm.querySelector('button[type="submit"]');
   errorEl.textContent = "";
+
+  const password = document.getElementById("signup-password").value;
+  const pwError = passwordStrengthError(password);
+  if (pwError) { errorEl.textContent = pwError; return; }
+
+  setBtnLoading(submitBtn, true, "Creating account…");
   try {
     await signUp({
       name: document.getElementById("signup-name").value,
       roll: document.getElementById("signup-roll").value,
       blood: document.getElementById("signup-blood").value,
+      gender: document.getElementById("signup-gender").value,
       phone: document.getElementById("signup-phone").value,
       email: document.getElementById("signup-email").value,
-      password: document.getElementById("signup-password").value
+      password
     });
   } catch (err) {
     errorEl.textContent = friendlyAuthError(err);
+    setBtnLoading(submitBtn, false);
   }
 });
 
@@ -98,28 +197,210 @@ function goToRoute(route) {
 document.querySelectorAll(".nav-item[data-route]").forEach(btn => {
   btn.addEventListener("click", () => goToRoute(btn.dataset.route));
 });
+document.getElementById("topbar-user").addEventListener("click", () => goToRoute("profile"));
 
 // ============================================================
-// LOGOUT — both the desktop sidebar button and the mobile profile button
+// LOGOUT — both the desktop sidebar button and the mobile profile
+// button go through a confirmation sheet first, so a stray tap
+// never signs someone out by accident.
 // ============================================================
-document.getElementById("logout-btn-desktop").addEventListener("click", () => logOut());
-document.getElementById("logout-btn-mobile").addEventListener("click", () => logOut());
+function confirmLogout() {
+  openModal(`
+    <div class="confirm-modal">
+      <div class="confirm-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </div>
+      <h3>Log out of GeoHub?</h3>
+      <p class="confirm-text">You'll need to log back in with your email and password (or Google) to access the department wall again.</p>
+      <div class="confirm-actions">
+        <button type="button" class="btn-outline full" id="logout-cancel-btn">Cancel</button>
+        <button type="button" class="btn-primary full danger-solid" id="logout-confirm-btn">Log Out</button>
+      </div>
+    </div>
+  `);
+  const cancelBtn = document.getElementById("logout-cancel-btn");
+  const confirmBtn = document.getElementById("logout-confirm-btn");
+  cancelBtn.addEventListener("click", closeModal);
+  confirmBtn.addEventListener("click", async () => {
+    setBtnLoading(confirmBtn, true, "Logging out…");
+    cancelBtn.disabled = true;
+    loggingOut = true;
+    try {
+      await logOut();
+      closeModal();
+    } catch (err) {
+      loggingOut = false;
+      setBtnLoading(confirmBtn, false);
+      cancelBtn.disabled = false;
+      showToast("Couldn't log out. Please try again.");
+    }
+  });
+}
+document.getElementById("logout-btn-desktop").addEventListener("click", confirmLogout);
+document.getElementById("logout-btn-mobile").addEventListener("click", confirmLogout);
 
 // ============================================================
-// PROFILE SECTION — simple read-only render of the logged-in student
+// PROFILE SECTION — card-free, flowing layout for the logged-in student
 // ============================================================
 function renderProfile() {
   if (!currentProfile) return;
+  const joined = fullDate(currentProfile.createdAt);
+  const p = currentProfile;
+  const admin = isAdminEmail(p.email);
+
+  const rows = [
+    ["Roll / Reg. No.", escapeHtml(p.roll || "Not set")],
+    ["Year", escapeHtml(p.year || "Not set")],
+    ["Session / Batch", escapeHtml(p.session || "Not set")],
+    ["Blood Group", escapeHtml(p.bloodGroup || "Not set")],
+    ["Gender", p.gender ? escapeHtml(p.gender[0].toUpperCase() + p.gender.slice(1)) : "Not set"],
+    ["Hometown", escapeHtml(p.hometown || "Not set")],
+    ["Present Address", escapeHtml(p.address || "Not set")],
+    ["Phone", `${escapeHtml(p.phone || "Not set")}${p.hidePhone ? ' <span class="hidden-field-tag">Hidden</span>' : ""}`],
+    ["Email", `${escapeHtml(p.email)}${p.hideEmail ? ' <span class="hidden-field-tag">Hidden</span>' : ""}`],
+    ["Social / Facebook", p.socialLink ? `<a href="${escapeHtml(p.socialLink)}" target="_blank" rel="noopener">${escapeHtml(p.socialLink)}</a>` : "Not set"],
+    ["College", escapeHtml(COLLEGE_NAME)]
+  ];
+  if (joined) rows.push(["Joined GeoHub", joined]);
+
   document.getElementById("profile-card").innerHTML = `
-    <div class="avatar">${initialsOf(currentProfile.name)}</div>
-    <h3>${escapeHtml(currentProfile.name)}</h3>
-    <div class="profile-role">${escapeHtml(DEPARTMENT_NAME)}</div>
-    <div class="profile-detail-row"><span>Roll / Reg. No.</span><span>${escapeHtml(currentProfile.roll)}</span></div>
-    <div class="profile-detail-row"><span>Blood Group</span><span>${escapeHtml(currentProfile.bloodGroup)}</span></div>
-    <div class="profile-detail-row"><span>Phone</span><span>${escapeHtml(currentProfile.phone)}</span></div>
-    <div class="profile-detail-row"><span>Email</span><span>${escapeHtml(currentProfile.email)}</span></div>
-    <div class="profile-detail-row"><span>College</span><span>${escapeHtml(COLLEGE_NAME)}</span></div>
+    <div class="profile-flow">
+      <div class="profile-flow-banner" aria-hidden="true"></div>
+      <div class="profile-flow-head">
+        <span class="avatar avatar-lg profile-flow-avatar">${avatarInner(p)}</span>
+        <h3>${nameWithBadge(p.name, p.email)}</h3>
+        <div class="profile-role">${escapeHtml(DEPARTMENT_NAME)}</div>
+        ${admin ? `<div class="profile-admin-note">Class Admin · can post notices to the whole department</div>` : ""}
+      </div>
+      ${p.bio ? `<p class="pv-bio profile-own-bio">${escapeHtml(p.bio)}</p>` : ""}
+      <div class="profile-flow-details">
+        ${rows.map(([label, val]) => `<div class="profile-detail-row"><span>${label}</span><span>${val}</span></div>`).join("")}
+      </div>
+      <div class="profile-flow-actions">
+        <button type="button" id="profile-edit-btn" class="profile-edit-btn">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          Edit Profile &amp; Privacy
+        </button>
+      </div>
+    </div>
   `;
+  document.getElementById("profile-edit-btn").addEventListener("click", () => openProfileDetailsModal(false));
+}
+
+// ============================================================
+// COMPLETE / EDIT PROFILE DETAILS — used right after a first-time
+// Google sign-in (roll/blood/phone are unknown) and later from the
+// "Edit" button on My Profile.
+// ============================================================
+function openProfileDetailsModal(isFirstTime = false) {
+  openModal(`
+    <h3>${isFirstTime ? "Finish setting up your profile" : "Edit your details"}</h3>
+    ${isFirstTime ? `<p class="modal-hint">Welcome to GeoHub! We just need a few more details so classmates can find you in the directory.</p>` : ""}
+    <label class="field">
+      <span>Roll / Registration No.</span>
+      <input type="text" id="pd-roll" placeholder="e.g. 2024-GEO-014" value="${escapeHtml(currentProfile.roll || "")}" />
+    </label>
+    <label class="field">
+      <span>Blood Group</span>
+      <select id="pd-blood">
+        <option value="" ${!currentProfile.bloodGroup ? "selected" : ""} disabled>Select blood group</option>
+        ${["A+","A-","B+","B-","AB+","AB-","O+","O-"].map(bg =>
+          `<option ${currentProfile.bloodGroup === bg ? "selected" : ""}>${bg}</option>`).join("")}
+      </select>
+    </label>
+    <label class="field">
+      <span>Gender</span>
+      <select id="pd-gender">
+        <option value="" ${!currentProfile.gender ? "selected" : ""} disabled>Select gender</option>
+        <option value="male" ${currentProfile.gender === "male" ? "selected" : ""}>Male</option>
+        <option value="female" ${currentProfile.gender === "female" ? "selected" : ""}>Female</option>
+        <option value="other" ${currentProfile.gender === "other" ? "selected" : ""}>Others</option>
+      </select>
+    </label>
+    <label class="field">
+      <span>Phone Number</span>
+      <input type="tel" id="pd-phone" placeholder="e.g. 01XXXXXXXXX" value="${escapeHtml(currentProfile.phone || "")}" />
+    </label>
+    <label class="field">
+      <span>Year</span>
+      <select id="pd-year">
+        <option value="" ${!currentProfile.year ? "selected" : ""}>Select year</option>
+        ${["1st Year", "2nd Year", "3rd Year", "4th Year", "Honours Completed"].map(y =>
+          `<option ${currentProfile.year === y ? "selected" : ""}>${y}</option>`).join("")}
+      </select>
+    </label>
+    <label class="field">
+      <span>Session / Batch</span>
+      <input type="text" id="pd-session" placeholder="e.g. 2024–25" value="${escapeHtml(currentProfile.session || "")}" />
+    </label>
+    <label class="field">
+      <span>Hometown</span>
+      <input type="text" id="pd-hometown" placeholder="e.g. Jessore" value="${escapeHtml(currentProfile.hometown || "")}" />
+    </label>
+    <label class="field">
+      <span>Present Address</span>
+      <input type="text" id="pd-address" placeholder="e.g. Hostel / Mess address" value="${escapeHtml(currentProfile.address || "")}" />
+    </label>
+    <label class="field">
+      <span>Social / Facebook Link</span>
+      <input type="url" id="pd-social" placeholder="https://facebook.com/…" value="${escapeHtml(currentProfile.socialLink || "")}" />
+    </label>
+    <label class="field">
+      <span>About / Bio</span>
+      <input type="text" id="pd-bio" placeholder="A short line about yourself" value="${escapeHtml(currentProfile.bio || "")}" />
+    </label>
+
+    <div class="privacy-block">
+      <div class="privacy-block-title">Privacy</div>
+      <label class="switch-row">
+        <span>Hide my phone number from classmates<br><small>Hiding it also removes the “Call” button on your profile.</small></span>
+        <input type="checkbox" id="pd-hide-phone" ${currentProfile.hidePhone ? "checked" : ""} />
+        <span class="switch-track"><span class="switch-thumb"></span></span>
+      </label>
+      <label class="switch-row">
+        <span>Hide my email from classmates</span>
+        <input type="checkbox" id="pd-hide-email" ${currentProfile.hideEmail ? "checked" : ""} />
+        <span class="switch-track"><span class="switch-thumb"></span></span>
+      </label>
+    </div>
+
+    <p id="pd-error" class="form-error"></p>
+    <button type="button" class="btn-primary full" id="pd-save-btn">Save Details</button>
+  `);
+  document.getElementById("pd-save-btn").addEventListener("click", () => saveProfileDetails(isFirstTime));
+}
+
+async function saveProfileDetails(isFirstTime) {
+  const btn = document.getElementById("pd-save-btn");
+  const roll = document.getElementById("pd-roll").value.trim();
+  const blood = document.getElementById("pd-blood").value;
+  const gender = document.getElementById("pd-gender").value;
+  const phone = document.getElementById("pd-phone").value.trim();
+  const year = document.getElementById("pd-year").value;
+  const session = document.getElementById("pd-session").value;
+  const hometown = document.getElementById("pd-hometown").value;
+  const address = document.getElementById("pd-address").value;
+  const socialLink = document.getElementById("pd-social").value;
+  const bio = document.getElementById("pd-bio").value;
+  const hidePhone = document.getElementById("pd-hide-phone").checked;
+  const hideEmail = document.getElementById("pd-hide-email").checked;
+  const errorEl = document.getElementById("pd-error");
+
+  if (!roll || !blood || !phone || !gender) {
+    errorEl.textContent = "Please fill in roll, blood group, gender and phone.";
+    return;
+  }
+  errorEl.textContent = "";
+  setBtnLoading(btn, true, "Saving…");
+  try {
+    await updateProfileDetails({ roll, blood, gender, phone, year, session, hometown, address, socialLink, bio, hidePhone, hideEmail });
+    closeModal();
+    showToast(isFirstTime ? "Profile complete — welcome aboard!" : "Profile updated.");
+    if (!document.getElementById("section-profile").classList.contains("hidden")) renderProfile();
+  } catch (err) {
+    errorEl.textContent = "Couldn't save your details. Please try again.";
+    setBtnLoading(btn, false);
+  }
 }
 
 // ============================================================
@@ -127,11 +408,20 @@ function renderProfile() {
 // ============================================================
 watchAuthState(
   (user, profile) => {
-    loadingScreen.classList.add("hidden");
+    // Bring the loading overlay back up (it may already be hidden from a
+    // previous screen) and swap the screens right away, but keep the
+    // overlay up for a beat longer so the jump from the auth screen into
+    // the Wall feels like one deliberate transition instead of an abrupt cut.
+    showLoadingScreen("Loading GeoHub");
     authScreen.classList.add("hidden");
     appShell.classList.remove("hidden");
 
-    document.getElementById("topbar-user").textContent = profile ? profile.name : user.email;
+    const displayProfile = profile || { name: user.email, email: user.email };
+    document.getElementById("topbar-user-name").innerHTML = nameWithBadge(displayProfile.name, displayProfile.email);
+    const topbarAvatar = document.getElementById("topbar-avatar");
+    if (topbarAvatar) topbarAvatar.innerHTML = avatarInner(displayProfile);
+    const composerAvatar = document.getElementById("composer-avatar");
+    if (composerAvatar) composerAvatar.innerHTML = avatarInner(displayProfile);
 
     if (!featuresInitialized) {
       initWall();
@@ -141,9 +431,15 @@ watchAuthState(
       featuresInitialized = true;
     }
     goToRoute("wall");
+
+    // First-time Google sign-ins land without roll/blood/phone — ask for them once.
+    if (profile && profile.profileIncomplete) {
+      openProfileDetailsModal(true);
+    }
+
+    setTimeout(hideLoadingScreen, LOADING_MIN_DISPLAY_MS);
   },
   () => {
-    loadingScreen.classList.add("hidden");
     appShell.classList.add("hidden");
     authScreen.classList.remove("hidden");
 
@@ -154,8 +450,26 @@ watchAuthState(
       teardownRoutine();
       featuresInitialized = false;
     }
-    // Reset auth forms for the next login
+    // Reset auth forms (and any stuck loading buttons) for the next login
     loginForm.reset();
     signupForm.reset();
+    setBtnLoading(loginForm.querySelector('button[type="submit"]'), false);
+    setBtnLoading(signupForm.querySelector('button[type="submit"]'), false);
+    document.querySelectorAll("#google-signin-btn, .google-signin-trigger").forEach(btn => setBtnLoading(btn, false));
+
+    if (loggingOut) {
+      // A user-initiated logout: keep the "Logging out" overlay up for a
+      // beat so it reads as a deliberate transition, mirroring the login flow.
+      showLoadingScreen("Logging out");
+      setTimeout(() => {
+        hideLoadingScreen();
+        setLoadingLabel("Loading GeoHub");
+        loggingOut = false;
+      }, LOADING_MIN_DISPLAY_MS);
+    } else {
+      // First page load with no existing session — the overlay is already
+      // showing from startup, so just dismiss it right away.
+      hideLoadingScreen();
+    }
   }
 );

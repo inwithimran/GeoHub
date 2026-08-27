@@ -8,7 +8,7 @@ import {
   collection, addDoc, onSnapshot, query, orderBy, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { currentProfile } from "./auth.js";
-import { showToast, escapeHtml, openModal, closeModal, timeAgo } from "./ui-utils.js";
+import { showToast, escapeHtml, openModal, closeModal, timeAgo, setBtnLoading } from "./ui-utils.js";
 
 const chipRow = document.getElementById("resource-categories");
 const resourceList = document.getElementById("resource-list");
@@ -54,7 +54,7 @@ function renderResources() {
     return;
   }
 
-  resourceList.innerHTML = filtered.map(r => `
+  resourceList.innerHTML = `<div class="flat-list">` + filtered.map(r => `
     <div class="resource-row">
       <div class="resource-row-icon">${fileGlyph(r.category)}</div>
       <div class="resource-row-info">
@@ -64,7 +64,7 @@ function renderResources() {
       </div>
       <a class="res-link" href="${escapeHtml(r.link)}" target="_blank" rel="noopener">Open</a>
     </div>
-  `).join("");
+  `).join("") + `</div>`;
 }
 
 /** Single-letter glyph shown in the leading icon slot, based on category. */
@@ -88,18 +88,20 @@ function openAddResourceModal() {
       <span>Link (Google Drive / OneDrive / etc.)</span>
       <input type="url" id="res-link" placeholder="https://drive.google.com/…" />
     </label>
-    <button class="btn-primary full" id="res-submit-btn">Publish Resource</button>
+    <button type="button" class="btn-primary full" id="res-submit-btn">Publish Resource</button>
   `);
   document.getElementById("res-submit-btn").addEventListener("click", submitResource);
 }
 
 async function submitResource() {
+  const btn = document.getElementById("res-submit-btn");
   const title = document.getElementById("res-title").value.trim();
   const category = document.getElementById("res-category").value;
   const link = document.getElementById("res-link").value.trim();
 
   if (!title || !link) return showToast("Please fill in the title and link.");
 
+  setBtnLoading(btn, true, "Publishing…");
   try {
     await addDoc(collection(db, "resources"), {
       title, category, link,
@@ -111,6 +113,7 @@ async function submitResource() {
     showToast("Resource shared with the department 🎉");
   } catch (err) {
     showToast("Couldn't share resource: " + err.message);
+    setBtnLoading(btn, false);
   }
 }
 

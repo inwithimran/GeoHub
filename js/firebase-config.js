@@ -6,6 +6,8 @@
 //    and paste the values below (replace every "YOUR_..." placeholder).
 // 3. In the Firebase Console enable:
 //      Authentication -> Sign-in method -> Email/Password
+//      Authentication -> Sign-in method -> Google (needed for the
+//        "Continue with Google" button on the login/signup screen)
 //      Firestore Database -> Create database (start in production mode)
 // 4. Paste the Firestore security rules from rules.txt (bottom of this repo)
 //    into Firestore -> Rules, so only logged-in classmates can read/write.
@@ -36,7 +38,7 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 
 // Department constant — used across the app (post metadata, empty states, etc.)
-export const DEPARTMENT_NAME = "Geography & Environment (1st Year Honors)";
+export const DEPARTMENT_NAME = "Geography & Environment";
 export const COLLEGE_NAME = "Govt. Michael Madhusudan College, Jessore";
 
 // Resource categories shown in the Notes & Sheet Hub
@@ -51,6 +53,8 @@ export const RESOURCE_CATEGORIES = [
 // Emails allowed to post to the Notice Board (CR / Class Admins).
 // Add your CR's/co-CR's login email(s) here. Mirror this list in your
 // Firestore security rules so it's enforced server-side, not just in the UI.
+// Any email in this list also gets the special admin badge next to their
+// name everywhere in the app (wall posts, comments, directory, notices…).
 export const ADMIN_EMAILS = [
   "in.with.imran@gmail.com"
 ];
