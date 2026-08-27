@@ -1,1 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>GeoHub · Geography &amp; Environment Dept.</title>
+<meta name="theme-color" content="#14532d" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
 
+  <!-- ============================================================
+       LOADING SCREEN — shown while Firebase checks auth state
+  ============================================================= -->
+  <div id="loading-screen" class="loading-screen">
+    <div class="loader-ring"></div>
+    <p>Loading GeoHub…</p>
+  </div>
+
+  <!-- ============================================================
+       AUTH SCREENS (Login / Sign Up) — shown when logged out.
+       No boxed "card" container — the hero blends straight into
+       the form area as one continuous page, Android onboarding-style.
+  ============================================================= -->
+  <div id="auth-screen" class="auth-screen hidden">
+
+    <!-- ---------- HERO: brand + topographic contour motif ---------- -->
+    <div class="auth-hero">
+      <div class="contour-field" aria-hidden="true"></div>
+      <div class="auth-hero-inner">
+        <div class="auth-logo-mark">GH</div>
+        <h1>GeoHub</h1>
+        <p class="auth-tagline">Geography &amp; Environment · 1st Year Honors</p>
+        <p class="auth-college">Govt. Michael Madhusudan College, Jessore</p>
+      </div>
+      <!-- Wave divider so the hero doesn't end in a hard rectangle -->
+      <svg class="auth-wave" viewBox="0 0 500 40" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M0,20 C 125,45 375,-5 500,20 L500,40 L0,40 Z" fill="var(--bg)"></path>
+      </svg>
+    </div>
+
+    <!-- ---------- Sliding tab switch ---------- -->
+    <div class="auth-tabs" id="auth-tabs">
+      <button class="auth-tab active" data-tab="login">Log In</button>
+      <button class="auth-tab" data-tab="signup">Sign Up</button>
+      <span class="auth-tab-indicator"></span>
+    </div>
+
+    <!-- ---------- Forms — plain fields on the page, no panel/box ---------- -->
+    <div class="auth-body">
+      <!-- LOGIN FORM -->
+      <form id="login-form" class="auth-form">
+        <label class="field-line">
+          <span>Email</span>
+          <input type="email" id="login-email" required placeholder="you@example.com" />
+        </label>
+        <label class="field-line">
+          <span>Password</span>
+          <input type="password" id="login-password" required placeholder="••••••••" />
+        </label>
+        <p id="login-error" class="form-error"></p>
+        <button type="submit" class="btn-primary full raised">Log In</button>
+        <p class="auth-switch-hint">New here? <button type="button" class="link-btn" data-tab="signup">Create an account</button></p>
+      </form>
+
+      <!-- SIGN UP FORM -->
+      <form id="signup-form" class="auth-form hidden">
+        <label class="field-line">
+          <span>Full Name</span>
+          <input type="text" id="signup-name" required placeholder="e.g. Rafiul Islam" />
+        </label>
+        <label class="field-line">
+          <span>Roll / Registration No.</span>
+          <input type="text" id="signup-roll" required placeholder="e.g. 2024-GEO-014" />
+        </label>
+        <label class="field-line">
+          <span>Blood Group</span>
+          <select id="signup-blood" required>
+            <option value="" disabled selected>Select blood group</option>
+            <option>A+</option><option>A-</option>
+            <option>B+</option><option>B-</option>
+            <option>AB+</option><option>AB-</option>
+            <option>O+</option><option>O-</option>
+          </select>
+        </label>
+        <label class="field-line">
+          <span>Phone Number</span>
+          <input type="tel" id="signup-phone" required placeholder="e.g. 01XXXXXXXXX" />
+        </label>
+        <label class="field-line">
+          <span>Email</span>
+          <input type="email" id="signup-email" required placeholder="you@example.com" />
+        </label>
+        <label class="field-line">
+          <span>Password</span>
+          <input type="password" id="signup-password" required placeholder="At least 6 characters" />
+        </label>
+        <p id="signup-error" class="form-error"></p>
+        <button type="submit" class="btn-primary full raised">Create Account</button>
+        <p class="auth-switch-hint">Already a member? <button type="button" class="link-btn" data-tab="login">Log in</button></p>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       MAIN APP SHELL — shown when logged in
+  ============================================================= -->
+  <div id="app-shell" class="app-shell hidden">
+
+    <!-- ---------- DESKTOP SIDEBAR ---------- -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="logo-mark-small">GH</div>
+        <div>
+          <strong>GeoHub</strong>
+          <small>Geo &amp; Env · 1st Yr</small>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-route="wall">
+          <span class="icon" data-icon="wall"></span> Student Wall
+        </button>
+        <button class="nav-item" data-route="resources">
+          <span class="icon" data-icon="resources"></span> Notes &amp; Sheets
+        </button>
+        <button class="nav-item" data-route="directory">
+          <span class="icon" data-icon="directory"></span> Classmates
+        </button>
+        <button class="nav-item" data-route="routine">
+          <span class="icon" data-icon="routine"></span> Routine &amp; Notices
+        </button>
+        <button class="nav-item" data-route="profile">
+          <span class="icon" data-icon="profile"></span> My Profile
+        </button>
+      </nav>
+
+      <button id="logout-btn-desktop" class="sidebar-logout">
+        <span class="icon" data-icon="logout"></span> Log Out
+      </button>
+    </aside>
+
+    <!-- ---------- TOP APP BAR (mobile + desktop) ---------- -->
+    <header class="topbar">
+      <h2 id="topbar-title">Student Wall</h2>
+      <div class="topbar-user" id="topbar-user">—</div>
+    </header>
+
+    <!-- ---------- MAIN CONTENT ---------- -->
+    <main class="content">
+
+      <!-- ===== SECTION 1: STUDENT WALL ===== -->
+      <section id="section-wall" class="route-section">
+        <div class="composer">
+          <textarea id="post-input" placeholder="Ask a question or share something with the department…" rows="2"></textarea>
+          <button id="post-submit" class="btn-primary">Post</button>
+        </div>
+        <div id="wall-list" class="list-block">
+          <p class="empty-state">No posts yet. Be the first to write on the wall.</p>
+        </div>
+      </section>
+
+      <!-- ===== SECTION 2: NOTES & SHEET HUB ===== -->
+      <section id="section-resources" class="route-section hidden">
+        <div class="chip-row" id="resource-categories">
+          <!-- category chips injected by JS -->
+        </div>
+
+        <button id="add-resource-btn" class="btn-outline full">+ Share a Note / Sheet</button>
+
+        <div id="resource-list" class="list-block">
+          <p class="empty-state">No resources shared yet in this category.</p>
+        </div>
+      </section>
+
+      <!-- ===== SECTION 3: CLASSMATE DIRECTORY ===== -->
+      <section id="section-directory" class="route-section hidden">
+        <div class="search-bar">
+          <input type="text" id="directory-search" placeholder="Search by name or blood group (e.g. B+)" />
+        </div>
+        <div id="directory-list" class="list-block">
+          <p class="empty-state">Loading classmates…</p>
+        </div>
+      </section>
+
+      <!-- ===== SECTION 4: ROUTINE & NOTICE BOARD ===== -->
+      <section id="section-routine" class="route-section hidden">
+        <h3 class="section-heading">📌 Notices</h3>
+        <div id="notice-list" class="list-block">
+          <p class="empty-state">No notices posted yet.</p>
+        </div>
+
+        <div id="admin-notice-box" class="hidden">
+          <textarea id="notice-input" placeholder="Post an urgent notice to the class…" rows="2"></textarea>
+          <label class="checkbox-row">
+            <input type="checkbox" id="notice-urgent" /> Mark as urgent
+          </label>
+          <button id="notice-submit" class="btn-primary full">Post Notice</button>
+        </div>
+
+        <h3 class="section-heading">🗓 Weekly Class Routine</h3>
+        <div id="routine-table" class="list-block">
+          <p class="empty-state">Routine has not been published yet.</p>
+        </div>
+      </section>
+
+      <!-- ===== SECTION 5: MY PROFILE ===== -->
+      <section id="section-profile" class="route-section hidden">
+        <div id="profile-card" class="list-block"></div>
+        <button id="logout-btn-mobile" class="btn-outline full danger">Log Out</button>
+      </section>
+
+    </main>
+
+    <!-- ---------- MOBILE BOTTOM NAVIGATION ---------- -->
+    <nav class="bottom-nav">
+      <button class="nav-item active" data-route="wall">
+        <span class="icon" data-icon="wall"></span><small>Wall</small>
+      </button>
+      <button class="nav-item" data-route="resources">
+        <span class="icon" data-icon="resources"></span><small>Notes</small>
+      </button>
+      <button class="nav-item" data-route="directory">
+        <span class="icon" data-icon="directory"></span><small>Classmates</small>
+      </button>
+      <button class="nav-item" data-route="routine">
+        <span class="icon" data-icon="routine"></span><small>Routine</small>
+      </button>
+      <button class="nav-item" data-route="profile">
+        <span class="icon" data-icon="profile"></span><small>Profile</small>
+      </button>
+    </nav>
+  </div>
+
+  <!-- ============================================================
+       MODAL — used for "Add Resource" and generic confirms
+  ============================================================= -->
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- Toast for quick feedback messages -->
+  <div id="toast" class="toast hidden"></div>
+
+  <!-- ============================================================
+       SCRIPTS (ES Modules — order doesn't matter, app.js is entry)
+  ============================================================= -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
