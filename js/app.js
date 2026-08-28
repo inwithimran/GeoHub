@@ -13,6 +13,7 @@ import { initWall, teardownWall } from "./wall.js";
 import { initResources, teardownResources } from "./resources.js";
 import { initDirectory, teardownDirectory } from "./directory.js";
 import { initRoutine, teardownRoutine } from "./routine.js";
+import { openUserProfilePage, loadUserPosts, registerProfilePageRouter } from "./profile-view.js";
 import {
   escapeHtml, openModal, closeModal, showToast, setBtnLoading, fullDate,
   avatarInner, nameWithBadge, isAdminEmail
@@ -211,7 +212,8 @@ const routeTitles = {
   resources: "Notes & Sheet Hub",
   directory: "Classmate Directory",
   routine: "Routine & Notices",
-  profile: "My Profile"
+  profile: "My Profile",
+  "user-profile": "Profile" // overwritten with the classmate's name once loaded
 };
 
 let currentRoute = "wall";
@@ -223,9 +225,10 @@ let currentRoute = "wall";
 // previously visited sections instead of leaving the app.
 // `fromPopstate` is true when we're reacting to the back button
 // itself, so we don't push a new entry for a navigation that's
-// already a "back".
+// already a "back". `state` carries any extra data (e.g. which
+// classmate's profile page is open) alongside the route itself.
 // ============================================================
-function goToRoute(route, { fromPopstate = false, replace = false } = {}) {
+function goToRoute(route, { fromPopstate = false, replace = false, state = {} } = {}) {
   if (!routeTitles[route]) return;
   document.querySelectorAll(".route-section").forEach(sec => {
     sec.classList.toggle("hidden", sec.id !== `section-${route}`);
@@ -234,16 +237,19 @@ function goToRoute(route, { fromPopstate = false, replace = false } = {}) {
     btn.classList.toggle("active", btn.dataset.route === route);
   });
   document.getElementById("topbar-title").textContent = routeTitles[route] || "GeoHub";
+  document.getElementById("topbar-subtitle").textContent = route === "user-profile" ? "Classmate Profile" : "Geography & Environment";
 
   if (route === "profile") renderProfile();
 
   currentRoute = route;
+  const historyState = { geohubRoute: route, ...state };
   if (replace) {
-    history.replaceState({ geohubRoute: route }, "");
-  } else if (!fromPopstate && route !== history.state?.geohubRoute) {
-    history.pushState({ geohubRoute: route }, "");
+    history.replaceState(historyState, "");
+  } else if (!fromPopstate && (route !== history.state?.geohubRoute || route === "user-profile")) {
+    history.pushState(historyState, "");
   }
 }
+registerProfilePageRouter(goToRoute);
 
 document.querySelectorAll(".nav-item[data-route]").forEach(btn => {
   btn.addEventListener("click", () => {
@@ -260,7 +266,11 @@ document.getElementById("topbar-user").addEventListener("click", () => {
 window.addEventListener("popstate", (e) => {
   if (appShell.classList.contains("hidden")) return; // not logged in — nothing to route
   if (e.state && e.state.geohubRoute) {
-    goToRoute(e.state.geohubRoute, { fromPopstate: true });
+    if (e.state.geohubRoute === "user-profile" && e.state.profileUid) {
+      openUserProfilePage(e.state.profileUid, { fromPopstate: true });
+    } else {
+      goToRoute(e.state.geohubRoute, { fromPopstate: true });
+    }
   }
 });
 
@@ -348,19 +358,46 @@ function renderProfile() {
         <div class="profile-stat-chip"><strong>${escapeHtml(p.bloodGroup || "—")}</strong><span>Blood Grp</span></div>
         <div class="profile-stat-chip"><strong>${escapeHtml(p.year || p.session || "—")}</strong><span>Year</span></div>
       </div>
-      <div class="profile-flow-details">
-        ${rows.map(([label, val]) => `<div class="profile-detail-row"><span>${label}</span><span>${val}</span></div>`).join("")}
+
+      <div class="profile-tabs" role="tablist">
+        <button type="button" class="profile-tab-btn active" data-tab="info">Info</button>
+        <button type="button" class="profile-tab-btn" data-tab="posts">Posts</button>
       </div>
-      <div class="profile-flow-actions">
-        <button type="button" id="profile-edit-btn" class="profile-edit-btn">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-          Edit Profile &amp; Privacy
-        </button>
+
+      <div class="profile-tab-panel active" data-tab-panel="info">
+        <div class="profile-flow-details">
+          ${rows.map(([label, val]) => `<div class="profile-detail-row"><span>${label}</span><span>${val}</span></div>`).join("")}
+        </div>
+        <div class="profile-flow-actions">
+          <button type="button" id="profile-edit-btn" class="profile-edit-btn">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+            Edit Profile &amp; Privacy
+          </button>
+        </div>
+      </div>
+
+      <div class="profile-tab-panel" data-tab-panel="posts">
+        <div id="own-profile-posts-list"><p class="empty-state">Loading posts…</p></div>
       </div>
     </div>
   `;
   document.getElementById("profile-edit-btn").addEventListener("click", () => openProfileDetailsModal(false));
   document.getElementById("profile-edit-fab").addEventListener("click", () => openProfileDetailsModal(false));
+
+  const profileCardEl = document.getElementById("profile-card");
+  const tabBtns = profileCardEl.querySelectorAll(".profile-tab-btn");
+  const tabPanels = profileCardEl.querySelectorAll(".profile-tab-panel");
+  let ownPostsLoaded = false;
+  tabBtns.forEach(btn => {
+    btn.addEventListener("click", () => {
+      tabBtns.forEach(b => b.classList.toggle("active", b === btn));
+      tabPanels.forEach(panel => panel.classList.toggle("active", panel.dataset.tabPanel === btn.dataset.tab));
+      if (btn.dataset.tab === "posts" && !ownPostsLoaded) {
+        ownPostsLoaded = true;
+        loadUserPosts(p.uid, document.getElementById("own-profile-posts-list"));
+      }
+    });
+  });
 }
 
 // ============================================================
@@ -369,6 +406,8 @@ function renderProfile() {
 // "Edit" button on My Profile.
 // ============================================================
 function openProfileDetailsModal(isFirstTime = false) {
+  // First-time completion (right after a Google sign-in) is mandatory —
+  // no close button, and it can't be dismissed until it's saved.
   openModal(`
     <h3>${isFirstTime ? "Finish setting up your profile" : "Edit your details"}</h3>
     ${isFirstTime ? `<p class="modal-hint">Welcome to GeoHub! We just need a few more details so classmates can find you in the directory.</p>` : ""}
@@ -442,7 +481,7 @@ function openProfileDetailsModal(isFirstTime = false) {
 
     <p id="pd-error" class="form-error"></p>
     <button type="button" class="btn-primary full" id="pd-save-btn">Save Details</button>
-  `);
+  `, { closable: !isFirstTime });
   document.getElementById("pd-save-btn").addEventListener("click", () => saveProfileDetails(isFirstTime));
 }
 
@@ -470,7 +509,7 @@ async function saveProfileDetails(isFirstTime) {
   setBtnLoading(btn, true, "Saving…");
   try {
     await updateProfileDetails({ roll, blood, gender, phone, year, session, hometown, address, socialLink, bio, hidePhone, hideEmail });
-    closeModal();
+    closeModal({ force: true }); // needed for the mandatory first-time flow, harmless otherwise
     showToast(isFirstTime ? "Profile complete — welcome aboard!" : "Profile updated.");
     if (!document.getElementById("section-profile").classList.contains("hidden")) renderProfile();
   } catch (err) {

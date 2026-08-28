@@ -1,25 +1,43 @@
 // ============================================================
-// PROFILE-VIEW.JS — shared "view someone else's profile" modal.
-// Used from the Student Wall (tapping a post author) and the
-// Classmate Directory (tapping a directory row). Respects each
-// student's own privacy choices — a hidden phone number never
-// renders a working Call button.
+// PROFILE-VIEW.JS — a classmate's profile as a full drill-down
+// page (its own route, pushed to browser history — never a
+// modal), used from the Student Wall (tapping a post/comment
+// author) and the Classmate Directory (tapping a directory row).
+// Also exports loadUserPosts(), shared with "My Profile" in
+// app.js so both the student's own profile and a classmate's
+// profile show the same Info / Posts tabbed layout.
+// Respects each student's own privacy choices — a hidden phone
+// number never renders a working Call button.
 // ============================================================
-import { auth } from "./firebase-config.js";
+import { auth, db } from "./firebase-config.js";
+import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { fetchProfile } from "./auth.js";
-import { openModal, escapeHtml, getCachedProfile, cacheUserProfile, avatarInner, nameWithBadge, isAdminEmail } from "./ui-utils.js";
+import {
+  escapeHtml, getCachedProfile, cacheUserProfile, avatarInner, nameWithBadge,
+  isAdminEmail, timeAgo, clampableHtml, attachClampToggle, showToast
+} from "./ui-utils.js";
 
-/** Open the read-only profile modal for the given uid (fetches + caches if needed). */
-export async function openUserProfileModal(uid) {
+const cardEl = document.getElementById("user-profile-card");
+const backBtn = document.getElementById("user-profile-back-btn");
+
+// app.js hands us its router (goToRoute) so this page participates in the
+// normal section/back-button history exactly like the 5 main sections do.
+let goToRouteRef = null;
+export function registerProfilePageRouter(goToRoute) { goToRouteRef = goToRoute; }
+
+backBtn?.addEventListener("click", () => history.back());
+
+/** Open the full-page profile view for the given uid. Own profile routes to "My Profile" instead of duplicating it here. */
+export async function openUserProfilePage(uid, { fromPopstate = false } = {}) {
   if (!uid) return;
 
-  // Own profile? Just point people to "My Profile" instead of a duplicate view.
   if (auth.currentUser && uid === auth.currentUser.uid) {
     document.querySelector('.nav-item[data-route="profile"]')?.click();
     return;
   }
 
-  openModal(`<div class="profile-modal-loading"><span class="btn-spinner dark"></span> Loading profile…</div>`);
+  if (goToRouteRef) goToRouteRef("user-profile", { fromPopstate, state: { profileUid: uid } });
+  cardEl.innerHTML = `<div class="profile-modal-loading"><span class="btn-spinner dark"></span> Loading profile…</div>`;
 
   let profile = getCachedProfile(uid);
   if (!profile) {
@@ -27,18 +45,20 @@ export async function openUserProfileModal(uid) {
       profile = await fetchProfile(uid);
       if (profile) cacheUserProfile(uid, profile);
     } catch (err) {
-      openModal(`<p class="empty-state">Couldn't load this profile.</p>`);
+      cardEl.innerHTML = `<p class="empty-state">Couldn't load this profile.</p>`;
       return;
     }
   }
   if (!profile) {
-    openModal(`<p class="empty-state">This student's profile couldn't be found.</p>`);
+    cardEl.innerHTML = `<p class="empty-state">This student's profile couldn't be found.</p>`;
     return;
   }
-  renderProfileModal(profile);
+  renderProfilePage(profile, uid);
 }
 
-function renderProfileModal(profile) {
+function renderProfilePage(profile, uid) {
+  const admin = isAdminEmail(profile.email);
+
   const rows = [];
   if (profile.roll) rows.push(["Roll / Reg. No.", escapeHtml(profile.roll)]);
   if (profile.year) rows.push(["Year", escapeHtml(profile.year)]);
@@ -47,26 +67,111 @@ function renderProfileModal(profile) {
   if (profile.hometown) rows.push(["Hometown", escapeHtml(profile.hometown)]);
   if (profile.address) rows.push(["Present Address", escapeHtml(profile.address)]);
   if (profile.socialLink) rows.push(["Social / Facebook", `<a href="${escapeHtml(profile.socialLink)}" target="_blank" rel="noopener">Visit</a>`]);
-  rows.push(["Email", profile.hideEmail ? `<span class="hidden-field">Hidden by user</span>` : escapeHtml(profile.email || "—")]);
+  rows.push(["Email", profile.hideEmail ? `<span class="hidden-field-tag">Hidden</span>` : escapeHtml(profile.email || "—")]);
+  rows.push(["Phone", (profile.hidePhone || !profile.phone) ? `<span class="hidden-field-tag">${profile.phone ? "Hidden" : "Not set"}</span>` : escapeHtml(profile.phone)]);
 
-  const phoneRow = profile.hidePhone || !profile.phone
-    ? `<div class="pv-detail-row"><span>Phone</span><span class="hidden-field">${profile.phone ? "Hidden by user" : "Not set"}</span></div>`
-    : `<div class="pv-detail-row"><span>Phone</span><span>${escapeHtml(profile.phone)}</span></div>`;
+  // Update the top bar to name the classmate being viewed, now that we know who they are.
+  const topbarTitle = document.getElementById("topbar-title");
+  if (topbarTitle) topbarTitle.textContent = profile.name || "Classmate Profile";
 
-  openModal(`
-    <div class="profile-view-modal">
-      <div class="pv-header">
-        <div class="avatar avatar-lg pv-avatar">${avatarInner(profile)}</div>
+  cardEl.innerHTML = `
+    <div class="profile-flow">
+      <div class="profile-flow-banner" aria-hidden="true"></div>
+      <div class="profile-flow-head">
+        <div class="profile-flow-avatar-wrap">
+          <span class="avatar avatar-lg profile-flow-avatar">${avatarInner(profile)}</span>
+        </div>
         <h3>${nameWithBadge(profile.name || "Classmate", profile.email)}</h3>
-        ${isAdminEmail(profile.email) ? `<div class="profile-admin-note">Admin</div>` : ""}
-        ${profile.session ? `<div class="pv-sub">${escapeHtml(profile.session)}</div>` : ""}
+        ${profile.session ? `<div class="profile-role">${escapeHtml(profile.session)}</div>` : ""}
+        ${admin ? `<div class="profile-admin-note">Admin</div>` : ""}
       </div>
-      ${profile.bio ? `<p class="pv-bio">${escapeHtml(profile.bio)}</p>` : ""}
-      <div class="pv-details">
-        ${rows.map(([label, val]) => `<div class="pv-detail-row"><span>${label}</span><span>${val}</span></div>`).join("")}
-        ${phoneRow}
+      ${profile.bio ? `<p class="pv-bio profile-own-bio">${escapeHtml(profile.bio)}</p>` : ""}
+      <div class="profile-stat-row">
+        <div class="profile-stat-chip"><strong>${escapeHtml(profile.roll || "—")}</strong><span>Roll No.</span></div>
+        <div class="profile-stat-chip"><strong>${escapeHtml(profile.bloodGroup || "—")}</strong><span>Blood Grp</span></div>
+        <div class="profile-stat-chip"><strong>${escapeHtml(profile.year || profile.session || "—")}</strong><span>Year</span></div>
       </div>
-      ${(!profile.hidePhone && profile.phone) ? `<a class="btn-primary full" href="tel:${escapeHtml(profile.phone)}">Call ${escapeHtml((profile.name || "").split(" ")[0] || "")}</a>` : `<p class="pv-call-disabled">This student has hidden their contact number.</p>`}
+
+      <div class="profile-tabs" role="tablist">
+        <button type="button" class="profile-tab-btn active" data-tab="info">Info</button>
+        <button type="button" class="profile-tab-btn" data-tab="posts">Posts</button>
+      </div>
+
+      <div class="profile-tab-panel active" data-tab-panel="info">
+        <div class="profile-flow-details">
+          ${rows.map(([label, val]) => `<div class="profile-detail-row"><span>${label}</span><span>${val}</span></div>`).join("")}
+        </div>
+        <div class="profile-flow-actions">
+          ${(!profile.hidePhone && profile.phone)
+            ? `<a class="btn-primary full" href="tel:${escapeHtml(profile.phone)}">Call ${escapeHtml((profile.name || "").split(" ")[0] || "")}</a>`
+            : `<p class="pv-call-disabled">This student has hidden their contact number.</p>`}
+        </div>
+      </div>
+
+      <div class="profile-tab-panel" data-tab-panel="posts">
+        <div id="user-profile-posts-list"><p class="empty-state">Loading posts…</p></div>
+      </div>
     </div>
-  `);
+  `;
+
+  const tabBtns = cardEl.querySelectorAll(".profile-tab-btn");
+  const tabPanels = cardEl.querySelectorAll(".profile-tab-panel");
+  let postsLoaded = false;
+  tabBtns.forEach(btn => {
+    btn.addEventListener("click", () => {
+      tabBtns.forEach(b => b.classList.toggle("active", b === btn));
+      tabPanels.forEach(panel => panel.classList.toggle("active", panel.dataset.tabPanel === btn.dataset.tab));
+      if (btn.dataset.tab === "posts" && !postsLoaded) {
+        postsLoaded = true;
+        loadUserPosts(uid, cardEl.querySelector("#user-profile-posts-list"));
+      }
+    });
+  });
+}
+
+// ============================================================
+// POSTS TAB — every post this student has written to the Student
+// Wall, newest first. Shared by both "My Profile" (app.js) and a
+// classmate's profile page above, so it only needs to be written
+// (and kept in sync with the Wall's post shape) in one place.
+// ============================================================
+export async function loadUserPosts(uid, listEl) {
+  if (!listEl) return;
+  try {
+    const q = query(collection(db, "posts"), where("authorUid", "==", uid));
+    const snap = await getDocs(q);
+
+    if (snap.empty) {
+      listEl.innerHTML = `<p class="empty-state">No posts yet.</p>`;
+      return;
+    }
+
+    const posts = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (b.createdAt?.toDate?.().getTime() || 0) - (a.createdAt?.toDate?.().getTime() || 0));
+
+    listEl.innerHTML = `<div class="flat-list feed-list">` + posts.map(post => {
+      const author = getCachedProfile(post.authorUid) || { uid: post.authorUid, name: post.authorName };
+      const likeCount = (post.likes || []).length;
+      return `
+        <article class="feed-post">
+          <div class="post-head">
+            <span class="avatar">${avatarInner(author)}</span>
+            <div class="post-meta">
+              <span class="post-author-name">${nameWithBadge(post.authorName, post.authorEmail)}</span>
+              <small>${timeAgo(post.createdAt)}</small>
+            </div>
+          </div>
+          ${clampableHtml(post.text, "post-text")}
+          ${likeCount ? `
+            <div class="post-actions">
+              <span class="post-like-count"><span class="leaf-mini"></span> ${likeCount} ${likeCount === 1 ? "like" : "likes"}</span>
+            </div>` : ""}
+        </article>`;
+    }).join("") + `</div>`;
+    attachClampToggle(listEl);
+  } catch (err) {
+    listEl.innerHTML = `<p class="empty-state">Couldn't load posts.</p>`;
+    showToast("Couldn't load posts: " + err.message);
+  }
 }

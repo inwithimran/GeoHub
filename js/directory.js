@@ -7,7 +7,7 @@
 import { db } from "./firebase-config.js";
 import { collection, onSnapshot } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { escapeHtml, showToast, cacheUserProfile, avatarInner, nameWithBadge } from "./ui-utils.js";
-import { openUserProfileModal } from "./profile-view.js";
+import { openUserProfilePage } from "./profile-view.js";
 
 const directoryList = document.getElementById("directory-list");
 const searchInput = document.getElementById("directory-search");
@@ -64,7 +64,7 @@ function renderDirectory() {
   directoryList.querySelectorAll(".directory-row").forEach(row => {
     row.addEventListener("click", (e) => {
       if (e.target.closest("[data-no-row-click]")) return; // let the Call link work normally
-      openUserProfileModal(row.dataset.uid);
+      openUserProfilePage(row.dataset.uid);
     });
   });
 }

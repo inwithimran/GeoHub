@@ -17,6 +17,7 @@ export function showToast(message) {
 
 const modalOverlay = document.getElementById("modal-overlay");
 const modalBody = document.getElementById("modal-body");
+const modalCloseBtn = document.getElementById("modal-close-btn");
 
 // ============================================================
 // MODAL <-> BACK BUTTON — every modal push its own history entry,
@@ -25,40 +26,57 @@ const modalBody = document.getElementById("modal-body");
 // section they were viewing. Content-only refreshes of an already
 // -open modal (e.g. a "Loading…" state swapped for the real
 // content) don't push a second entry.
+//
+// Tapping the dark backdrop no longer closes the sheet — the only
+// way to dismiss a modal is the close (X) button in its top-right
+// corner. A modal opened with { closable: false } (the mandatory
+// "finish your profile" step right after first sign-in) hides that
+// button entirely and can't be dismissed until the flow calls
+// closeModal({ force: true }) itself.
 // ============================================================
 let modalHistoryOpen = false;   // true while the current history entry represents an open modal
 let closingFromPopstate = false; // true while we're reacting to a back-navigation, to avoid a double history.back()
+let modalClosable = true;       // false while a mandatory, non-dismissable modal is open
 
-/** Open the shared bottom-sheet modal with the given inner HTML. */
-export function openModal(html) {
+/** Open the shared bottom-sheet modal with the given inner HTML. Pass { closable: false } for a modal that must be completed rather than dismissed. */
+export function openModal(html, { closable = true } = {}) {
   const wasHidden = modalOverlay.classList.contains("hidden");
   modalBody.innerHTML = html;
+  modalClosable = closable;
+  modalOverlay.classList.toggle("no-close", !closable);
   modalOverlay.classList.remove("hidden");
   if (wasHidden) {
     history.pushState({ geohubModal: true }, "");
     modalHistoryOpen = true;
   }
 }
-export function closeModal() {
+/** Close the modal. A non-closable (mandatory) modal ignores this unless { force: true } is passed. */
+export function closeModal({ force = false } = {}) {
   if (modalOverlay.classList.contains("hidden")) return;
+  if (!modalClosable && !force) return;
   modalOverlay.classList.add("hidden");
+  modalOverlay.classList.remove("no-close");
   modalBody.innerHTML = "";
+  modalClosable = true;
   if (modalHistoryOpen) {
     modalHistoryOpen = false;
     if (!closingFromPopstate) history.back(); // pop the entry this modal pushed
   }
 }
-// Tapping the dark backdrop closes the sheet
-modalOverlay.addEventListener("click", (e) => {
-  if (e.target === modalOverlay) closeModal();
-});
-// Device/browser back button: close an open modal instead of navigating away.
+// The close (X) button is the only way to dismiss a modal by hand.
+modalCloseBtn.addEventListener("click", () => closeModal());
+// Device/browser back button: close an open, closable modal instead of
+// navigating away. A mandatory modal re-asserts its history entry so the
+// back button can't be used to slip past it.
 window.addEventListener("popstate", () => {
-  if (!modalOverlay.classList.contains("hidden")) {
-    closingFromPopstate = true;
-    closeModal();
-    closingFromPopstate = false;
+  if (modalOverlay.classList.contains("hidden")) return;
+  if (!modalClosable) {
+    history.pushState({ geohubModal: true }, "");
+    return;
   }
+  closingFromPopstate = true;
+  closeModal();
+  closingFromPopstate = false;
 });
 
 /** Escape user-entered text before injecting into innerHTML (XSS guard). */

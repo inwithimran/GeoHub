@@ -15,7 +15,7 @@ import {
   setBtnLoading, cacheUserProfile, getCachedProfile, clampableHtml, attachClampToggle,
   avatarInner, nameWithBadge
 } from "./ui-utils.js";
-import { openUserProfileModal } from "./profile-view.js";
+import { openUserProfilePage } from "./profile-view.js";
 
 const wallList = document.getElementById("wall-list");
 const composerTrigger = document.getElementById("composer-trigger");
@@ -145,7 +145,7 @@ function renderPost(postId, post, listEl) {
   `;
 
   el.querySelectorAll("[data-author]").forEach(b =>
-    b.addEventListener("click", () => openUserProfileModal(post.authorUid)));
+    b.addEventListener("click", () => openUserProfilePage(post.authorUid)));
   el.querySelector(".leaf-like-btn").addEventListener("click", (e) => {
     toggleLike(postId, liked, e.currentTarget);
   });
@@ -207,7 +207,10 @@ async function openLikesModal(uids) {
     </div>
   `);
   document.querySelectorAll(".likes-row").forEach(row =>
-    row.addEventListener("click", () => openUserProfileModal(row.dataset.uid)));
+    row.addEventListener("click", () => {
+      closeModal(); // this row lives inside the "Liked by" modal — close it before navigating to a full page
+      openUserProfilePage(row.dataset.uid);
+    }));
 }
 
 // ============================================================
@@ -258,7 +261,7 @@ async function loadComments(postId, block) {
   block.innerHTML = html;
 
   block.querySelectorAll("[data-author]").forEach(b =>
-    b.addEventListener("click", () => openUserProfileModal(b.dataset.author)));
+    b.addEventListener("click", () => openUserProfilePage(b.dataset.author)));
 
   const sendBtn = block.querySelector(`[data-comment-send="${postId}"]`);
   sendBtn.addEventListener("click", () => submitComment(postId, block, sendBtn));
