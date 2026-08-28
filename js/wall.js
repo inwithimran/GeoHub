@@ -91,6 +91,7 @@ async function handleCreatePost() {
     await addDoc(collection(db, "posts"), {
       authorUid: auth.currentUser.uid,
       authorName: currentProfile.name,
+      authorEmail: auth.currentUser.email,
       text,
       likes: [],
       createdAt: serverTimestamp()
@@ -118,7 +119,7 @@ function renderPost(postId, post, listEl) {
     <div class="post-head">
       <button type="button" class="avatar avatar-btn" data-author="${post.authorUid}">${avatarInner(author)}</button>
       <div class="post-meta">
-        <button type="button" class="post-author-name" data-author="${post.authorUid}">${nameWithBadge(post.authorName, author.email)}</button>
+        <button type="button" class="post-author-name" data-author="${post.authorUid}">${nameWithBadge(post.authorName, post.authorEmail)}</button>
         <small>${timeAgo(post.createdAt)}</small>
       </div>
     </div>
@@ -240,7 +241,7 @@ async function loadComments(postId, block) {
       <div class="comment-item">
         <button type="button" class="avatar avatar-sm avatar-btn" data-author="${data.authorUid}">${avatarInner(author)}</button>
         <div class="comment-body">
-          <button type="button" class="comment-author" data-author="${data.authorUid}">${nameWithBadge(data.authorName, author.email)}</button>
+          <button type="button" class="comment-author" data-author="${data.authorUid}">${nameWithBadge(data.authorName, data.authorEmail)}</button>
           <p>${escapeHtml(data.text)}</p>
           <small>${timeAgo(data.createdAt)}</small>
         </div>
@@ -280,6 +281,7 @@ async function submitComment(postId, block, sendBtn) {
     await addDoc(collection(db, "posts", postId, "comments"), {
       authorUid: auth.currentUser.uid,
       authorName: currentProfile.name,
+      authorEmail: auth.currentUser.email,
       text,
       createdAt: serverTimestamp()
     });

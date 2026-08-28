@@ -57,7 +57,7 @@ function renderNotices() {
       <div class="notice-row-top">
         <span class="avatar avatar-sm notice-row-avatar">${avatarInner(posterProfile(n))}</span>
         <div class="notice-row-byline">
-          <span class="notice-row-name">${nameWithBadge(n.postedByName || "Class Admin", n.postedBy)}</span>
+          <span class="notice-row-name">${nameWithBadge(n.postedByName || "Admin", n.postedBy)}</span>
           <small>${timeAgo(n.createdAt)}</small>
         </div>
         ${n.urgent ? `<span class="urgent-tag">⚠ Urgent</span>` : ""}
@@ -78,7 +78,7 @@ function openNoticeDetail(noticeId) {
       <div class="notice-detail-head">
         <span class="avatar avatar-lg">${avatarInner(posterProfile(n))}</span>
         <div>
-          <div class="notice-detail-name">${nameWithBadge(n.postedByName || "Class Admin", n.postedBy)}</div>
+          <div class="notice-detail-name">${nameWithBadge(n.postedByName || "Admin", n.postedBy)}</div>
           <small>${fullDate(n.createdAt) || "Just now"}</small>
         </div>
       </div>
@@ -98,7 +98,7 @@ async function postNotice() {
       urgent: noticeUrgent.checked,
       postedBy: auth.currentUser.email,
       postedByUid: auth.currentUser.uid,
-      postedByName: currentProfile ? currentProfile.name : "Class Admin",
+      postedByName: currentProfile ? currentProfile.name : "Admin",
       createdAt: serverTimestamp()
     });
     noticeInput.value = "";

@@ -303,7 +303,7 @@ function renderProfile() {
         <span class="avatar avatar-lg profile-flow-avatar">${avatarInner(p)}</span>
         <h3>${nameWithBadge(p.name, p.email)}</h3>
         <div class="profile-role">${escapeHtml(DEPARTMENT_NAME)}</div>
-        ${admin ? `<div class="profile-admin-note">Class Admin · can post notices to the whole department</div>` : ""}
+        ${admin ? `<div class="profile-admin-note">Admin · can post notices to the whole department</div>` : ""}
       </div>
       ${p.bio ? `<p class="pv-bio profile-own-bio">${escapeHtml(p.bio)}</p>` : ""}
       <div class="profile-flow-details">

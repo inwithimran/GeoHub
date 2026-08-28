@@ -58,7 +58,7 @@ function renderProfileModal(profile) {
       <div class="pv-header">
         <div class="avatar avatar-lg pv-avatar">${avatarInner(profile)}</div>
         <h3>${nameWithBadge(profile.name || "Classmate", profile.email)}</h3>
-        ${isAdminEmail(profile.email) ? `<div class="profile-admin-note">Class Admin</div>` : ""}
+        ${isAdminEmail(profile.email) ? `<div class="profile-admin-note">Admin</div>` : ""}
         ${profile.session ? `<div class="pv-sub">${escapeHtml(profile.session)}</div>` : ""}
       </div>
       ${profile.bio ? `<p class="pv-bio">${escapeHtml(profile.bio)}</p>` : ""}

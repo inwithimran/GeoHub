@@ -156,9 +156,9 @@ export function isAdminEmail(email) {
   return !!email && ADMIN_EMAILS.includes(email);
 }
 
-/** The small admin badge shown next to an admin's name everywhere — an "A" mark, no icon. */
+/** The small purple "verified" seal shown next to the admin's name everywhere (scalloped badge shape, like the well-known social-app verified marks, with an "A" mark inside). */
 export function adminBadgeHtml() {
-  return `<span class="admin-badge" role="img" aria-label="Class Admin" title="Class Admin">A</span>`;
+  return `<svg class="admin-badge" viewBox="0 0 24 24" role="img" aria-label="Verified Admin" aria-hidden="false"><title>Founder & Admin</title><path d="M23 12l-2.44-2.79.34-3.69-3.61-.82-1.89-3.2L12 2.96 8.6 1.5 6.71 4.69 3.1 5.5l.34 3.7L1 12l2.44 2.79-.34 3.7 3.61.82L8.6 22.5l3.4-1.47 3.4 1.46 1.89-3.19 3.61-.82-.34-3.69L23 12z"/><text x="12" y="15.7" text-anchor="middle" font-size="10" font-weight="800" fill="#fff" font-family="Arial, Helvetica, sans-serif">A</text></svg>`;
 }
 
 /**
