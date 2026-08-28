@@ -58,3 +58,9 @@ export const RESOURCE_CATEGORIES = [
 export const ADMIN_EMAILS = [
   "in.with.imran@gmail.com"
 ];
+
+// The class admin's real, canonical name — shown everywhere their email
+// appears (Wall posts, comments, Notice Board, Directory, Profile), with
+// the admin badge, regardless of whatever name string is stored on the
+// account itself. Keeps the admin identity consistent across the app.
+export const ADMIN_NAME = "Tabib Imran";

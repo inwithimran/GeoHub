@@ -2,7 +2,7 @@
 // UI-UTILS.JS — small shared helpers (toast, modal, formatting)
 // used by wall.js / resources.js / directory.js / routine.js
 // ============================================================
-import { ADMIN_EMAILS } from "./firebase-config.js";
+import { ADMIN_EMAILS, ADMIN_NAME } from "./firebase-config.js";
 
 const toastEl = document.getElementById("toast");
 let toastTimer = null;
@@ -18,18 +18,47 @@ export function showToast(message) {
 const modalOverlay = document.getElementById("modal-overlay");
 const modalBody = document.getElementById("modal-body");
 
+// ============================================================
+// MODAL <-> BACK BUTTON — every modal push its own history entry,
+// so the device/browser back button closes the modal (instead of
+// leaving the whole app) and lands the user back on whatever
+// section they were viewing. Content-only refreshes of an already
+// -open modal (e.g. a "Loading…" state swapped for the real
+// content) don't push a second entry.
+// ============================================================
+let modalHistoryOpen = false;   // true while the current history entry represents an open modal
+let closingFromPopstate = false; // true while we're reacting to a back-navigation, to avoid a double history.back()
+
 /** Open the shared bottom-sheet modal with the given inner HTML. */
 export function openModal(html) {
+  const wasHidden = modalOverlay.classList.contains("hidden");
   modalBody.innerHTML = html;
   modalOverlay.classList.remove("hidden");
+  if (wasHidden) {
+    history.pushState({ geohubModal: true }, "");
+    modalHistoryOpen = true;
+  }
 }
 export function closeModal() {
+  if (modalOverlay.classList.contains("hidden")) return;
   modalOverlay.classList.add("hidden");
   modalBody.innerHTML = "";
+  if (modalHistoryOpen) {
+    modalHistoryOpen = false;
+    if (!closingFromPopstate) history.back(); // pop the entry this modal pushed
+  }
 }
 // Tapping the dark backdrop closes the sheet
 modalOverlay.addEventListener("click", (e) => {
   if (e.target === modalOverlay) closeModal();
+});
+// Device/browser back button: close an open modal instead of navigating away.
+window.addEventListener("popstate", () => {
+  if (!modalOverlay.classList.contains("hidden")) {
+    closingFromPopstate = true;
+    closeModal();
+    closingFromPopstate = false;
+  }
 });
 
 /** Escape user-entered text before injecting into innerHTML (XSS guard). */
@@ -132,9 +161,17 @@ export function adminBadgeHtml() {
   return `<span class="admin-badge" role="img" aria-label="Class Admin" title="Class Admin">A</span>`;
 }
 
-/** A student's display name, with the admin badge appended when applicable. */
+/**
+ * A student's display name, with the admin badge appended when applicable.
+ * For the class admin's email, the canonical ADMIN_NAME is always shown
+ * (instead of whatever name happens to be stored on the account) — so the
+ * admin's identity is consistent everywhere: Wall posts, comments, the
+ * Notice Board, Directory, and Profile.
+ */
 export function nameWithBadge(name, email) {
-  return `${escapeHtml(name || "Classmate")}${isAdminEmail(email) ? adminBadgeHtml() : ""}`;
+  const admin = isAdminEmail(email);
+  const displayName = admin ? ADMIN_NAME : (name || "Classmate");
+  return `${escapeHtml(displayName)}${admin ? adminBadgeHtml() : ""}`;
 }
 
 /** Turn a Firestore Timestamp (or null, while pending) into "3m ago" style text. */

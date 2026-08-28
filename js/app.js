@@ -182,7 +182,19 @@ const routeTitles = {
   profile: "My Profile"
 };
 
-function goToRoute(route) {
+let currentRoute = "wall";
+
+// ============================================================
+// ROUTE <-> BACK BUTTON — every section change pushes a history
+// entry (replaced, not pushed, for the very first section after
+// login), so the device/browser back button steps back through
+// previously visited sections instead of leaving the app.
+// `fromPopstate` is true when we're reacting to the back button
+// itself, so we don't push a new entry for a navigation that's
+// already a "back".
+// ============================================================
+function goToRoute(route, { fromPopstate = false, replace = false } = {}) {
+  if (!routeTitles[route]) return;
   document.querySelectorAll(".route-section").forEach(sec => {
     sec.classList.toggle("hidden", sec.id !== `section-${route}`);
   });
@@ -192,12 +204,33 @@ function goToRoute(route) {
   document.getElementById("topbar-title").textContent = routeTitles[route] || "GeoHub";
 
   if (route === "profile") renderProfile();
+
+  currentRoute = route;
+  if (replace) {
+    history.replaceState({ geohubRoute: route }, "");
+  } else if (!fromPopstate && route !== history.state?.geohubRoute) {
+    history.pushState({ geohubRoute: route }, "");
+  }
 }
 
 document.querySelectorAll(".nav-item[data-route]").forEach(btn => {
-  btn.addEventListener("click", () => goToRoute(btn.dataset.route));
+  btn.addEventListener("click", () => {
+    if (btn.dataset.route !== currentRoute) goToRoute(btn.dataset.route);
+  });
 });
-document.getElementById("topbar-user").addEventListener("click", () => goToRoute("profile"));
+document.getElementById("topbar-user").addEventListener("click", () => {
+  if (currentRoute !== "profile") goToRoute("profile");
+});
+
+// Device/browser back button: step back to whichever section is recorded
+// in that history entry (a modal's own popstate handling, in ui-utils.js,
+// runs independently and takes care of closing an open modal first).
+window.addEventListener("popstate", (e) => {
+  if (appShell.classList.contains("hidden")) return; // not logged in — nothing to route
+  if (e.state && e.state.geohubRoute) {
+    goToRoute(e.state.geohubRoute, { fromPopstate: true });
+  }
+});
 
 // ============================================================
 // LOGOUT — both the desktop sidebar button and the mobile profile
@@ -430,7 +463,7 @@ watchAuthState(
       initRoutine();
       featuresInitialized = true;
     }
-    goToRoute("wall");
+    goToRoute("wall", { replace: true });
 
     // First-time Google sign-ins land without roll/blood/phone — ask for them once.
     if (profile && profile.profileIncomplete) {
@@ -442,6 +475,9 @@ watchAuthState(
   () => {
     appShell.classList.add("hidden");
     authScreen.classList.remove("hidden");
+    // Clear the app's route history so a re-login starts a fresh back-stack
+    // instead of carrying over section entries from the previous session.
+    history.replaceState({ geohubAuthScreen: true }, "");
 
     if (featuresInitialized) {
       teardownWall();
