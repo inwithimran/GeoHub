@@ -9,13 +9,16 @@
 // Respects each student's own privacy choices — a hidden phone
 // number never renders a working Call button.
 // ============================================================
-import { auth, db } from "./firebase-config.js";
+import { auth, db, COLLEGE_NAME } from "./firebase-config.js";
 import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { fetchProfile } from "./auth.js";
 import {
   escapeHtml, getCachedProfile, cacheUserProfile, avatarInner, nameWithBadge,
-  isAdminEmail, timeAgo, clampableHtml, attachClampToggle, showToast
+  isAdminEmail, timeAgo, fullDate, clampableHtml, attachClampToggle, showToast,
+  resetScrollForTabs, kebabMenuHtml, wireKebabMenus, confirmDialog
 } from "./ui-utils.js";
+import { loadUserResources } from "./resources.js";
+import { openEditPostModal, deletePost } from "./wall.js";
 
 const cardEl = document.getElementById("user-profile-card");
 const backBtn = document.getElementById("user-profile-back-btn");
@@ -63,12 +66,16 @@ function renderProfilePage(profile, uid) {
   if (profile.roll) rows.push(["Roll / Reg. No.", escapeHtml(profile.roll)]);
   if (profile.year) rows.push(["Year", escapeHtml(profile.year)]);
   if (profile.bloodGroup) rows.push(["Blood Group", escapeHtml(profile.bloodGroup)]);
+  rows.push(["Gender", profile.gender ? escapeHtml(profile.gender[0].toUpperCase() + profile.gender.slice(1)) : "Not set"]);
   if (profile.session) rows.push(["Session / Batch", escapeHtml(profile.session)]);
   if (profile.hometown) rows.push(["Hometown", escapeHtml(profile.hometown)]);
   if (profile.address) rows.push(["Present Address", escapeHtml(profile.address)]);
   if (profile.socialLink) rows.push(["Social / Facebook", `<a href="${escapeHtml(profile.socialLink)}" target="_blank" rel="noopener">Visit</a>`]);
   rows.push(["Email", profile.hideEmail ? `<span class="hidden-field-tag">Hidden</span>` : escapeHtml(profile.email || "—")]);
   rows.push(["Phone", (profile.hidePhone || !profile.phone) ? `<span class="hidden-field-tag">${profile.phone ? "Hidden" : "Not set"}</span>` : escapeHtml(profile.phone)]);
+  rows.push(["College", escapeHtml(COLLEGE_NAME)]);
+  const joined = fullDate(profile.createdAt);
+  if (joined) rows.push(["Joined GeoHub", joined]);
 
   // Update the top bar to name the classmate being viewed, now that we know who they are.
   const topbarTitle = document.getElementById("topbar-title");
@@ -95,6 +102,7 @@ function renderProfilePage(profile, uid) {
       <div class="profile-tabs" role="tablist">
         <button type="button" class="profile-tab-btn active" data-tab="info">Info</button>
         <button type="button" class="profile-tab-btn" data-tab="posts">Posts</button>
+        <button type="button" class="profile-tab-btn" data-tab="notes">Notes</button>
       </div>
 
       <div class="profile-tab-panel active" data-tab-panel="info">
@@ -111,19 +119,30 @@ function renderProfilePage(profile, uid) {
       <div class="profile-tab-panel" data-tab-panel="posts">
         <div id="user-profile-posts-list"><p class="empty-state">Loading posts…</p></div>
       </div>
+
+      <div class="profile-tab-panel" data-tab-panel="notes">
+        <div id="user-profile-notes-list"><p class="empty-state">Loading notes…</p></div>
+      </div>
     </div>
   `;
 
   const tabBtns = cardEl.querySelectorAll(".profile-tab-btn");
   const tabPanels = cardEl.querySelectorAll(".profile-tab-panel");
+  const tabsEl = cardEl.querySelector(".profile-tabs");
   let postsLoaded = false;
+  let notesLoaded = false;
   tabBtns.forEach(btn => {
     btn.addEventListener("click", () => {
       tabBtns.forEach(b => b.classList.toggle("active", b === btn));
       tabPanels.forEach(panel => panel.classList.toggle("active", panel.dataset.tabPanel === btn.dataset.tab));
+      resetScrollForTabs(tabsEl); // each tab starts at its own top, instead of inheriting the previous tab's scroll position
       if (btn.dataset.tab === "posts" && !postsLoaded) {
         postsLoaded = true;
         loadUserPosts(uid, cardEl.querySelector("#user-profile-posts-list"));
+      }
+      if (btn.dataset.tab === "notes" && !notesLoaded) {
+        notesLoaded = true;
+        loadUserResources(uid, cardEl.querySelector("#user-profile-notes-list"));
       }
     });
   });
@@ -150,17 +169,23 @@ export async function loadUserPosts(uid, listEl) {
       .map(d => ({ id: d.id, ...d.data() }))
       .sort((a, b) => (b.createdAt?.toDate?.().getTime() || 0) - (a.createdAt?.toDate?.().getTime() || 0));
 
+    const myUid = auth.currentUser?.uid;
     listEl.innerHTML = `<div class="flat-list feed-list">` + posts.map(post => {
       const author = getCachedProfile(post.authorUid) || { uid: post.authorUid, name: post.authorName };
       const likeCount = (post.likes || []).length;
+      const isOwnPost = post.authorUid === myUid;
       return `
         <article class="feed-post">
           <div class="post-head">
             <span class="avatar">${avatarInner(author)}</span>
             <div class="post-meta">
               <span class="post-author-name">${nameWithBadge(post.authorName, post.authorEmail)}</span>
-              <small>${timeAgo(post.createdAt)}</small>
+              <small>${timeAgo(post.createdAt)}${post.editedAt ? " · edited" : ""}</small>
             </div>
+            ${isOwnPost ? kebabMenuHtml(post.id, [
+              { action: "edit", label: "Edit Post" },
+              { action: "delete", label: "Delete Post", danger: true }
+            ]) : ""}
           </div>
           ${clampableHtml(post.text, "post-text")}
           ${likeCount ? `
@@ -170,6 +195,18 @@ export async function loadUserPosts(uid, listEl) {
         </article>`;
     }).join("") + `</div>`;
     attachClampToggle(listEl);
+    wireKebabMenus(listEl, {
+      edit: (postId) => {
+        const post = posts.find(p => p.id === postId);
+        openEditPostModal(postId, post.text, () => loadUserPosts(uid, listEl));
+      },
+      delete: (postId) => confirmDialog({
+        title: "Delete this post?",
+        text: "This post and all of its comments will be removed from the Wall. This can't be undone.",
+        confirmLabel: "Delete",
+        onConfirm: () => deletePost(postId, () => loadUserPosts(uid, listEl))
+      })
+    });
   } catch (err) {
     listEl.innerHTML = `<p class="empty-state">Couldn't load posts.</p>`;
     showToast("Couldn't load posts: " + err.message);

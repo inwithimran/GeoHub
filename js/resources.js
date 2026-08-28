@@ -1,14 +1,17 @@
 // ============================================================
 // RESOURCES.JS — Central Note & Sheet Hub
 // Resources live in the "resources" collection:
-// { title, category, contributorName, link, createdAt }
+// { title, category, contributorName, contributorUid, link, createdAt }
 // ============================================================
 import { db, auth, RESOURCE_CATEGORIES } from "./firebase-config.js";
 import {
-  collection, addDoc, onSnapshot, query, orderBy, serverTimestamp
+  collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, where, orderBy, getDocs, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { currentProfile } from "./auth.js";
-import { showToast, escapeHtml, openModal, closeModal, timeAgo, setBtnLoading } from "./ui-utils.js";
+import {
+  showToast, escapeHtml, openModal, closeModal, timeAgo, setBtnLoading,
+  kebabMenuHtml, wireKebabMenus, confirmDialog
+} from "./ui-utils.js";
 
 const chipRow = document.getElementById("resource-categories");
 const resourceList = document.getElementById("resource-list");
@@ -48,13 +51,19 @@ function renderResources() {
   const filtered = activeCategory === "All"
     ? allResources
     : allResources.filter(r => r.category === activeCategory);
+  renderResourceRows(filtered, resourceList, "No resources shared yet in this category.");
+}
 
-  if (!filtered.length) {
-    resourceList.innerHTML = `<p class="empty-state">No resources shared yet in this category.</p>`;
+/** Shared row renderer — used by the main Notes & Sheet Hub list and by a profile's "Notes" tab. */
+function renderResourceRows(resources, listEl, emptyMessage) {
+  if (!listEl) return;
+  if (!resources.length) {
+    listEl.innerHTML = `<p class="empty-state">${escapeHtml(emptyMessage)}</p>`;
     return;
   }
 
-  resourceList.innerHTML = `<div class="flat-list">` + filtered.map(r => `
+  const uid = auth.currentUser?.uid;
+  listEl.innerHTML = `<div class="flat-list">` + resources.map(r => `
     <div class="resource-row">
       <div class="resource-row-icon">${fileGlyph(r.category)}</div>
       <div class="resource-row-info">
@@ -66,8 +75,41 @@ function renderResources() {
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3h7v7"/><path d="M10 14 21 3"/><path d="M19 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h6"/></svg>
         <span>Open</span>
       </a>
+      ${r.contributorUid === uid ? kebabMenuHtml(r.id, [
+        { action: "edit", label: "Edit" },
+        { action: "delete", label: "Delete", danger: true }
+      ]) : ""}
     </div>
   `).join("") + `</div>`;
+
+  wireKebabMenus(listEl, {
+    edit: (resId) => openEditResourceModal(resId),
+    delete: (resId) => confirmDialog({
+      title: "Delete this resource?",
+      text: "This note/sheet link will be removed for everyone in the department. This can't be undone.",
+      confirmLabel: "Delete",
+      onConfirm: async () => {
+        await deleteDoc(doc(db, "resources", resId));
+        showToast("Resource deleted.");
+      }
+    })
+  });
+}
+
+/** Every resource a given student has contributed — shared by "My Profile" and a classmate's profile "Notes" tab. */
+export async function loadUserResources(uid, listEl) {
+  if (!listEl) return;
+  try {
+    const q = query(collection(db, "resources"), where("contributorUid", "==", uid));
+    const snap = await getDocs(q);
+    const resources = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (b.createdAt?.toDate?.().getTime() || 0) - (a.createdAt?.toDate?.().getTime() || 0));
+    renderResourceRows(resources, listEl, "No notes shared yet.");
+  } catch (err) {
+    listEl.innerHTML = `<p class="empty-state">Couldn't load notes.</p>`;
+    showToast("Couldn't load notes: " + err.message);
+  }
 }
 
 /** Single-letter glyph shown in the leading icon slot, based on category. */
@@ -118,6 +160,43 @@ async function submitResource() {
     showToast("Couldn't share resource: " + err.message);
     setBtnLoading(btn, false);
   }
+}
+
+function openEditResourceModal(resId) {
+  const r = allResources.find(x => x.id === resId);
+  if (!r) return;
+  const options = RESOURCE_CATEGORIES.map(c => `<option value="${escapeHtml(c)}" ${r.category === c ? "selected" : ""}>${escapeHtml(c)}</option>`).join("");
+  openModal(`
+    <h3>Edit Note / Sheet</h3>
+    <label class="field">
+      <span>Title</span>
+      <input type="text" id="res-edit-title" value="${escapeHtml(r.title)}" />
+    </label>
+    <label class="field">
+      <span>Category</span>
+      <select id="res-edit-category">${options}</select>
+    </label>
+    <label class="field">
+      <span>Link (Google Drive / OneDrive / etc.)</span>
+      <input type="url" id="res-edit-link" value="${escapeHtml(r.link)}" />
+    </label>
+    <button type="button" class="btn-primary full" id="res-edit-save-btn">Save Changes</button>
+  `);
+  document.getElementById("res-edit-save-btn").addEventListener("click", async (e) => {
+    const title = document.getElementById("res-edit-title").value.trim();
+    const category = document.getElementById("res-edit-category").value;
+    const link = document.getElementById("res-edit-link").value.trim();
+    if (!title || !link) return showToast("Please fill in the title and link.");
+    setBtnLoading(e.currentTarget, true, "Saving…");
+    try {
+      await updateDoc(doc(db, "resources", resId), { title, category, link });
+      closeModal();
+      showToast("Resource updated.");
+    } catch (err) {
+      showToast("Couldn't update resource: " + err.message);
+      setBtnLoading(e.currentTarget, false);
+    }
+  });
 }
 
 export function teardownResources() {

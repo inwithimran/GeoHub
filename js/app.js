@@ -10,13 +10,13 @@ import {
   signInWithGoogle, updateProfileDetails
 } from "./auth.js";
 import { initWall, teardownWall } from "./wall.js";
-import { initResources, teardownResources } from "./resources.js";
+import { initResources, teardownResources, loadUserResources } from "./resources.js";
 import { initDirectory, teardownDirectory } from "./directory.js";
-import { initRoutine, teardownRoutine } from "./routine.js";
+import { initRoutine, teardownRoutine, openNoticesPanel } from "./routine.js";
 import { openUserProfilePage, loadUserPosts, registerProfilePageRouter } from "./profile-view.js";
 import {
   escapeHtml, openModal, closeModal, showToast, setBtnLoading, fullDate,
-  avatarInner, nameWithBadge, isAdminEmail
+  avatarInner, nameWithBadge, isAdminEmail, resetScrollForTabs
 } from "./ui-utils.js";
 
 // ---------- Element references ----------
@@ -211,7 +211,7 @@ const routeTitles = {
   wall: "Student Wall",
   resources: "Notes & Sheet Hub",
   directory: "Classmate Directory",
-  routine: "Routine & Notices",
+  routine: "Weekly Routine",
   profile: "My Profile",
   "user-profile": "Profile" // overwritten with the classmate's name once loaded
 };
@@ -256,9 +256,7 @@ document.querySelectorAll(".nav-item[data-route]").forEach(btn => {
     if (btn.dataset.route !== currentRoute) goToRoute(btn.dataset.route);
   });
 });
-document.getElementById("topbar-user").addEventListener("click", () => {
-  if (currentRoute !== "profile") goToRoute("profile");
-});
+document.getElementById("topbar-notif-btn").addEventListener("click", () => openNoticesPanel());
 
 // Device/browser back button: step back to whichever section is recorded
 // in that history entry (a modal's own popstate handling, in ui-utils.js,
@@ -362,6 +360,7 @@ function renderProfile() {
       <div class="profile-tabs" role="tablist">
         <button type="button" class="profile-tab-btn active" data-tab="info">Info</button>
         <button type="button" class="profile-tab-btn" data-tab="posts">Posts</button>
+        <button type="button" class="profile-tab-btn" data-tab="notes">Notes</button>
       </div>
 
       <div class="profile-tab-panel active" data-tab-panel="info">
@@ -379,6 +378,10 @@ function renderProfile() {
       <div class="profile-tab-panel" data-tab-panel="posts">
         <div id="own-profile-posts-list"><p class="empty-state">Loading posts…</p></div>
       </div>
+
+      <div class="profile-tab-panel" data-tab-panel="notes">
+        <div id="own-profile-notes-list"><p class="empty-state">Loading notes…</p></div>
+      </div>
     </div>
   `;
   document.getElementById("profile-edit-btn").addEventListener("click", () => openProfileDetailsModal(false));
@@ -387,14 +390,21 @@ function renderProfile() {
   const profileCardEl = document.getElementById("profile-card");
   const tabBtns = profileCardEl.querySelectorAll(".profile-tab-btn");
   const tabPanels = profileCardEl.querySelectorAll(".profile-tab-panel");
+  const tabsEl = profileCardEl.querySelector(".profile-tabs");
   let ownPostsLoaded = false;
+  let ownNotesLoaded = false;
   tabBtns.forEach(btn => {
     btn.addEventListener("click", () => {
       tabBtns.forEach(b => b.classList.toggle("active", b === btn));
       tabPanels.forEach(panel => panel.classList.toggle("active", panel.dataset.tabPanel === btn.dataset.tab));
+      resetScrollForTabs(tabsEl); // each tab starts at its own top, instead of inheriting the previous tab's scroll position
       if (btn.dataset.tab === "posts" && !ownPostsLoaded) {
         ownPostsLoaded = true;
         loadUserPosts(p.uid, document.getElementById("own-profile-posts-list"));
+      }
+      if (btn.dataset.tab === "notes" && !ownNotesLoaded) {
+        ownNotesLoaded = true;
+        loadUserResources(p.uid, document.getElementById("own-profile-notes-list"));
       }
     });
   });
@@ -532,9 +542,6 @@ watchAuthState(
     appShell.classList.remove("hidden");
 
     const displayProfile = profile || { name: user.email, email: user.email };
-    document.getElementById("topbar-user-name").innerHTML = nameWithBadge(displayProfile.name, displayProfile.email);
-    const topbarAvatar = document.getElementById("topbar-avatar");
-    if (topbarAvatar) topbarAvatar.innerHTML = avatarInner(displayProfile);
     const composerAvatar = document.getElementById("composer-avatar");
     if (composerAvatar) composerAvatar.innerHTML = avatarInner(displayProfile);
 

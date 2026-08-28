@@ -271,3 +271,100 @@ export function clampableHtml(rawText, extraClass = "") {
   const isLong = rawText.length > 260;
   return `<p class="clampable ${extraClass} ${isLong ? "is-clampable" : ""}">${safe}</p>${isLong ? `<button type="button" class="clamp-toggle">… See more</button>` : ""}`;
 }
+
+// ============================================================
+// OWNER "THREE-DOT" MENU — reused wherever a student should be
+// able to edit/delete something they own (posts, comments,
+// resources, notices). Markup + wiring live here once so every
+// screen behaves identically and only one dropdown is ever open.
+// ============================================================
+
+/** Build the three-dot trigger + its dropdown of actions. `id` is handed back to your handler untouched. */
+export function kebabMenuHtml(id, actions, extraClass = "") {
+  return `
+    <div class="kebab-menu ${extraClass}" data-kebab-id="${escapeHtml(String(id))}">
+      <button type="button" class="kebab-btn" aria-label="More options" aria-haspopup="true">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/></svg>
+      </button>
+      <div class="kebab-dropdown hidden">
+        ${actions.map(a => `<button type="button" class="kebab-item ${a.danger ? "danger" : ""}" data-kebab-action="${escapeHtml(a.action)}">${escapeHtml(a.label)}</button>`).join("")}
+      </div>
+    </div>`;
+}
+
+/** Close every open kebab dropdown in the document. */
+export function closeAllKebabMenus() {
+  document.querySelectorAll(".kebab-dropdown").forEach(d => d.classList.add("hidden"));
+}
+document.addEventListener("click", closeAllKebabMenus);
+
+/**
+ * Wire up every not-yet-wired `.kebab-menu` under `root`.
+ * `handlers` is a map of action name -> function(id). Re-safe to call
+ * on every re-render since already-wired menus are skipped.
+ */
+export function wireKebabMenus(root, handlers) {
+  root.querySelectorAll(".kebab-menu").forEach(menu => {
+    const btn = menu.querySelector(".kebab-btn");
+    const dd = menu.querySelector(".kebab-dropdown");
+    if (!btn || !dd || btn.dataset.wired) return;
+    btn.dataset.wired = "1";
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const wasHidden = dd.classList.contains("hidden");
+      closeAllKebabMenus();
+      if (wasHidden) dd.classList.remove("hidden");
+    });
+    dd.querySelectorAll(".kebab-item").forEach(item => {
+      item.addEventListener("click", (e) => {
+        e.stopPropagation();
+        closeAllKebabMenus();
+        const action = item.dataset.kebabAction;
+        handlers[action]?.(menu.dataset.kebabId);
+      });
+    });
+  });
+}
+
+/** Shared "are you sure?" confirmation sheet — used for every delete action in the app. */
+export function confirmDialog({ title, text, confirmLabel = "Delete", danger = true, onConfirm }) {
+  openModal(`
+    <div class="confirm-modal">
+      <div class="confirm-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+      </div>
+      <h3>${escapeHtml(title)}</h3>
+      <p class="confirm-text">${escapeHtml(text)}</p>
+      <div class="confirm-actions">
+        <button type="button" class="btn-outline full" id="confirm-cancel-btn">Cancel</button>
+        <button type="button" class="btn-primary full ${danger ? "danger-solid" : ""}" id="confirm-ok-btn">${escapeHtml(confirmLabel)}</button>
+      </div>
+    </div>
+  `);
+  document.getElementById("confirm-cancel-btn").addEventListener("click", () => closeModal());
+  const okBtn = document.getElementById("confirm-ok-btn");
+  okBtn.addEventListener("click", async () => {
+    setBtnLoading(okBtn, true, "Please wait…");
+    try {
+      await onConfirm();
+      closeModal();
+    } catch (err) {
+      showToast("Something went wrong: " + err.message);
+      setBtnLoading(okBtn, false);
+    }
+  });
+}
+
+/**
+ * Fix for tab panels sharing one page-level scroll container: switching
+ * tabs used to leave the window at whatever scrollTop the previous tab
+ * left behind, so a short tab could open already "scrolled" out of view.
+ * Call this right after toggling `.active` on the tab panels.
+ */
+export function resetScrollForTabs(anchorEl) {
+  if (!anchorEl) return;
+  const topbar = document.querySelector(".topbar");
+  const offset = (topbar?.offsetHeight || 0) + 10;
+  const top = anchorEl.getBoundingClientRect().top + window.scrollY - offset;
+  window.scrollTo({ top: Math.max(top, 0), behavior: "auto" });
+}

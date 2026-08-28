@@ -6,14 +6,14 @@
 // ============================================================
 import { db, auth } from "./firebase-config.js";
 import {
-  collection, addDoc, doc, updateDoc, onSnapshot, query, orderBy,
+  collection, addDoc, doc, updateDoc, deleteDoc, onSnapshot, query, orderBy,
   serverTimestamp, arrayUnion, arrayRemove, getDocs
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { currentProfile, fetchProfile } from "./auth.js";
 import {
   showToast, escapeHtml, timeAgo, openModal, closeModal,
   setBtnLoading, cacheUserProfile, getCachedProfile, clampableHtml, attachClampToggle,
-  avatarInner, nameWithBadge
+  avatarInner, nameWithBadge, kebabMenuHtml, wireKebabMenus, confirmDialog
 } from "./ui-utils.js";
 import { openUserProfilePage } from "./profile-view.js";
 
@@ -105,6 +105,42 @@ async function handleCreatePost() {
 }
 
 // ============================================================
+// EDIT / DELETE OWN POST — reached via the post's three-dot menu
+// ============================================================
+export function openEditPostModal(postId, currentText, onSaved) {
+  openModal(`
+    <h3>Edit Post</h3>
+    <textarea id="post-edit-input" class="composer-modal-textarea" rows="6">${escapeHtml(currentText)}</textarea>
+    <p id="post-edit-error" class="form-error"></p>
+    <button type="button" class="btn-primary full" id="post-edit-save-btn">Save Changes</button>
+  `);
+  document.getElementById("post-edit-save-btn").addEventListener("click", async (e) => {
+    const text = document.getElementById("post-edit-input").value.trim();
+    const errorEl = document.getElementById("post-edit-error");
+    if (!text) { errorEl.textContent = "Post can't be empty."; return; }
+    setBtnLoading(e.currentTarget, true, "Saving…");
+    try {
+      await updateDoc(doc(db, "posts", postId), { text, editedAt: serverTimestamp() });
+      closeModal();
+      showToast("Post updated.");
+      onSaved?.();
+    } catch (err) {
+      errorEl.textContent = "Couldn't save changes: " + err.message;
+      setBtnLoading(e.currentTarget, false);
+    }
+  });
+}
+
+/** Deletes every comment first (so nothing orphaned lingers server-side), then the post itself. */
+export async function deletePost(postId, onDeleted) {
+  const commentsSnap = await getDocs(collection(db, "posts", postId, "comments"));
+  await Promise.all(commentsSnap.docs.map(c => deleteDoc(c.ref)));
+  await deleteDoc(doc(db, "posts", postId));
+  showToast("Post deleted.");
+  onDeleted?.();
+}
+
+// ============================================================
 // POST RENDERING — flat feed row, no card chrome
 // ============================================================
 function renderPost(postId, post, listEl) {
@@ -113,6 +149,7 @@ function renderPost(postId, post, listEl) {
   const likeCount = (post.likes || []).length;
 
   const author = authorProfile(post.authorUid, post.authorName);
+  const isOwnPost = post.authorUid === uid;
   const el = document.createElement("article");
   el.className = "feed-post";
   el.innerHTML = `
@@ -120,8 +157,12 @@ function renderPost(postId, post, listEl) {
       <button type="button" class="avatar avatar-btn" data-author="${post.authorUid}">${avatarInner(author)}</button>
       <div class="post-meta">
         <button type="button" class="post-author-name" data-author="${post.authorUid}">${nameWithBadge(post.authorName, post.authorEmail)}</button>
-        <small>${timeAgo(post.createdAt)}</small>
+        <small>${timeAgo(post.createdAt)}${post.editedAt ? " · edited" : ""}</small>
       </div>
+      ${isOwnPost ? kebabMenuHtml(postId, [
+        { action: "edit", label: "Edit Post" },
+        { action: "delete", label: "Delete Post", danger: true }
+      ]) : ""}
     </div>
     ${clampableHtml(post.text, "post-text")}
     <div class="post-actions">
@@ -152,6 +193,15 @@ function renderPost(postId, post, listEl) {
   el.querySelector(".comment-toggle-btn").addEventListener("click", () => toggleComments(postId, el));
   el.querySelector(".post-like-count").addEventListener("click", () => openLikesModal(post.likes || []));
   attachClampToggle(el);
+  wireKebabMenus(el, {
+    edit: () => openEditPostModal(postId, post.text),
+    delete: () => confirmDialog({
+      title: "Delete this post?",
+      text: "This post and all of its comments will be removed from the Wall. This can't be undone.",
+      confirmLabel: "Delete",
+      onConfirm: () => deletePost(postId)
+    })
+  });
 
   listEl.appendChild(el);
 
@@ -234,18 +284,24 @@ async function loadComments(postId, block) {
   const q = query(collection(db, "posts", postId, "comments"), orderBy("createdAt", "asc"));
   const snap = await getDocs(q);
 
+  const uid = auth.currentUser.uid;
   let html = "";
   snap.forEach((c) => {
     const data = c.data();
     const author = authorProfile(data.authorUid, data.authorName);
+    const isOwnComment = data.authorUid === uid;
     html += `
       <div class="comment-item">
         <button type="button" class="avatar avatar-sm avatar-btn" data-author="${data.authorUid}">${avatarInner(author)}</button>
         <div class="comment-body">
           <button type="button" class="comment-author" data-author="${data.authorUid}">${nameWithBadge(data.authorName, data.authorEmail)}</button>
           <p>${escapeHtml(data.text)}</p>
-          <small>${timeAgo(data.createdAt)}</small>
+          <small>${timeAgo(data.createdAt)}${data.editedAt ? " · edited" : ""}</small>
         </div>
+        ${isOwnComment ? kebabMenuHtml(c.id, [
+          { action: "edit", label: "Edit Comment" },
+          { action: "delete", label: "Delete Comment", danger: true }
+        ]) : ""}
       </div>`;
   });
   if (!snap.size) html = `<p class="empty-state" style="padding:10px 0;">No comments yet — be the first to reply.</p>`;
@@ -262,6 +318,19 @@ async function loadComments(postId, block) {
 
   block.querySelectorAll("[data-author]").forEach(b =>
     b.addEventListener("click", () => openUserProfilePage(b.dataset.author)));
+
+  wireKebabMenus(block, {
+    edit: (commentId) => openEditCommentModal(postId, commentId, block),
+    delete: (commentId) => confirmDialog({
+      title: "Delete this comment?",
+      text: "This comment will be removed from the thread. This can't be undone.",
+      confirmLabel: "Delete",
+      onConfirm: async () => {
+        await deleteDoc(doc(db, "posts", postId, "comments", commentId));
+        loadComments(postId, block);
+      }
+    })
+  });
 
   const sendBtn = block.querySelector(`[data-comment-send="${postId}"]`);
   sendBtn.addEventListener("click", () => submitComment(postId, block, sendBtn));
@@ -294,6 +363,34 @@ async function submitComment(postId, block, sendBtn) {
     sendBtn.classList.remove("is-loading");
     sendBtn.disabled = false;
   }
+}
+
+// ============================================================
+// EDIT OWN COMMENT — reached via the comment's three-dot menu
+// ============================================================
+function openEditCommentModal(postId, commentId, block) {
+  const inputEl = block.querySelector(`[data-kebab-id="${commentId}"]`)?.closest(".comment-item")?.querySelector(".comment-body p");
+  const currentText = inputEl ? inputEl.textContent : "";
+  openModal(`
+    <h3>Edit Comment</h3>
+    <textarea id="comment-edit-input" class="composer-modal-textarea" rows="3">${escapeHtml(currentText)}</textarea>
+    <p id="comment-edit-error" class="form-error"></p>
+    <button type="button" class="btn-primary full" id="comment-edit-save-btn">Save Changes</button>
+  `);
+  document.getElementById("comment-edit-save-btn").addEventListener("click", async (e) => {
+    const text = document.getElementById("comment-edit-input").value.trim();
+    const errorEl = document.getElementById("comment-edit-error");
+    if (!text) { errorEl.textContent = "Comment can't be empty."; return; }
+    setBtnLoading(e.currentTarget, true, "Saving…");
+    try {
+      await updateDoc(doc(db, "posts", postId, "comments", commentId), { text, editedAt: serverTimestamp() });
+      closeModal();
+      loadComments(postId, block);
+    } catch (err) {
+      errorEl.textContent = "Couldn't save changes: " + err.message;
+      setBtnLoading(e.currentTarget, false);
+    }
+  });
 }
 
 /** Detach the realtime listener (call on logout to avoid leaks). */
