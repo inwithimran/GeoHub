@@ -2,11 +2,10 @@
    DESIGN TOKENS
    Theme: field-map / terrain — deep forest green (primary),
    river-teal (secondary), soil-ochre (accent, urgent states only).
-   Native-Android surface language: card-free. Content sits
-   straight on the page/tonal surfaces, sections are separated by
-   spacing + hairline dividers, and elevation (shadow) is reserved
-   only for things that actually float — the bottom nav, modals,
-   the toast, buttons — never for list panels.
+   Social-feed surface language: every post, notice, classmate and
+   resource is its own elevated card (soft shadow + rounded corners)
+   floating on the muted --bg backdrop, with breathing room between
+   entries — the familiar feed language of a real social app.
 ============================================================= */
 :root{
   --primary:        #14532d;
@@ -59,11 +58,40 @@ body{
   overscroll-behavior-y: none;
 }
 .hidden{ display:none !important; }
+
+/* ---- Keyboard focus — always visible, never relies on hover/tap-only cues ---- */
+:focus-visible{ outline:2.5px solid var(--secondary); outline-offset:2px; border-radius:6px; }
+
+/* ---- Section changes fade in gently instead of popping into place ---- */
+.route-section:not(.hidden){ animation: route-fade-in .22s ease; }
+@keyframes route-fade-in{ from{ opacity:0; transform:translateY(4px); } to{ opacity:1; transform:translateY(0); } }
+
+@media (prefers-reduced-motion: reduce){
+  *, *::before, *::after{ animation-duration:0.001ms !important; animation-iteration-count:1 !important; transition-duration:0.001ms !important; }
+}
 button{ font-family:inherit; cursor:pointer; border:none; background:none; color:inherit; min-width:auto; }
 input, textarea, select{ font-family:inherit; font-size:1rem; min-width:auto; }
 a{ color:var(--secondary); }
 img, svg{ max-width:100%; display:block; }
 h1,h2,h3,h4{ font-family:var(--font-display); letter-spacing:0.1px; }
+
+/* ============================================================
+   BRAND MARK — the app's icon logo: a monoline globe (Geography)
+   with a small leaf chip (Environment) overlapping its edge. Used
+   at three sizes: the loading screen, the auth header, and the
+   compact sidebar/topbar mark. Colors always follow the badge's
+   own `color` (currentColor), so the same markup drops cleanly
+   onto a light badge or a dark/gradient one.
+============================================================= */
+.brand-mark{
+  position:relative; width:100%; height:100%; display:flex; align-items:center; justify-content:center;
+}
+.brand-mark svg{ width:62%; height:62%; }
+.brand-leaf{
+  position:absolute; right:-6%; bottom:-6%; width:36%; height:36%;
+  background:var(--accent); border:2px solid currentColor; border-radius:50% 0;
+  transform:rotate(-45deg); box-shadow:0 2px 5px rgba(0,0,0,0.18);
+}
 
 /* ============================================================
    LOADING SCREEN
@@ -111,9 +139,9 @@ h1,h2,h3,h4{ font-family:var(--font-display); letter-spacing:0.1px; }
 /* ---- Hero band — solid tone + fine hand-drawn-feeling contour lines,
    the actual topographic signature (no blurred decorative blobs) ---- */
 .auth-hero{
-  position:relative; overflow:hidden; padding:20px 20px;
-  background: var(--primary-dark);
-  color:#fff; text-align:left;
+  position:relative; overflow:hidden; padding:44px 20px 56px;
+  background: radial-gradient(130% 160% at 50% -10%, var(--primary-mid) 0%, var(--primary) 45%, var(--primary-dark) 100%);
+  color:#fff; text-align:center;
 }
 .contour-lines{
   position:absolute; inset:0; width:100%; height:100%; pointer-events:none;
@@ -123,23 +151,31 @@ h1,h2,h3,h4{ font-family:var(--font-display); letter-spacing:0.1px; }
 }
 .contour-lines path:nth-child(2){ stroke:rgba(255,255,255,0.09); }
 .contour-lines path:nth-child(3){ stroke:rgba(255,255,255,0.10); }
-.auth-hero-inner{ position:relative; z-index:1; display:flex; align-items:center; gap:12px; max-width:340px; margin:0 auto; }
+/* Centered brand block: icon logo, name, tagline — the header's single focal point */
+.auth-hero-inner{
+  position:relative; z-index:1; display:flex; flex-direction:column; align-items:center; gap:14px;
+  max-width:340px; margin:0 auto;
+}
 .auth-logo-mark{
-  width:38px; height:38px; border-radius:12px; background:rgba(255,255,255,0.12);
-  border:1px solid rgba(255,255,255,0.22); color:#fff;
-  display:flex; align-items:center; justify-content:center; font-weight:700; font-family:var(--font-display);
-  font-size:0.9rem; letter-spacing:0.5px; flex-shrink:0;
+  width:72px; height:72px; border-radius:22px; background:rgba(255,255,255,0.14);
+  border:1px solid rgba(255,255,255,0.28); color:#fff; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:0 14px 30px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.2);
 }
 .logo-mark-small{
-  width:38px; height:38px; border-radius:12px; background:#fff; color:var(--primary);
-  display:flex; align-items:center; justify-content:center; font-weight:700; font-family:var(--font-display); font-size:0.9rem; flex-shrink:0;
+  width:38px; height:38px; border-radius:12px; background:#fff; color:var(--primary); flex-shrink:0;
+  display:flex; align-items:center; justify-content:center;
 }
 .auth-hero-text{ min-width:0; }
-.auth-hero-text h1{ font-size:1.15rem; font-weight:700; letter-spacing:0.2px; line-height:1.25; }
-.auth-tagline{ font-size:0.72rem; opacity:0.8; margin-top:2px; font-weight:600; line-height:1.35; }
+.auth-hero-text h1{ font-family:var(--font-display); font-size:1.5rem; font-weight:800; letter-spacing:0.2px; line-height:1.2; }
+.auth-tagline{ font-size:0.78rem; opacity:0.85; margin-top:6px; font-weight:600; line-height:1.45; max-width:280px; margin-left:auto; margin-right:auto; }
 
-/* ---- Sheet holding the tabs + forms — flows straight out of the hero ---- */
-.auth-sheet{ max-width:420px; margin:0 auto; }
+/* ---- Sheet holding the tabs + forms — a clean card that floats up
+   over the hero, so the two zones read as distinct, tidy layers ---- */
+.auth-sheet{
+  max-width:420px; margin:-28px auto 0; position:relative; z-index:2;
+  background:var(--surface); border-radius:26px 26px 0 0; box-shadow:0 -12px 30px rgba(11,25,15,0.08);
+}
 
 /* ---- Underline tab switch — quiet, no floating pill ---- */
 .auth-tabs{
@@ -337,15 +373,17 @@ button.is-loading{ display:flex; align-items:center; justify-content:center; gap
 [data-icon="logout"]::after{ top:3px; right:2px; width:2px; height:12px; background:currentColor; }
 
 /* ============================================================
-   CARD-FREE LIST SYSTEM — no panel, no border, no shadow around
-   list content. Rows sit straight on the page background and are
-   separated only by a hairline divider (the native-Android list
-   pattern: Contacts, Gmail, Settings) — never a boxed container.
+   SOCIAL CARD LIST SYSTEM — every row (post, notice, classmate,
+   resource) is its own elevated card: soft shadow, rounded
+   corners, a little breathing room between entries — the familiar
+   feed/list language of a real social app, instead of hairline-
+   divided rows sitting flat on the page.
 ============================================================= */
-.flat-list{ /* class name kept for JS compatibility; renders card-free */ }
-.list-block{ }
+.flat-list{ display:flex; flex-direction:column; gap:12px; }
+.list-block{ display:flex; flex-direction:column; gap:10px; }
 .empty-state{
   padding:44px 20px; text-align:center; color:var(--text-low); font-size:0.88rem;
+  background:var(--surface); border-radius:var(--radius-md); box-shadow:var(--elevation-1);
 }
 
 /* ---- Composer trigger (Student Wall) — flat tonal row, opens the modal composer ---- */
@@ -375,14 +413,18 @@ button.is-loading{ display:flex; align-items:center; justify-content:center; gap
 }
 .composer-modal-textarea:focus{ outline:none; border-color:var(--primary); background:#fff; }
 
-/* ---- Feed post — flat professional row, no card chrome ---- */
-.feed-post{ padding:16px; border-bottom:1px solid var(--divider); }
-.feed-post:last-child{ border-bottom:none; }
+/* ---- Feed post — a real social-feed card ---- */
+.feed-post{
+  padding:16px; background:var(--surface); border-radius:var(--radius-md);
+  box-shadow:var(--elevation-1); border:1px solid rgba(20,83,45,0.05);
+  transition:box-shadow .18s, transform .18s;
+}
+@media (hover:hover){ .feed-post:hover{ box-shadow:var(--elevation-2); } }
 .post-head{ display:flex; align-items:center; gap:10px; margin-bottom:8px; }
 /* ---- Avatars — gender-icon silhouette on a per-student color, never initials ---- */
 .avatar{
   width:38px; height:38px; border-radius:50%; overflow:hidden; flex-shrink:0;
-  position:relative; display:block;
+  position:relative; display:block; box-shadow:0 0 0 2px var(--surface);
 }
 .avatar-fill{
   width:100%; height:100%; display:flex; align-items:center; justify-content:center;
@@ -401,9 +443,7 @@ button.is-loading{ display:flex; align-items:center; justify-content:center; gap
   box-shadow:0 2px 5px rgba(217,119,6,0.4);
   font-size:9px; font-weight:800; font-family:var(--font-display); line-height:1;
 }
-.post-author-name, .comment-author, .post-like-count, .notice-row, .directory-row{ padding-left:0; padding-right:0; }
 .post-author-name, .comment-author, .post-like-count{ background:none; padding:0; }
-.notice-row, .directory-row{ padding-left:16px; padding-right:16px; }
 .post-meta{ display:flex; flex-direction:column; align-items:flex-start; }
 .post-author-name{ display:block; font-size:0.92rem; font-weight:700; color:var(--text-high); text-align:left; }
 .post-author-name:hover, .post-author-name:active{ text-decoration:underline; color:var(--primary); }
@@ -476,11 +516,13 @@ button.is-loading{ display:flex; align-items:center; justify-content:center; gap
 }
 .chip.active{ background: linear-gradient(135deg, var(--primary-mid), var(--primary)); color:#fff; }
 
-/* ---- Resource row (flat, sits on the page — no panel) ---- */
+/* ---- Resource row — a card in the Notes & Sheet Hub feed ---- */
 .resource-row{
-  display:flex; align-items:center; gap:12px; padding:14px 2px; border-bottom:1px solid var(--divider);
+  display:flex; align-items:center; gap:12px; padding:14px 16px;
+  background:var(--surface); border-radius:var(--radius-md); box-shadow:var(--elevation-1);
+  border:1px solid rgba(20,83,45,0.05); transition:box-shadow .18s;
 }
-.flat-list .resource-row:last-child{ border-bottom:none; }
+@media (hover:hover){ .resource-row:hover{ box-shadow:var(--elevation-2); } }
 .resource-row-icon{
   width:42px; height:42px; border-radius:13px; background:var(--primary-tint); color:var(--secondary);
   display:flex; align-items:center; justify-content:center; font-weight:800; font-size:0.95rem; flex-shrink:0;
@@ -503,12 +545,13 @@ a.res-link{
 .search-bar input{ flex:1; border:none; padding:13px 0; background:transparent; }
 .search-bar input:focus{ outline:none; }
 
-/* ---- Directory row (flat, clickable -> view profile) — no panel ---- */
+/* ---- Directory row — a contact card, clickable -> view profile ---- */
 .directory-row{
-  display:flex; align-items:center; gap:12px; padding:13px 2px; border-bottom:1px solid var(--divider);
-  width:100%; text-align:left; background:transparent; transition:background .12s; cursor:pointer; border-radius:var(--radius-sm);
+  display:flex; align-items:center; gap:12px; padding:13px 14px;
+  width:100%; text-align:left; background:var(--surface); transition:background .12s, box-shadow .18s;
+  cursor:pointer; border-radius:var(--radius-md); box-shadow:var(--elevation-1); border:1px solid rgba(20,83,45,0.05);
 }
-.flat-list .directory-row:last-child{ border-bottom:none; }
+@media (hover:hover){ .directory-row:hover{ box-shadow:var(--elevation-2); } }
 .directory-row:active{ background:var(--surface-2); }
 .directory-info{ flex:1; min-width:0; }
 .directory-info strong{ display:block; font-size:0.92rem; }
@@ -527,16 +570,17 @@ a.res-link{
 }
 .likes-list .likes-row{ cursor:pointer; }
 
-/* ---- Notices — plain byline-style board, no panel ---- */
+/* ---- Notices — a real notice-board feed, one card per notice ---- */
 .section-heading{ font-size:0.78rem; font-weight:800; color:var(--text-low); margin:4px 0 -4px; letter-spacing:0.8px; text-transform:uppercase; padding-left:2px; }
-.notice-flat-list{ }
+.notice-flat-list{ display:flex; flex-direction:column; gap:10px; }
 .notice-row{
-  display:block; width:100%; text-align:left; padding:14px 2px; border-bottom:1px solid var(--divider);
-  background:transparent; transition:background .12s; border-radius:var(--radius-sm);
+  display:block; width:100%; text-align:left; padding:14px 16px;
+  background:var(--surface); transition:background .12s, box-shadow .18s; border-radius:var(--radius-md);
+  box-shadow:var(--elevation-1); border:1px solid rgba(20,83,45,0.05);
 }
-.notice-flat-list .notice-row:last-child{ border-bottom:none; }
+@media (hover:hover){ .notice-row:hover{ box-shadow:var(--elevation-2); } }
 .notice-row:active{ background:var(--surface-2); }
-.notice-row.urgent{ background:var(--accent-tint); border-left:3px solid var(--accent); padding-left:14px; border-radius:0 var(--radius-sm) var(--radius-sm) 0; }
+.notice-row.urgent{ background:var(--accent-tint); border-left:3px solid var(--accent); border-color:rgba(180,83,9,0.12); }
 .notice-row-top{ display:flex; align-items:center; gap:9px; margin-bottom:8px; }
 .notice-row-byline{ flex:1; min-width:0; display:flex; flex-direction:column; }
 .notice-row-name{ font-size:0.85rem; font-weight:700; color:var(--text-high); }
@@ -568,9 +612,11 @@ a.res-link{
 .checkbox-row{ display:flex; align-items:center; gap:8px; font-size:0.85rem; color:var(--text-med); font-weight:600; }
 .checkbox-row input{ width:17px; height:17px; accent-color:var(--primary); }
 
-/* ---- Routine table ---- */
-.routine-day{ padding:13px 2px; border-bottom:1px solid var(--divider); }
-.routine-day:last-child{ border-bottom:none; }
+/* ---- Routine table — one card per day ---- */
+.routine-day{
+  padding:14px 16px; background:var(--surface); border-radius:var(--radius-md);
+  box-shadow:var(--elevation-1); border:1px solid rgba(20,83,45,0.05);
+}
 .routine-day h4{ font-size:0.82rem; color:var(--primary); margin-bottom:7px; font-weight:800; text-transform:uppercase; letter-spacing:0.4px; }
 .routine-slot{ display:flex; justify-content:space-between; gap:10px; font-size:0.85rem; padding:5px 0; color:var(--text-med); }
 .routine-slot span:first-child{ font-weight:700; color:var(--text-high); flex-shrink:0; }
