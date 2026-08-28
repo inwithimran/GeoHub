@@ -124,23 +124,21 @@ function renderPost(postId, post, listEl) {
       </div>
     </div>
     ${clampableHtml(post.text, "post-text")}
-    <div class="post-stats ${likeCount ? "" : "hidden"}">
-      <button type="button" class="post-like-count" data-id="${postId}">
-        <span class="leaf-mini"></span> ${likeCount} ${likeCount === 1 ? "like" : "likes"}
-      </button>
-    </div>
     <div class="post-actions">
       <button class="post-action-btn leaf-like-btn ${liked ? "liked" : ""}" data-id="${postId}" aria-pressed="${liked}">
         <span class="leaf-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="19" height="19" fill="${liked ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2" stroke-linejoin="round">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="${liked ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2" stroke-linejoin="round">
             <path d="M20 4c-8 0-16 4-16 13 0 1.5.3 2.6.8 3.4C6 15 11 9 18 6c-6 4-10 10-12.4 13.7.5.2 1 .3 1.4.3C16 20 20 12 20 4z"/>
           </svg>
         </span>
         <span>${liked ? "Liked" : "Like"}</span>
       </button>
       <button class="post-action-btn comment-toggle-btn" data-id="${postId}">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
         <span>Comment</span>
+      </button>
+      <button type="button" class="post-like-count ${likeCount ? "" : "hidden"}" data-id="${postId}">
+        <span class="leaf-mini"></span> ${likeCount} ${likeCount === 1 ? "like" : "likes"}
       </button>
     </div>
     <div class="comments-block hidden" data-comments-for="${postId}"></div>

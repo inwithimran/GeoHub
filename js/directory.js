@@ -45,12 +45,19 @@ function renderDirectory() {
       <div class="avatar">${avatarInner(s)}</div>
       <div class="directory-info">
         <strong>${nameWithBadge(s.name || "Unnamed", s.email)}</strong>
-        <div class="directory-sub">Roll: ${escapeHtml(s.roll || "—")}${s.year ? " · " + escapeHtml(s.year) : (s.session ? " · " + escapeHtml(s.session) : "")}</div>
+        <div class="directory-sub">
+          <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M4 17V7l8-4 8 4v10l-8 4-8-4z"/></svg>
+          ${escapeHtml(s.roll || "—")}${s.year ? " · " + escapeHtml(s.year) : (s.session ? " · " + escapeHtml(s.session) : "")}
+        </div>
       </div>
       <span class="blood-badge">${escapeHtml(s.bloodGroup || "—")}</span>
       ${s.hidePhone || !s.phone
-        ? `<span class="call-btn call-btn-disabled">${s.phone ? "Hidden" : "No number"}</span>`
-        : `<a class="call-btn" href="tel:${escapeHtml(s.phone)}" data-no-row-click>Call</a>`}
+        ? `<span class="call-btn call-btn-disabled" title="${s.phone ? "Number hidden" : "No number on file"}">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.68 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.32 1.85.55 2.81.68A2 2 0 0 1 22 16.92z"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
+          </span>`
+        : `<a class="call-btn" href="tel:${escapeHtml(s.phone)}" data-no-row-click title="Call ${escapeHtml((s.name||"").split(" ")[0]||"")}">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.68 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.32 1.85.55 2.81.68A2 2 0 0 1 22 16.92z"/></svg>
+          </a>`}
     </div>
   `).join("") + `</div>`;
 

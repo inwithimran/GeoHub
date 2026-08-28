@@ -60,7 +60,7 @@ function renderNotices() {
           <span class="notice-row-name">${nameWithBadge(n.postedByName || "Admin", n.postedBy)}</span>
           <small>${timeAgo(n.createdAt)}</small>
         </div>
-        ${n.urgent ? `<span class="urgent-tag">⚠ Urgent</span>` : ""}
+        ${n.urgent ? `<span class="urgent-tag"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M10.3 3.9 1.8 18.5a1.8 1.8 0 0 0 1.55 2.7h17.3a1.8 1.8 0 0 0 1.55-2.7L13.7 3.9a1.8 1.8 0 0 0-3.4 0z"/><circle cx="12" cy="16.3" r="1"/></svg>Urgent</span>` : ""}
       </div>
       <p class="notice-row-text">${escapeHtml(n.text)}</p>
     </button>
@@ -82,7 +82,7 @@ function openNoticeDetail(noticeId) {
           <small>${fullDate(n.createdAt) || "Just now"}</small>
         </div>
       </div>
-      ${n.urgent ? `<span class="urgent-tag">⚠ URGENT NOTICE</span>` : `<span class="notice-detail-tag">NOTICE</span>`}
+      ${n.urgent ? `<span class="urgent-tag"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M10.3 3.9 1.8 18.5a1.8 1.8 0 0 0 1.55 2.7h17.3a1.8 1.8 0 0 0 1.55-2.7L13.7 3.9a1.8 1.8 0 0 0-3.4 0z"/><circle cx="12" cy="16.3" r="1"/></svg>Urgent Notice</span>` : `<span class="notice-detail-tag">NOTICE</span>`}
       <p class="notice-detail-text">${escapeHtml(n.text)}</p>
     </div>
   `);

@@ -81,6 +81,38 @@ function switchAuthTab(target) {
 allTabTriggers.forEach(el => el.addEventListener("click", () => switchAuthTab(el.dataset.tab)));
 
 // ============================================================
+// AUTH GATE — the home/landing state of the auth screen shows
+// only two entry buttons (Google / Email & Password), never a
+// bare form. Picking the email option reveals the form section;
+// Back returns to the gate.
+// ============================================================
+const authGate = document.getElementById("auth-gate");
+const authFormSection = document.getElementById("auth-form-section");
+const authCardHead = document.getElementById("auth-card-head");
+const openEmailFormBtn = document.getElementById("open-email-form-btn");
+const openSignupGateBtn = document.getElementById("open-signup-gate-btn");
+const authBackBtn = document.getElementById("auth-back-btn");
+
+/** Show the gate (two entry buttons) and hide the form section. */
+function showAuthGate() {
+  authFormSection.classList.add("hidden");
+  authGate.classList.remove("hidden");
+  if (authCardHead) authCardHead.querySelector("small").textContent = "Log in, or create your student account";
+}
+
+/** Reveal the email/password form section on a given tab, hiding the gate. */
+function showAuthFormSection(tab) {
+  switchAuthTab(tab);
+  authGate.classList.add("hidden");
+  authFormSection.classList.remove("hidden");
+  if (authCardHead) authCardHead.querySelector("small").textContent = tab === "signup" ? "Create your student account" : "Log in to your account";
+}
+
+openEmailFormBtn.addEventListener("click", () => showAuthFormSection("login"));
+openSignupGateBtn.addEventListener("click", () => showAuthFormSection("signup"));
+authBackBtn.addEventListener("click", showAuthGate);
+
+// ============================================================
 // PASSWORD SHOW / HIDE — works for every ".pw-toggle" button
 // (login password field, signup password field, etc.)
 // ============================================================
@@ -300,12 +332,22 @@ function renderProfile() {
     <div class="profile-flow">
       <div class="profile-flow-banner" aria-hidden="true"></div>
       <div class="profile-flow-head">
-        <span class="avatar avatar-lg profile-flow-avatar">${avatarInner(p)}</span>
+        <div class="profile-flow-avatar-wrap">
+          <span class="avatar avatar-lg profile-flow-avatar">${avatarInner(p)}</span>
+          <button type="button" id="profile-edit-fab" class="profile-edit-fab" aria-label="Edit profile">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          </button>
+        </div>
         <h3>${nameWithBadge(p.name, p.email)}</h3>
         <div class="profile-role">${escapeHtml(DEPARTMENT_NAME)}</div>
         ${admin ? `<div class="profile-admin-note">Admin · can post notices to the whole department</div>` : ""}
       </div>
       ${p.bio ? `<p class="pv-bio profile-own-bio">${escapeHtml(p.bio)}</p>` : ""}
+      <div class="profile-stat-row">
+        <div class="profile-stat-chip"><strong>${escapeHtml(p.roll || "—")}</strong><span>Roll No.</span></div>
+        <div class="profile-stat-chip"><strong>${escapeHtml(p.bloodGroup || "—")}</strong><span>Blood Grp</span></div>
+        <div class="profile-stat-chip"><strong>${escapeHtml(p.year || p.session || "—")}</strong><span>Year</span></div>
+      </div>
       <div class="profile-flow-details">
         ${rows.map(([label, val]) => `<div class="profile-detail-row"><span>${label}</span><span>${val}</span></div>`).join("")}
       </div>
@@ -318,6 +360,7 @@ function renderProfile() {
     </div>
   `;
   document.getElementById("profile-edit-btn").addEventListener("click", () => openProfileDetailsModal(false));
+  document.getElementById("profile-edit-fab").addEventListener("click", () => openProfileDetailsModal(false));
 }
 
 // ============================================================
@@ -487,6 +530,7 @@ watchAuthState(
       featuresInitialized = false;
     }
     // Reset auth forms (and any stuck loading buttons) for the next login
+    showAuthGate();
     loginForm.reset();
     signupForm.reset();
     setBtnLoading(loginForm.querySelector('button[type="submit"]'), false);

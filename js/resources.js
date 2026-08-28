@@ -62,7 +62,10 @@ function renderResources() {
         <h4>${escapeHtml(r.title)}</h4>
         <div class="res-meta">Shared by ${escapeHtml(r.contributorName)} · ${timeAgo(r.createdAt)}</div>
       </div>
-      <a class="res-link" href="${escapeHtml(r.link)}" target="_blank" rel="noopener">Open</a>
+      <a class="res-link" href="${escapeHtml(r.link)}" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3h7v7"/><path d="M10 14 21 3"/><path d="M19 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h6"/></svg>
+        <span>Open</span>
+      </a>
     </div>
   `).join("") + `</div>`;
 }
