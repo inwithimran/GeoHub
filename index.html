@@ -237,10 +237,11 @@
 
   /* .field — tonal boxed style, used outside the auth screen (Edit Profile,
      Add Resource, Notice composer). Unaffected by the auth-form restyle below. */
-  .field input, .field select, #notice-input {
+  .field input, .field select, .field textarea, #notice-input {
     @apply border-0 border-b-[1.5px] rounded-t-[10px] rounded-b-[3px] px-3.5 py-3 w-full transition-colors;
     border-color: var(--color-line); background: var(--color-paper-deep); color: var(--color-ink);
   }
+  .field textarea { @apply resize-none; font-family: inherit; }
   .field input:focus, .field select:focus, textarea:focus, #notice-input:focus {
     outline:none; border-bottom-width:2px; border-color: var(--color-forest-600); background: var(--color-forest-50);
   }
@@ -343,13 +344,31 @@
   .topbar-titles { @apply min-w-0 flex flex-col; }
   #topbar-title { @apply text-[1rem] font-extrabold whitespace-nowrap overflow-hidden text-ellipsis; }
   #topbar-subtitle { @apply text-[.68rem] opacity-80 font-semibold whitespace-nowrap overflow-hidden text-ellipsis; }
-  .topbar-user {
-    @apply flex items-center gap-2 text-sm font-bold rounded-full max-w-[180px] shrink-0 transition-transform;
-    background: rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.16); padding:5px 12px 5px 5px;
+
+  /* ---------- Header notification bell (replaces the old profile button) ---------- */
+  .topbar-notif-btn {
+    @apply relative flex items-center justify-center shrink-0 rounded-full transition-transform;
+    width:38px; height:38px; background: rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.16); color:#fff;
   }
-  .topbar-user:active { background: rgba(255,255,255,.2); transform:scale(.97); }
-  .topbar-user-name { @apply overflow-hidden text-ellipsis whitespace-nowrap; }
-  .topbar-user .admin-badge { @apply hidden; }
+  .topbar-notif-btn:active { background: rgba(255,255,255,.2); transform:scale(.93); }
+  .notif-badge {
+    @apply absolute flex items-center justify-center text-white font-extrabold rounded-full;
+    top:-4px; right:-4px; min-width:17px; height:17px; font-size:.6rem; padding:0 4px;
+    background: linear-gradient(135deg, var(--color-danger-500), var(--color-danger-600));
+    border:2px solid var(--color-forest-800); box-shadow:0 2px 6px rgba(0,0,0,.3);
+  }
+
+  /* ---------- Owner "kebab" (three-dot) menu — edit/delete for your own posts, comments, resources & notices ---------- */
+  .kebab-menu { @apply relative shrink-0; }
+  .kebab-btn { @apply flex items-center justify-center rounded-full transition-colors; width:30px; height:30px; color: var(--color-ink-faint); }
+  .kebab-btn:active { background: var(--color-paper-deep); }
+  .kebab-dropdown {
+    @apply absolute right-0 z-10 flex flex-col overflow-hidden rounded-2xl bg-surface;
+    top:calc(100% + 4px); min-width:150px; box-shadow: var(--shadow-cardhover); border:1px solid var(--color-line);
+  }
+  .kebab-item { @apply w-full text-left text-[.85rem] font-semibold; padding:11px 15px; color: var(--color-ink); }
+  .kebab-item:active { background: var(--color-paper-deep); }
+  .kebab-item.danger { color: var(--color-danger-600); }
   .content { @apply mx-auto w-full overflow-x-hidden; grid-row:2; max-width:760px; padding:16px 14px 96px; }
   .route-section { @apply flex flex-col gap-3.5 min-w-0; }
   .route-section:not(.hidden) { @apply animate-fade-up; }
@@ -441,6 +460,9 @@
   @media (hover:hover) { .feed-post:hover { box-shadow: var(--shadow-cardhover); } }
 
   .post-head { @apply flex items-center gap-2.5 mb-2.5; }
+  .post-head .kebab-menu { @apply ml-auto -mr-1.5; }
+  .comment-item .kebab-menu { @apply ml-auto shrink-0; }
+  .comment-item .kebab-btn { width:26px; height:26px; }
   .avatar { @apply w-[40px] h-[40px] rounded-full overflow-hidden shrink-0 relative block; box-shadow:0 0 0 2.5px var(--color-surface), 0 0 0 4px var(--color-forest-100); }
   .avatar-fill { @apply w-full h-full flex items-center justify-center; }
   .avatar-sm { @apply w-[30px] h-[30px]; box-shadow:0 0 0 2px var(--color-surface), 0 0 0 3px var(--color-forest-100); }
@@ -623,7 +645,7 @@
   .notice-detail-text { @apply text-[.95rem] leading-relaxed whitespace-pre-wrap; color: var(--color-ink); margin-bottom:4px; }
 
   /* ---------- Add Notice — admin composer card ---------- */
-  #admin-notice-box {
+  .admin-notice-box {
     @apply flex flex-col gap-3 rounded-[18px] bg-surface shadow-[var(--shadow-card)] mb-1;
     padding:16px; border:1px solid var(--color-line);
   }
@@ -634,6 +656,9 @@
     background: linear-gradient(135deg, var(--color-clay-500), var(--color-clay-600));
     box-shadow: 0 10px 22px rgba(162,75,35,.3);
   }
+  .notices-modal { @apply flex flex-col gap-3.5; }
+  .notice-row-top .kebab-menu { @apply ml-auto -mr-1.5 -mt-1; }
+  .notice-row { @apply cursor-pointer; }
 
   .routine-day { @apply relative bg-surface rounded-2xl shadow-[var(--shadow-card)] border overflow-hidden; padding:0 16px 8px; border-color:rgba(26,76,48,.06); }
   .routine-day h4 {
@@ -1071,9 +1096,9 @@
           <small id="topbar-subtitle">Geography &amp; Environment</small>
         </div>
       </div>
-      <button type="button" class="topbar-user" id="topbar-user">
-        <span class="avatar avatar-sm" id="topbar-avatar"></span>
-        <span class="topbar-user-name" id="topbar-user-name">—</span>
+      <button type="button" class="topbar-notif-btn" id="topbar-notif-btn" aria-label="Notifications">
+        <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <span class="notif-badge hidden" id="topbar-notif-badge">0</span>
       </button>
     </header>
 
@@ -1133,23 +1158,6 @@
 
       <!-- ===== SECTION 4: ROUTINE & NOTICE BOARD ===== -->
       <section id="section-routine" class="route-section">
-        <h3 class="section-heading">Notices</h3>
-        <div id="notice-list">
-          <p class="empty-state">No notices posted yet.</p>
-        </div>
-
-        <div id="admin-notice-box" class="hidden">
-          <span class="admin-notice-label">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-            Admin · Post to Notice Board
-          </span>
-          <textarea id="notice-input" placeholder="Post an urgent notice to the class…" rows="2"></textarea>
-          <label class="checkbox-row">
-            <input type="checkbox" id="notice-urgent" /> Mark as urgent
-          </label>
-          <button id="notice-submit" type="button" class="btn-primary full notice-submit-btn">Post Notice</button>
-        </div>
-
         <h3 class="section-heading">Weekly Class Routine</h3>
         <div id="routine-table" class="list-block">
           <p class="empty-state">Routine has not been published yet.</p>
