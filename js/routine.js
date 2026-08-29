@@ -81,7 +81,10 @@ function visibleToMe(a) {
   if (a.type === "comment" || a.type === "like") {
     return a.targetUid === auth.currentUser?.uid;
   }
-  return true;
+  // Public activity (post/resource/notice) exists to tell OTHER classmates
+  // something new happened — you don't need a "notification" telling you
+  // about your own post/resource/notice, so hide your own entries here.
+  return a.actorUid !== auth.currentUser?.uid;
 }
 
 export function initRoutine() {
@@ -110,17 +113,18 @@ export function initRoutine() {
   // it: each one only asks for documents the rules already guarantee it
   // can read.
   //
-  // NOTE: both queries below combine a `where` with `orderBy` on a
-  // different field, so Firestore will require a composite index for
-  // each the first time they run — open the browser console, click the
-  // link in the error it prints, and it self-creates in a minute. Safe
-  // to ignore once created; it only needs doing once per Firebase project.
+  // NOTE: combining `where` with `orderBy` on a different field needs a
+  // composite Firestore index — that used to mean these queries silently
+  // failed (permission/precondition errors) until someone manually created
+  // the index in the console. To avoid requiring that manual step, we drop
+  // orderBy here (an "in" filter alone needs no composite index) and pull a
+  // generous page instead of a tight one; mergedActivity() below already
+  // sorts everything client-side and trims to the newest 60 for display.
   // ----------------------------------------------------------------
   const publicQ = query(
     collection(db, "activity"),
     where("type", "in", ["post", "resource", "notice"]),
-    orderBy("createdAt", "desc"),
-    limit(60)
+    limit(200)
   );
   unsubscribeActivityPublic = onSnapshot(publicQ, (snap) => {
     latestActivityPublic = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -147,8 +151,7 @@ export function initRoutine() {
     const privateQ = query(
       collection(db, "activity"),
       where("targetUid", "==", uid),
-      orderBy("createdAt", "desc"),
-      limit(60)
+      limit(200)
     );
     unsubscribeActivityPrivate = onSnapshot(privateQ, (snap) => {
       latestActivityPrivate = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -271,17 +274,21 @@ async function openReportsModal() {
   openModal(`<h3>Reported Posts</h3><div id="reports-modal-list"><p class="empty-state">Loading…</p></div>`);
   const listEl = document.getElementById("reports-modal-list");
   try {
-    // NOTE: this where()+orderBy() combo needs a composite Firestore index.
-    // The very first time this runs, Firestore will throw an error containing
-    // a direct link to auto-create that index in the console — click it once
-    // and the query works from then on.
-    const q = query(collection(db, "reports"), where("resolved", "==", false), orderBy("createdAt", "desc"));
+    // A where()+orderBy() combo on different fields needs a composite
+    // Firestore index (previously this crashed with "the query requires an
+    // index" — see the screenshot this was reported with). This admin-only
+    // collection is always small, so we drop the orderBy (an equality-only
+    // where needs no composite index) and sort client-side instead — same
+    // result, no manual index setup required.
+    const q = query(collection(db, "reports"), where("resolved", "==", false));
     const snap = await getDocs(q);
     if (snap.empty) {
       listEl.innerHTML = `<p class="empty-state">No open reports. 🎉</p>`;
       return;
     }
-    listEl.innerHTML = `<div class="flat-list">` + snap.docs.map(d => {
+    const sortedDocs = [...snap.docs].sort((a, b) =>
+      (b.get("createdAt")?.toMillis?.() || 0) - (a.get("createdAt")?.toMillis?.() || 0));
+    listEl.innerHTML = `<div class="flat-list">` + sortedDocs.map(d => {
       const r = d.data();
       return `
         <div class="report-row" data-report-id="${escapeHtml(d.id)}" data-post-id="${escapeHtml(r.postId || "")}">

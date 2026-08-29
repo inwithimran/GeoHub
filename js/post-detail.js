@@ -262,6 +262,15 @@ async function submitComment(postId, commentsEl, sendBtn, postAuthorUid) {
   const text = input.value.trim();
   if (!text) return;
 
+  // Clear the field immediately, BEFORE the write. addDoc()'s optimistic
+  // local write can make the comments onSnapshot fire (and re-render this
+  // whole box, restoring "draftText" — see renderPostDetail) before this
+  // async function ever resumes after `await`. If we only cleared the
+  // input afterwards, we'd be clearing a DOM node that re-render had
+  // already replaced, so the field visibly kept the typed text. Clearing
+  // first means that even if that race happens, the draft it restores is
+  // already empty.
+  input.value = "";
   sendBtn.disabled = true;
   sendBtn.classList.add("is-loading");
   try {
@@ -272,7 +281,6 @@ async function submitComment(postId, commentsEl, sendBtn, postAuthorUid) {
       text,
       createdAt: serverTimestamp()
     });
-    input.value = ""; // the live listener redraws the thread with the new comment
     // Only notify the post's author, and never notify someone that they
     // commented on their own post — that's not a meaningful notification.
     if (postAuthorUid && postAuthorUid !== auth.currentUser.uid) {
@@ -280,6 +288,9 @@ async function submitComment(postId, commentsEl, sendBtn, postAuthorUid) {
       triggerPush({ type: "comment", text, actorName: currentProfile.name, targetUid: postAuthorUid, postId });
     }
   } catch (err) {
+    // Put the text back so it isn't lost if the write failed.
+    const liveInput = commentsEl.querySelector(".comment-input-row input");
+    if (liveInput) liveInput.value = text;
     showToast("Couldn't send your comment: " + err.message);
   } finally {
     sendBtn.disabled = false;
