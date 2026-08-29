@@ -1,7 +1,3 @@
 {
-  "functions": {
-    "api/send-push.js": {
-      "runtime": "nodejs20.x"
-    }
-  }
+  "cleanUrls": true
 }
