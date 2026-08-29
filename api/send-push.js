@@ -188,12 +188,17 @@ async function verifyClaim(db, callerUid, callerEmail, payload) {
     if (postSnap.get("authorUid") !== targetUid) throw { status: 400, message: "targetUid doesn't match the post's author." };
     // Find a recent comment on this post by the caller — good enough proof
     // without requiring the client to also thread the commentId through.
-    // NOTE: this where()+orderBy() combo needs a composite Firestore index
-    // on the comments subcollection (authorUid + createdAt) — Firestore's
-    // error the first time will include a direct link to create it.
+    // A where()+orderBy() combo on different fields needs a composite
+    // Firestore index; until that index is manually created in the console
+    // this call throws "failed-precondition" and every "commented on your
+    // post" push silently fails (triggerPush() swallows the error client-
+    // side). Dropping orderBy avoids that entirely — a single-field
+    // equality filter needs no composite index, and scanning a handful of
+    // the caller's own comments on one post for a recent one is plenty.
     const commentsSnap = await db.collection("posts").doc(postId).collection("comments")
-      .where("authorUid", "==", callerUid).orderBy("createdAt", "desc").limit(1).get();
-    if (commentsSnap.empty || !isRecent(commentsSnap.docs[0].get("createdAt"))) {
+      .where("authorUid", "==", callerUid).limit(20).get();
+    const hasRecentComment = commentsSnap.docs.some((d) => isRecent(d.get("createdAt")));
+    if (!hasRecentComment) {
       throw { status: 400, message: "No recent comment by you found on that post." };
     }
     return;
