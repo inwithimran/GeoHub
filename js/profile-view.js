@@ -14,11 +14,10 @@ import { collection, query, where, getDocs } from "https://www.gstatic.com/fireb
 import { fetchProfile } from "./auth.js";
 import {
   escapeHtml, getCachedProfile, cacheUserProfile, avatarInner, nameWithBadge,
-  isAdminEmail, timeAgo, fullDate, clampableHtml, attachClampToggle, showToast,
-  resetScrollForTabs, kebabMenuHtml, wireKebabMenus, confirmDialog
+  isAdminEmail, fullDate, showToast, resetScrollForTabs
 } from "./ui-utils.js";
 import { loadUserResources } from "./resources.js";
-import { openEditPostModal, deletePost } from "./wall.js";
+import { renderPost } from "./wall.js";
 
 const cardEl = document.getElementById("user-profile-card");
 const backBtn = document.getElementById("user-profile-back-btn");
@@ -30,8 +29,14 @@ export function registerProfilePageRouter(goToRoute) { goToRouteRef = goToRoute;
 
 backBtn?.addEventListener("click", () => history.back());
 
-/** Open the full-page profile view for the given uid. Own profile routes to "My Profile" instead of duplicating it here. */
-export async function openUserProfilePage(uid, { fromPopstate = false } = {}) {
+/**
+ * Open the full-page profile view for the given uid. Own profile routes to
+ * "My Profile" instead of duplicating it here. Pass { replace: true } when
+ * navigating here right after closing a modal (e.g. from a "Liked by" list)
+ * so this page's history entry replaces the modal's instead of racing it —
+ * see the { keepHistory } note on closeModal() in ui-utils.js.
+ */
+export async function openUserProfilePage(uid, { fromPopstate = false, replace = false } = {}) {
   if (!uid) return;
 
   if (auth.currentUser && uid === auth.currentUser.uid) {
@@ -39,7 +44,7 @@ export async function openUserProfilePage(uid, { fromPopstate = false } = {}) {
     return;
   }
 
-  if (goToRouteRef) goToRouteRef("user-profile", { fromPopstate, state: { profileUid: uid } });
+  if (goToRouteRef) goToRouteRef("user-profile", { fromPopstate, replace, state: { profileUid: uid } });
   cardEl.innerHTML = `<div class="profile-modal-loading"><span class="btn-spinner dark"></span> Loading profile…</div>`;
 
   let profile = getCachedProfile(uid);
@@ -169,44 +174,12 @@ export async function loadUserPosts(uid, listEl) {
       .map(d => ({ id: d.id, ...d.data() }))
       .sort((a, b) => (b.createdAt?.toDate?.().getTime() || 0) - (a.createdAt?.toDate?.().getTime() || 0));
 
-    const myUid = auth.currentUser?.uid;
-    listEl.innerHTML = `<div class="flat-list feed-list">` + posts.map(post => {
-      const author = getCachedProfile(post.authorUid) || { uid: post.authorUid, name: post.authorName };
-      const likeCount = (post.likes || []).length;
-      const isOwnPost = post.authorUid === myUid;
-      return `
-        <article class="feed-post">
-          <div class="post-head">
-            <span class="avatar">${avatarInner(author)}</span>
-            <div class="post-meta">
-              <span class="post-author-name">${nameWithBadge(post.authorName, post.authorEmail)}</span>
-              <small>${timeAgo(post.createdAt)}${post.editedAt ? " · edited" : ""}</small>
-            </div>
-            ${isOwnPost ? kebabMenuHtml(post.id, [
-              { action: "edit", label: "Edit Post" },
-              { action: "delete", label: "Delete Post", danger: true }
-            ]) : ""}
-          </div>
-          ${clampableHtml(post.text, "post-text")}
-          ${likeCount ? `
-            <div class="post-actions">
-              <span class="post-like-count"><span class="leaf-mini"></span> ${likeCount} ${likeCount === 1 ? "like" : "likes"}</span>
-            </div>` : ""}
-        </article>`;
-    }).join("") + `</div>`;
-    attachClampToggle(listEl);
-    wireKebabMenus(listEl, {
-      edit: (postId) => {
-        const post = posts.find(p => p.id === postId);
-        openEditPostModal(postId, post.text, () => loadUserPosts(uid, listEl));
-      },
-      delete: (postId) => confirmDialog({
-        title: "Delete this post?",
-        text: "This post and all of its comments will be removed from the Wall. This can't be undone.",
-        confirmLabel: "Delete",
-        onConfirm: () => deletePost(postId, () => loadUserPosts(uid, listEl))
-      })
-    });
+    // Reuse the exact same card renderer as the Student Wall itself, so a
+    // profile's Posts tab gets full like / comment / "who liked this"
+    // interactivity instead of a static read-only summary.
+    listEl.innerHTML = `<div class="flat-list feed-list"></div>`;
+    const innerListEl = listEl.querySelector(".feed-list");
+    posts.forEach(post => renderPost(post.id, post, innerListEl, { onChanged: () => loadUserPosts(uid, listEl) }));
   } catch (err) {
     listEl.innerHTML = `<p class="empty-state">Couldn't load posts.</p>`;
     showToast("Couldn't load posts: " + err.message);

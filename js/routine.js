@@ -1,75 +1,131 @@
 // ============================================================
-// ROUTINE.JS — Weekly Class Routine + Notice Board
+// ROUTINE.JS — Weekly Class Routine + the "Notices & Notifications"
+// page (its own route — NOT a modal/backdrop sheet — reached by
+// tapping the bell icon in the header).
+//
+// That page has two header tabs:
+//   • Notice       — the CR/admin notice board (unchanged data model,
+//                     just rendered into a page section instead of a
+//                     bottom sheet).
+//   • Notification — a live activity feed ("X posted on the Wall",
+//                     "Y shared a note", …), backed by a new "activity"
+//                     Firestore collection. Other modules call the
+//                     exported logActivity() after a successful action
+//                     they want to show up here (see wall.js, resources.js).
+//
 // Routine: single doc at routine/weekly, shape:
 //          { Saturday: [{time, subject, room}, ...], Sunday: [...], ... }
 //          Create/edit that doc directly in the Firebase Console,
 //          or build a small admin form later — reading is wired up here.
-//          The Routine tab itself shows ONLY this weekly table.
 // Notices: realtime "notices" collection, posting restricted to
 //          emails listed in ADMIN_EMAILS (CR / class admins).
-//          Notices no longer live in the Routine tab — they open
-//          from the notification bell in the header, which also
-//          carries an unread-count badge.
 // ============================================================
 import { db, auth, ADMIN_EMAILS } from "./firebase-config.js";
 import {
-  collection, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp,
+  collection, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit, serverTimestamp,
   doc, getDoc
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import {
-  escapeHtml, timeAgo, fullDate, showToast, setBtnLoading, openModal,
+  escapeHtml, timeAgo, fullDate, showToast, setBtnLoading, openModal, closeModal,
   avatarInner, nameWithBadge, getCachedProfile, kebabMenuHtml, wireKebabMenus, confirmDialog
 } from "./ui-utils.js";
 import { currentProfile } from "./auth.js";
+import { triggerPush } from "./push-trigger.js";
 
-/** Resolve the poster's full profile (gender, etc.) from the shared cache when available. */
-function posterProfile(n) {
-  return getCachedProfile(n.postedByUid) || { uid: n.postedByUid, name: n.postedByName, email: n.postedBy };
+/** Resolve a poster's full profile (gender, photo, etc.) from the shared cache when available. */
+function posterProfile(uid, fallbackName, fallbackEmail) {
+  return getCachedProfile(uid) || { uid, name: fallbackName, email: fallbackEmail };
 }
 
 const routineTable = document.getElementById("routine-table");
 const notifBadge = document.getElementById("topbar-notif-badge");
 
 const NOTICES_SEEN_KEY = "geohub_notices_seen_at";
+const ACTIVITY_SEEN_KEY = "geohub_activity_seen_at";
 
 let unsubscribeNotices = null;
+let unsubscribeActivity = null;
 let latestNotices = [];
+let latestActivity = [];
+let noticesPageWired = false;
 
 export function initRoutine() {
   const q = query(collection(db, "notices"), orderBy("createdAt", "desc"));
   unsubscribeNotices = onSnapshot(q, (snap) => {
     latestNotices = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     updateNoticeBadge();
-    if (document.getElementById("notices-panel-marker")) {
-      renderNoticesList(); // panel is open right now — keep it live
-    }
+    renderNoticeTabBody();
   }, (err) => showToast("Couldn't load notices: " + err.message));
 
+  const aq = query(collection(db, "activity"), orderBy("createdAt", "desc"), limit(60));
+  unsubscribeActivity = onSnapshot(aq, (snap) => {
+    latestActivity = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    updateNoticeBadge();
+    renderActivityList();
+  }, () => { /* fine if the collection doesn't exist yet on a fresh project — just show "no activity" */
+    latestActivity = [];
+    renderActivityList();
+  });
+
   loadRoutine();
+  wireNoticesPageTabs();
 }
 
 // ============================================================
-// UNREAD BADGE — a notice counts as unread until the panel that
-// shows it has been opened at least once after it was posted.
+// UNREAD BADGE — counts both unseen notices AND unseen activity
+// entries; either kind lights up the bell. Both are marked "seen"
+// together the moment the Notices & Notifications page is opened.
 // ============================================================
 function updateNoticeBadge() {
   if (!notifBadge) return;
-  const seenAt = Number(localStorage.getItem(NOTICES_SEEN_KEY) || 0);
-  const unread = latestNotices.filter(n => (n.createdAt?.toDate?.().getTime() || 0) > seenAt).length;
+  const noticesSeenAt = Number(localStorage.getItem(NOTICES_SEEN_KEY) || 0);
+  const activitySeenAt = Number(localStorage.getItem(ACTIVITY_SEEN_KEY) || 0);
+  const unreadNotices = latestNotices.filter(n => (n.createdAt?.toDate?.().getTime() || 0) > noticesSeenAt).length;
+  const unreadActivity = latestActivity.filter(a => (a.createdAt?.toDate?.().getTime() || 0) > activitySeenAt).length;
+  const unread = unreadNotices + unreadActivity;
   notifBadge.textContent = unread > 9 ? "9+" : String(unread);
   notifBadge.classList.toggle("hidden", unread === 0);
 }
 
+/** Called by app.js's router the moment the Notices & Notifications page is opened. */
+export function markNoticesPageSeen() {
+  localStorage.setItem(NOTICES_SEEN_KEY, String(Date.now()));
+  localStorage.setItem(ACTIVITY_SEEN_KEY, String(Date.now()));
+  updateNoticeBadge();
+}
+
 // ============================================================
-// NOTIFICATION PANEL — opened from the bell icon in the header.
-// Shows the admin composer (for CR/admins only) plus the full
-// notice list, each with an edit/delete menu for the poster.
+// PAGE SHELL — tab switching between Notice / Notification.
+// Wired once; the two panels themselves are re-rendered live by
+// the realtime listeners above whenever their data changes.
 // ============================================================
-export function openNoticesPanel() {
-  const isAdmin = ADMIN_EMAILS.includes(auth.currentUser.email);
-  openModal(`
-    <div class="notices-modal" id="notices-panel-marker">
-      <h3>Notices</h3>
+function wireNoticesPageTabs() {
+  if (noticesPageWired) return;
+  const section = document.getElementById("section-notices");
+  if (!section) return;
+  noticesPageWired = true;
+
+  const tabBtns = section.querySelectorAll(".notices-page-tab-btn");
+  tabBtns.forEach(btn => {
+    btn.addEventListener("click", () => {
+      tabBtns.forEach(b => b.classList.toggle("active", b === btn));
+      section.querySelectorAll(".notices-page-panel").forEach(p =>
+        p.classList.toggle("active", p.dataset.panel === btn.dataset.tab));
+    });
+  });
+}
+
+// ============================================================
+// NOTICE TAB
+// ============================================================
+function renderNoticeTabBody() {
+  const host = document.getElementById("notice-tab-body");
+  if (!host) return; // page not in the DOM yet
+
+  if (!host.dataset.shellBuilt) {
+    const isAdmin = !!(auth.currentUser && ADMIN_EMAILS.includes(auth.currentUser.email));
+    host.dataset.shellBuilt = "1";
+    host.innerHTML = `
       ${isAdmin ? `
         <div class="admin-notice-box">
           <span class="admin-notice-label">
@@ -83,14 +139,10 @@ export function openNoticesPanel() {
           <button id="notice-submit" type="button" class="btn-primary full notice-submit-btn">Post Notice</button>
         </div>` : ""}
       <div id="notice-list"><p class="empty-state">Loading notices…</p></div>
-    </div>
-  `);
-  if (isAdmin) document.getElementById("notice-submit").addEventListener("click", postNotice);
+    `;
+    if (isAdmin) document.getElementById("notice-submit").addEventListener("click", postNotice);
+  }
   renderNoticesList();
-
-  // Everything currently loaded counts as "seen" the moment the panel opens.
-  localStorage.setItem(NOTICES_SEEN_KEY, String(Date.now()));
-  updateNoticeBadge();
 }
 
 function renderNoticesList() {
@@ -106,7 +158,7 @@ function renderNoticesList() {
   noticeList.innerHTML = `<div class="notice-flat-list">` + latestNotices.map(n => `
     <div class="notice-row ${n.urgent ? "urgent" : ""}" data-id="${n.id}">
       <div class="notice-row-top">
-        <span class="avatar avatar-sm notice-row-avatar">${avatarInner(posterProfile(n))}</span>
+        <span class="avatar avatar-sm notice-row-avatar">${avatarInner(posterProfile(n.postedByUid, n.postedByName, n.postedBy))}</span>
         <div class="notice-row-byline">
           <span class="notice-row-name">${nameWithBadge(n.postedByName || "Admin", n.postedBy)}</span>
           <small>${timeAgo(n.createdAt)}</small>
@@ -147,7 +199,7 @@ function openNoticeDetail(noticeId) {
   openModal(`
     <div class="notice-detail-modal">
       <div class="notice-detail-head">
-        <span class="avatar avatar-lg">${avatarInner(posterProfile(n))}</span>
+        <span class="avatar avatar-lg">${avatarInner(posterProfile(n.postedByUid, n.postedByName, n.postedBy))}</span>
         <div>
           <div class="notice-detail-name">${nameWithBadge(n.postedByName || "Admin", n.postedBy)}</div>
           <small>${fullDate(n.createdAt) || "Just now"}</small>
@@ -164,27 +216,25 @@ function openEditNoticeModal(noticeId) {
   if (!n) return;
   openModal(`
     <h3>Edit Notice</h3>
-    <label class="field">
-      <span>Notice text</span>
-      <textarea id="notice-edit-input" rows="4">${escapeHtml(n.text)}</textarea>
-    </label>
+    <textarea id="notice-edit-input" class="composer-modal-textarea" rows="4">${escapeHtml(n.text)}</textarea>
     <label class="checkbox-row">
       <input type="checkbox" id="notice-edit-urgent" ${n.urgent ? "checked" : ""} /> Mark as urgent
     </label>
+    <p id="notice-edit-error" class="form-error"></p>
     <button type="button" class="btn-primary full" id="notice-edit-save-btn">Save Changes</button>
   `);
   document.getElementById("notice-edit-save-btn").addEventListener("click", async (e) => {
     const text = document.getElementById("notice-edit-input").value.trim();
-    if (!text) return showToast("Notice text can't be empty.");
+    if (!text) { document.getElementById("notice-edit-error").textContent = "Notice text can't be empty."; return; }
     setBtnLoading(e.currentTarget, true, "Saving…");
     try {
       await updateDoc(doc(db, "notices", noticeId), {
         text, urgent: document.getElementById("notice-edit-urgent").checked
       });
+      closeModal(); // the live "notices" listener already re-renders the page underneath
       showToast("Notice updated.");
-      openNoticesPanel();
     } catch (err) {
-      showToast("Couldn't update notice: " + err.message);
+      document.getElementById("notice-edit-error").textContent = "Couldn't update notice: " + err.message;
       setBtnLoading(e.currentTarget, false);
     }
   });
@@ -196,11 +246,12 @@ async function postNotice() {
   const submit = document.getElementById("notice-submit");
   const text = input.value.trim();
   if (!text) return;
+  const wasUrgent = urgent.checked;
   setBtnLoading(submit, true, "Posting…");
   try {
     await addDoc(collection(db, "notices"), {
       text,
-      urgent: urgent.checked,
+      urgent: wasUrgent,
       postedBy: auth.currentUser.email,
       postedByUid: auth.currentUser.uid,
       postedByName: currentProfile ? currentProfile.name : "Admin",
@@ -209,6 +260,7 @@ async function postNotice() {
     input.value = "";
     urgent.checked = false;
     showToast("Notice posted.");
+    triggerPush({ type: "notice", text, urgent: wasUrgent });
   } catch (err) {
     showToast("Couldn't post notice: " + err.message);
   } finally {
@@ -216,6 +268,79 @@ async function postNotice() {
   }
 }
 
+// ============================================================
+// NOTIFICATION TAB — a live feed of department activity (new wall
+// posts, new shared notes, …). Any module can add an entry with
+// logActivity() right after its own write succeeds; this tab just
+// reads the resulting "activity" collection.
+// ============================================================
+
+/** Best-effort activity log entry — never blocks or fails the action that triggered it. */
+export async function logActivity({ type, text = "" }) {
+  if (!auth.currentUser) return;
+  try {
+    await addDoc(collection(db, "activity"), {
+      type,
+      text,
+      actorUid: auth.currentUser.uid,
+      actorName: currentProfile ? currentProfile.name : (auth.currentUser.email || "Someone"),
+      actorEmail: auth.currentUser.email,
+      createdAt: serverTimestamp()
+    });
+  } catch (err) {
+    console.warn("Couldn't log activity:", err.message);
+  }
+}
+
+function truncate(text, max) {
+  return text.length > max ? text.slice(0, max) + "…" : text;
+}
+
+function activityLine(a) {
+  const quoted = a.text ? ` — “${escapeHtml(truncate(a.text, 90))}”` : "";
+  switch (a.type) {
+    case "post": return `posted on the Student Wall${quoted}`;
+    case "resource": return `shared a note/sheet${a.text ? `: <strong>${escapeHtml(truncate(a.text, 70))}</strong>` : ""}`;
+    case "comment": return `commented on a post${quoted}`;
+    default: return escapeHtml(a.text || "did something on GeoHub");
+  }
+}
+
+function renderActivityList() {
+  const host = document.getElementById("notification-list");
+  if (!host) return;
+
+  if (!latestActivity.length) {
+    host.innerHTML = `<p class="empty-state">No recent activity yet.</p>`;
+    return;
+  }
+
+  host.innerHTML = `<div class="notice-flat-list">` + latestActivity.map(a => `
+    <div class="notice-row activity-row" data-uid="${escapeHtml(a.actorUid || "")}">
+      <div class="notice-row-top">
+        <span class="avatar avatar-sm">${avatarInner(posterProfile(a.actorUid, a.actorName, a.actorEmail))}</span>
+        <div class="notice-row-byline">
+          <span class="notice-row-name">${nameWithBadge(a.actorName || "Someone", a.actorEmail)}</span>
+          <small>${timeAgo(a.createdAt)}</small>
+        </div>
+      </div>
+      <p class="notice-row-text">${activityLine(a)}</p>
+    </div>
+  `).join("") + `</div>`;
+
+  host.querySelectorAll(".activity-row").forEach(row => {
+    const uid = row.dataset.uid;
+    if (!uid) return;
+    row.addEventListener("click", async () => {
+      const { openUserProfilePage } = await import("./profile-view.js");
+      openUserProfilePage(uid);
+    });
+  });
+}
+
+// ============================================================
+// WEEKLY ROUTINE
+// ============================================================
 async function loadRoutine() {
   try {
     const snap = await getDoc(doc(db, "routine", "weekly"));
@@ -245,4 +370,9 @@ async function loadRoutine() {
 
 export function teardownRoutine() {
   if (unsubscribeNotices) unsubscribeNotices();
+  if (unsubscribeActivity) unsubscribeActivity();
+  latestNotices = [];
+  latestActivity = [];
+  const host = document.getElementById("notice-tab-body");
+  if (host) { delete host.dataset.shellBuilt; host.innerHTML = ""; }
 }

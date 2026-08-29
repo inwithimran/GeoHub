@@ -35,6 +35,7 @@ export async function signUp(data) {
     gender: data.gender || "",
     phone: data.phone.trim(),
     email: data.email.trim(),
+    photoURL: "",
     bio: "",
     session: "",
     year: "",
@@ -99,7 +100,7 @@ export async function signInWithGoogle() {
  * privacy toggles that control what classmates can see (and whether
  * they can call this student).
  */
-export async function updateProfileDetails({ roll, blood, phone, bio, session, year, hometown, address, socialLink, gender, hidePhone, hideEmail }) {
+export async function updateProfileDetails({ roll, blood, phone, bio, session, year, hometown, address, socialLink, gender, hidePhone, hideEmail, photoURL }) {
   const uid = auth.currentUser.uid;
   const updates = {
     roll: roll.trim(),
@@ -116,6 +117,7 @@ export async function updateProfileDetails({ roll, blood, phone, bio, session, y
   if (gender !== undefined && gender) updates.gender = gender;
   if (hidePhone !== undefined) updates.hidePhone = !!hidePhone;
   if (hideEmail !== undefined) updates.hideEmail = !!hideEmail;
+  if (photoURL !== undefined && photoURL) updates.photoURL = photoURL;
 
   await updateDoc(doc(db, "users", uid), updates);
   currentProfile = { ...currentProfile, ...updates };
@@ -156,6 +158,7 @@ export function watchAuthState(onLogin, onLogout) {
           gender: "",
           phone: "",
           email: user.email || "",
+          photoURL: user.photoURL || "",
           bio: "",
           session: "",
           year: "",

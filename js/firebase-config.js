@@ -37,6 +37,18 @@ export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
+// ============================================================
+// PUSH NOTIFICATIONS (Firebase Cloud Messaging)
+// ----------------------------------------------------------------------------
+// 1. Firebase Console -> Project settings -> Cloud Messaging -> "Web Push
+//    certificates" -> Generate key pair. Paste the resulting key below.
+// 2. The server side that actually SENDS the push (triggered after a new
+//    post/note/notice/comment is saved) is a Vercel serverless function at
+//    /api/send-push.js — NOT a Firebase Cloud Function, so this stays on
+//    Firebase's free Spark plan. See VERCEL_SETUP.md for the deploy steps.
+// ============================================================
+export const VAPID_KEY = "BD9lAKJwaHRwTaSMqD6sYWs40rfsEhUW0rxuyZtOgBsWm4jhdAgMCS4aLCIpcvFmtpIvnn_klw9IdwWrP2tp7rc";
+
 // Department constant — used across the app (post metadata, empty states, etc.)
 export const DEPARTMENT_NAME = "Geography & Environment";
 export const COLLEGE_NAME = "Govt. Michael Madhusudan College, Jessore";

@@ -16,6 +16,10 @@ import {
   avatarInner, nameWithBadge, kebabMenuHtml, wireKebabMenus, confirmDialog
 } from "./ui-utils.js";
 import { openUserProfilePage } from "./profile-view.js";
+import { uploadImages } from "./cloudinary.js";
+import { logActivity } from "./routine.js";
+import { triggerPush } from "./push-trigger.js";
+import { imagePickerHtml, wireImagePicker, postImagesHtml, wireEditImagePicker, wirePostImageViewer } from "./media-picker.js";
 
 const wallList = document.getElementById("wall-list");
 const composerTrigger = document.getElementById("composer-trigger");
@@ -61,6 +65,7 @@ function openComposerModal() {
         </div>
       </div>
       <textarea id="post-input" class="composer-modal-textarea" placeholder="Ask a question or share something with the department…" rows="6" autofocus></textarea>
+      ${imagePickerHtml("post-image-input")}
       <p id="post-error" class="form-error"></p>
       <button type="button" id="post-submit" class="btn-primary full raised composer-post-btn">
         <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -70,13 +75,14 @@ function openComposerModal() {
   `);
   const textarea = document.getElementById("post-input");
   textarea.focus();
-  document.getElementById("post-submit").addEventListener("click", handleCreatePost);
+  const getImageFiles = wireImagePicker(document.getElementById("modal-body"), "post-image-input");
+  document.getElementById("post-submit").addEventListener("click", () => handleCreatePost(getImageFiles));
   textarea.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleCreatePost();
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleCreatePost(getImageFiles);
   });
 }
 
-async function handleCreatePost() {
+async function handleCreatePost(getImageFiles) {
   const textarea = document.getElementById("post-input");
   const btn = document.getElementById("post-submit");
   const errorEl = document.getElementById("post-error");
@@ -88,16 +94,26 @@ async function handleCreatePost() {
 
   setBtnLoading(btn, true, "Posting…");
   try {
+    const files = getImageFiles ? getImageFiles() : [];
+    let images = [];
+    if (files.length) {
+      setBtnLoading(btn, true, "Uploading photos…");
+      images = await uploadImages(files, { maxDim: 1600, quality: 0.78, folder: "geohub/posts" });
+      setBtnLoading(btn, true, "Posting…");
+    }
     await addDoc(collection(db, "posts"), {
       authorUid: auth.currentUser.uid,
       authorName: currentProfile.name,
       authorEmail: auth.currentUser.email,
       text,
+      images,
       likes: [],
       createdAt: serverTimestamp()
     });
     closeModal();
     showToast("Posted to the Student Wall.");
+    logActivity({ type: "post", text });
+    triggerPush({ type: "post", text, actorName: currentProfile.name });
   } catch (err) {
     errorEl.textContent = "Couldn't publish your post: " + err.message;
     setBtnLoading(btn, false);
@@ -107,20 +123,32 @@ async function handleCreatePost() {
 // ============================================================
 // EDIT / DELETE OWN POST — reached via the post's three-dot menu
 // ============================================================
-export function openEditPostModal(postId, currentText, onSaved) {
+export function openEditPostModal(postId, currentText, onSaved, currentImages = []) {
   openModal(`
     <h3>Edit Post</h3>
     <textarea id="post-edit-input" class="composer-modal-textarea" rows="6">${escapeHtml(currentText)}</textarea>
+    <div class="media-picker-existing" data-existing-grid="post-edit-image-input"></div>
+    ${imagePickerHtml("post-edit-image-input", "Add More Photos")}
     <p id="post-edit-error" class="form-error"></p>
     <button type="button" class="btn-primary full" id="post-edit-save-btn">Save Changes</button>
   `);
+  const modalBody = document.getElementById("modal-body");
+  const { getRemainingUrls, getNewFiles } = wireEditImagePicker(modalBody, "post-edit-image-input", currentImages);
+
   document.getElementById("post-edit-save-btn").addEventListener("click", async (e) => {
     const text = document.getElementById("post-edit-input").value.trim();
     const errorEl = document.getElementById("post-edit-error");
     if (!text) { errorEl.textContent = "Post can't be empty."; return; }
     setBtnLoading(e.currentTarget, true, "Saving…");
     try {
-      await updateDoc(doc(db, "posts", postId), { text, editedAt: serverTimestamp() });
+      const newFiles = getNewFiles();
+      let uploaded = [];
+      if (newFiles.length) {
+        setBtnLoading(e.currentTarget, true, "Uploading photos…");
+        uploaded = await uploadImages(newFiles, { maxDim: 1600, quality: 0.78, folder: "geohub/posts" });
+      }
+      const images = [...getRemainingUrls(), ...uploaded];
+      await updateDoc(doc(db, "posts", postId), { text, images, editedAt: serverTimestamp() });
       closeModal();
       showToast("Post updated.");
       onSaved?.();
@@ -141,9 +169,12 @@ export async function deletePost(postId, onDeleted) {
 }
 
 // ============================================================
-// POST RENDERING — flat feed row, no card chrome
+// POST RENDERING — flat feed row, no card chrome. Shared by the
+// realtime Wall feed AND a profile's "Posts" tab (own or a
+// classmate's), so likes/comments/kebab all work identically
+// everywhere a post can appear.
 // ============================================================
-function renderPost(postId, post, listEl) {
+export function renderPost(postId, post, listEl, { onChanged } = {}) {
   const uid = auth.currentUser.uid;
   const liked = (post.likes || []).includes(uid);
   const likeCount = (post.likes || []).length;
@@ -165,6 +196,7 @@ function renderPost(postId, post, listEl) {
       ]) : ""}
     </div>
     ${clampableHtml(post.text, "post-text")}
+    ${postImagesHtml(post.images)}
     <div class="post-actions">
       <button class="post-action-btn leaf-like-btn ${liked ? "liked" : ""}" data-id="${postId}" aria-pressed="${liked}">
         <span class="leaf-icon" aria-hidden="true">
@@ -190,16 +222,17 @@ function renderPost(postId, post, listEl) {
   el.querySelector(".leaf-like-btn").addEventListener("click", (e) => {
     toggleLike(postId, liked, e.currentTarget);
   });
-  el.querySelector(".comment-toggle-btn").addEventListener("click", () => toggleComments(postId, el));
+  el.querySelector(".comment-toggle-btn").addEventListener("click", () => toggleComments(postId, el, post.authorUid));
   el.querySelector(".post-like-count").addEventListener("click", () => openLikesModal(post.likes || []));
   attachClampToggle(el);
+  wirePostImageViewer(el);
   wireKebabMenus(el, {
-    edit: () => openEditPostModal(postId, post.text),
+    edit: () => openEditPostModal(postId, post.text, onChanged, post.images || []),
     delete: () => confirmDialog({
       title: "Delete this post?",
       text: "This post and all of its comments will be removed from the Wall. This can't be undone.",
       confirmLabel: "Delete",
-      onConfirm: () => deletePost(postId)
+      onConfirm: () => deletePost(postId, onChanged)
     })
   });
 
@@ -209,7 +242,7 @@ function renderPost(postId, post, listEl) {
   if (openComments.has(postId)) {
     const block = el.querySelector(`[data-comments-for="${postId}"]`);
     block.classList.remove("hidden");
-    loadComments(postId, block);
+    loadComments(postId, block, post.authorUid);
   }
 }
 
@@ -258,15 +291,19 @@ async function openLikesModal(uids) {
   `);
   document.querySelectorAll(".likes-row").forEach(row =>
     row.addEventListener("click", () => {
-      closeModal(); // this row lives inside the "Liked by" modal — close it before navigating to a full page
-      openUserProfilePage(row.dataset.uid);
+      // Close the "Liked by" modal WITHOUT letting it pop its own history entry
+      // (keepHistory) — otherwise that history.back() races the profile page's
+      // own history.pushState and the navigation can silently fail. Instead we
+      // replace the modal's entry with the profile page's ({ replace: true }).
+      closeModal({ keepHistory: true });
+      openUserProfilePage(row.dataset.uid, { replace: true });
     }));
 }
 
 // ============================================================
 // COMMENTS — professional inline thread (avatar + name + text)
 // ============================================================
-function toggleComments(postId, postEl) {
+function toggleComments(postId, postEl, authorUid) {
   const block = postEl.querySelector(`[data-comments-for="${postId}"]`);
   const isOpen = !block.classList.contains("hidden");
   if (isOpen) {
@@ -275,11 +312,11 @@ function toggleComments(postId, postEl) {
   } else {
     block.classList.remove("hidden");
     openComments.add(postId);
-    loadComments(postId, block);
+    loadComments(postId, block, authorUid);
   }
 }
 
-async function loadComments(postId, block) {
+async function loadComments(postId, block, authorUid) {
   block.innerHTML = `<p class="empty-state comments-loading"><span class="btn-spinner dark"></span> Loading comments…</p>`;
   const q = query(collection(db, "posts", postId, "comments"), orderBy("createdAt", "asc"));
   const snap = await getDocs(q);
@@ -320,26 +357,26 @@ async function loadComments(postId, block) {
     b.addEventListener("click", () => openUserProfilePage(b.dataset.author)));
 
   wireKebabMenus(block, {
-    edit: (commentId) => openEditCommentModal(postId, commentId, block),
+    edit: (commentId) => openEditCommentModal(postId, commentId, block, authorUid),
     delete: (commentId) => confirmDialog({
       title: "Delete this comment?",
       text: "This comment will be removed from the thread. This can't be undone.",
       confirmLabel: "Delete",
       onConfirm: async () => {
         await deleteDoc(doc(db, "posts", postId, "comments", commentId));
-        loadComments(postId, block);
+        loadComments(postId, block, authorUid);
       }
     })
   });
 
   const sendBtn = block.querySelector(`[data-comment-send="${postId}"]`);
-  sendBtn.addEventListener("click", () => submitComment(postId, block, sendBtn));
+  sendBtn.addEventListener("click", () => submitComment(postId, block, sendBtn, authorUid));
   block.querySelector(`[data-comment-input="${postId}"]`).addEventListener("keydown", (e) => {
-    if (e.key === "Enter") submitComment(postId, block, sendBtn);
+    if (e.key === "Enter") submitComment(postId, block, sendBtn, authorUid);
   });
 }
 
-async function submitComment(postId, block, sendBtn) {
+async function submitComment(postId, block, sendBtn, authorUid) {
   const input = block.querySelector(`[data-comment-input="${postId}"]`);
   const text = input.value.trim();
   if (!text) return;
@@ -356,7 +393,8 @@ async function submitComment(postId, block, sendBtn) {
       createdAt: serverTimestamp()
     });
     input.value = "";
-    loadComments(postId, block); // refresh thread
+    loadComments(postId, block, authorUid); // refresh thread
+    triggerPush({ type: "comment", text, actorName: currentProfile.name, targetUid: authorUid });
   } catch (err) {
     showToast("Couldn't send your comment: " + err.message);
     input.disabled = false;
@@ -368,7 +406,7 @@ async function submitComment(postId, block, sendBtn) {
 // ============================================================
 // EDIT OWN COMMENT — reached via the comment's three-dot menu
 // ============================================================
-function openEditCommentModal(postId, commentId, block) {
+function openEditCommentModal(postId, commentId, block, authorUid) {
   const inputEl = block.querySelector(`[data-kebab-id="${commentId}"]`)?.closest(".comment-item")?.querySelector(".comment-body p");
   const currentText = inputEl ? inputEl.textContent : "";
   openModal(`
@@ -385,7 +423,7 @@ function openEditCommentModal(postId, commentId, block) {
     try {
       await updateDoc(doc(db, "posts", postId, "comments", commentId), { text, editedAt: serverTimestamp() });
       closeModal();
-      loadComments(postId, block);
+      loadComments(postId, block, authorUid);
     } catch (err) {
       errorEl.textContent = "Couldn't save changes: " + err.message;
       setBtnLoading(e.currentTarget, false);

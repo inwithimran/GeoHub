@@ -50,8 +50,15 @@ export function openModal(html, { closable = true } = {}) {
     modalHistoryOpen = true;
   }
 }
-/** Close the modal. A non-closable (mandatory) modal ignores this unless { force: true } is passed. */
-export function closeModal({ force = false } = {}) {
+/**
+ * Close the modal. A non-closable (mandatory) modal ignores this unless { force: true } is passed.
+ * Pass { keepHistory: true } when the modal is being closed only because the caller is about to
+ * navigate to a full page right after (e.g. tapping a name in the "Liked by" list) — this skips the
+ * history.back() call so it can't race the page's own history.pushState/replaceState. The caller is
+ * then responsible for using `{ replace: true }` on that navigation so it replaces this modal's
+ * history entry instead of stacking on top of it.
+ */
+export function closeModal({ force = false, keepHistory = false } = {}) {
   if (modalOverlay.classList.contains("hidden")) return;
   if (!modalClosable && !force) return;
   modalOverlay.classList.add("hidden");
@@ -60,7 +67,7 @@ export function closeModal({ force = false } = {}) {
   modalClosable = true;
   if (modalHistoryOpen) {
     modalHistoryOpen = false;
-    if (!closingFromPopstate) history.back(); // pop the entry this modal pushed
+    if (!closingFromPopstate && !keepHistory) history.back(); // pop the entry this modal pushed
   }
 }
 // The close (X) button is the only way to dismiss a modal by hand.
@@ -166,6 +173,9 @@ function genderIconSvg(gender) {
 export function avatarInner(profile = {}) {
   const seed = profile.uid || profile.name || "?";
   const color = avatarColorFor(seed);
+  if (profile.photoURL) {
+    return `<span class="avatar-fill" style="background:${color}"><img src="${escapeHtml(profile.photoURL)}" alt="" loading="lazy" /></span>`;
+  }
   return `<span class="avatar-fill" style="background:${color}">${genderIconSvg(profile.gender)}</span>`;
 }
 
@@ -292,9 +302,13 @@ export function kebabMenuHtml(id, actions, extraClass = "") {
     </div>`;
 }
 
-/** Close every open kebab dropdown in the document. */
+/**
+ * Close every open kebab dropdown in the document, and un-elevate whatever
+ * row it had been lifted above its siblings (see wireKebabMenus below).
+ */
 export function closeAllKebabMenus() {
   document.querySelectorAll(".kebab-dropdown").forEach(d => d.classList.add("hidden"));
+  document.querySelectorAll(".kebab-stack-top").forEach(el => el.classList.remove("kebab-stack-top"));
 }
 document.addEventListener("click", closeAllKebabMenus);
 
@@ -309,11 +323,20 @@ export function wireKebabMenus(root, handlers) {
     const dd = menu.querySelector(".kebab-dropdown");
     if (!btn || !dd || btn.dataset.wired) return;
     btn.dataset.wired = "1";
+    // Some cards (notice-row, in particular) apply a CSS transform, which
+    // creates its own stacking context — that traps the dropdown's z-index
+    // inside it, so the *next* card (painted after it in normal doc order)
+    // can still cover the open dropdown. Elevating the whole card above its
+    // siblings while its own menu is open fixes that for every card type.
+    const stackHost = menu.closest(".notice-row, .feed-post, .resource-row, .comment-item, .directory-row") || menu;
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       const wasHidden = dd.classList.contains("hidden");
       closeAllKebabMenus();
-      if (wasHidden) dd.classList.remove("hidden");
+      if (wasHidden) {
+        dd.classList.remove("hidden");
+        stackHost.classList.add("kebab-stack-top");
+      }
     });
     dd.querySelectorAll(".kebab-item").forEach(item => {
       item.addEventListener("click", (e) => {

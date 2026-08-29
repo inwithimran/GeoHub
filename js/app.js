@@ -12,12 +12,14 @@ import {
 import { initWall, teardownWall } from "./wall.js";
 import { initResources, teardownResources, loadUserResources } from "./resources.js";
 import { initDirectory, teardownDirectory } from "./directory.js";
-import { initRoutine, teardownRoutine, openNoticesPanel } from "./routine.js";
+import { initRoutine, teardownRoutine, markNoticesPageSeen } from "./routine.js";
 import { openUserProfilePage, loadUserPosts, registerProfilePageRouter } from "./profile-view.js";
 import {
   escapeHtml, openModal, closeModal, showToast, setBtnLoading, fullDate,
   avatarInner, nameWithBadge, isAdminEmail, resetScrollForTabs
 } from "./ui-utils.js";
+import { uploadImage } from "./cloudinary.js";
+import { initPush, unregisterPushToken } from "./push.js";
 
 // ---------- Element references ----------
 const loadingScreen = document.getElementById("loading-screen");
@@ -213,6 +215,7 @@ const routeTitles = {
   directory: "Classmate Directory",
   routine: "Weekly Routine",
   profile: "My Profile",
+  notices: "Notices & Notifications",
   "user-profile": "Profile" // overwritten with the classmate's name once loaded
 };
 
@@ -240,6 +243,7 @@ function goToRoute(route, { fromPopstate = false, replace = false, state = {} } 
   document.getElementById("topbar-subtitle").textContent = route === "user-profile" ? "Classmate Profile" : "Geography & Environment";
 
   if (route === "profile") renderProfile();
+  if (route === "notices") markNoticesPageSeen();
 
   currentRoute = route;
   const historyState = { geohubRoute: route, ...state };
@@ -256,7 +260,9 @@ document.querySelectorAll(".nav-item[data-route]").forEach(btn => {
     if (btn.dataset.route !== currentRoute) goToRoute(btn.dataset.route);
   });
 });
-document.getElementById("topbar-notif-btn").addEventListener("click", () => openNoticesPanel());
+document.getElementById("topbar-notif-btn").addEventListener("click", () => {
+  if (currentRoute !== "notices") goToRoute("notices");
+});
 
 // Device/browser back button: step back to whichever section is recorded
 // in that history entry (a modal's own popstate handling, in ui-utils.js,
@@ -299,6 +305,7 @@ function confirmLogout() {
     cancelBtn.disabled = true;
     loggingOut = true;
     try {
+      await unregisterPushToken();
       await logOut();
       closeModal();
     } catch (err) {
@@ -421,6 +428,16 @@ function openProfileDetailsModal(isFirstTime = false) {
   openModal(`
     <h3>${isFirstTime ? "Finish setting up your profile" : "Edit your details"}</h3>
     ${isFirstTime ? `<p class="modal-hint">Welcome to GeoHub! We just need a few more details so classmates can find you in the directory.</p>` : ""}
+
+    <div class="pd-photo-picker">
+      <div class="avatar avatar-lg pd-photo-preview" id="pd-photo-preview">${avatarInner(currentProfile)}</div>
+      <div class="pd-photo-actions">
+        <button type="button" class="btn-outline" id="pd-photo-btn">Change Photo</button>
+        <small>JPG or PNG, square photos look best.</small>
+      </div>
+      <input type="file" id="pd-photo-input" accept="image/*" class="hidden" />
+    </div>
+
     <label class="field">
       <span>Roll / Registration No.</span>
       <input type="text" id="pd-roll" placeholder="e.g. 2024-GEO-014" value="${escapeHtml(currentProfile.roll || "")}" />
@@ -492,10 +509,23 @@ function openProfileDetailsModal(isFirstTime = false) {
     <p id="pd-error" class="form-error"></p>
     <button type="button" class="btn-primary full" id="pd-save-btn">Save Details</button>
   `, { closable: !isFirstTime });
-  document.getElementById("pd-save-btn").addEventListener("click", () => saveProfileDetails(isFirstTime));
+
+  // ---------- Photo picker: pick -> instant local preview -> uploaded only on Save ----------
+  let selectedPhotoFile = null;
+  const photoInput = document.getElementById("pd-photo-input");
+  const photoPreview = document.getElementById("pd-photo-preview");
+  document.getElementById("pd-photo-btn").addEventListener("click", () => photoInput.click());
+  photoInput.addEventListener("change", () => {
+    const file = photoInput.files?.[0];
+    if (!file) return;
+    selectedPhotoFile = file;
+    photoPreview.innerHTML = `<span class="avatar-fill"><img src="${URL.createObjectURL(file)}" alt="" /></span>`;
+  });
+
+  document.getElementById("pd-save-btn").addEventListener("click", () => saveProfileDetails(isFirstTime, () => selectedPhotoFile));
 }
 
-async function saveProfileDetails(isFirstTime) {
+async function saveProfileDetails(isFirstTime, getSelectedPhotoFile) {
   const btn = document.getElementById("pd-save-btn");
   const roll = document.getElementById("pd-roll").value.trim();
   const blood = document.getElementById("pd-blood").value;
@@ -518,7 +548,14 @@ async function saveProfileDetails(isFirstTime) {
   errorEl.textContent = "";
   setBtnLoading(btn, true, "Saving…");
   try {
-    await updateProfileDetails({ roll, blood, gender, phone, year, session, hometown, address, socialLink, bio, hidePhone, hideEmail });
+    const selectedPhotoFile = getSelectedPhotoFile ? getSelectedPhotoFile() : null;
+    let photoURL;
+    if (selectedPhotoFile) {
+      setBtnLoading(btn, true, "Uploading photo…");
+      photoURL = await uploadImage(selectedPhotoFile, { maxDim: 600, quality: 0.85, folder: "geohub/avatars" });
+      setBtnLoading(btn, true, "Saving…");
+    }
+    await updateProfileDetails({ roll, blood, gender, phone, year, session, hometown, address, socialLink, bio, hidePhone, hideEmail, photoURL });
     closeModal({ force: true }); // needed for the mandatory first-time flow, harmless otherwise
     showToast(isFirstTime ? "Profile complete — welcome aboard!" : "Profile updated.");
     if (!document.getElementById("section-profile").classList.contains("hidden")) renderProfile();
@@ -553,6 +590,7 @@ watchAuthState(
       featuresInitialized = true;
     }
     goToRoute("wall", { replace: true });
+    initPush(); // best-effort: registers this device for background push notifications
 
     // First-time Google sign-ins land without roll/blood/phone — ask for them once.
     if (profile && profile.profileIncomplete) {

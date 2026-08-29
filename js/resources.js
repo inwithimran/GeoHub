@@ -12,6 +12,8 @@ import {
   showToast, escapeHtml, openModal, closeModal, timeAgo, setBtnLoading,
   kebabMenuHtml, wireKebabMenus, confirmDialog
 } from "./ui-utils.js";
+import { logActivity } from "./routine.js";
+import { triggerPush } from "./push-trigger.js";
 
 const chipRow = document.getElementById("resource-categories");
 const resourceList = document.getElementById("resource-list");
@@ -156,6 +158,8 @@ async function submitResource() {
     });
     closeModal();
     showToast("Resource shared with the department 🎉");
+    logActivity({ type: "resource", text: title });
+    triggerPush({ type: "resource", text: title, actorName: currentProfile.name });
   } catch (err) {
     showToast("Couldn't share resource: " + err.message);
     setBtnLoading(btn, false);
