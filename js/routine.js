@@ -52,6 +52,7 @@ let latestNotices = [];
 // can't be a single onSnapshot the way `notices` is.
 let latestActivityPublic = [];   // type in [post, resource, notice] — visible to everyone
 let latestActivityPrivate = [];  // type in [comment, like] targeted at ME specifically
+let activityFeedError = null;    // last onSnapshot error message, if either half of the feed is currently down
 let noticesPageWired = false;
 
 // app.js hands us its router (goToRoute) so clicking a notification can
@@ -123,10 +124,20 @@ export function initRoutine() {
   );
   unsubscribeActivityPublic = onSnapshot(publicQ, (snap) => {
     latestActivityPublic = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    activityFeedError = null;
     updateNoticeBadge();
     renderActivityList();
   }, (err) => {
-    console.error("Couldn't load public activity feed:", err.message);
+    console.error("Couldn't load public activity feed:", err.code, err.message);
+    // Surfaced as a toast (not just console.error) because on a phone there's
+    // no devtools to check — this is the single most useful diagnostic if the
+    // Notification tab ever goes blank again: it will say either
+    // "permission-denied" (rules/query mismatch) or "failed-precondition"
+    // (missing Firestore composite index — the error also contains a direct
+    // link to create it, visible by tapping "Copy error" in most browsers'
+    // address bar / share sheet, or by reading it over someone's desktop).
+    activityFeedError = err.code || err.message;
+    showToast("Notification feed error: " + activityFeedError);
     latestActivityPublic = [];
     renderActivityList();
   });
@@ -141,10 +152,13 @@ export function initRoutine() {
     );
     unsubscribeActivityPrivate = onSnapshot(privateQ, (snap) => {
       latestActivityPrivate = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      activityFeedError = null;
       updateNoticeBadge();
       renderActivityList();
     }, (err) => {
-      console.error("Couldn't load your personal activity feed:", err.message);
+      console.error("Couldn't load your personal activity feed:", err.code, err.message);
+      activityFeedError = err.code || err.message;
+      showToast("Notification feed error: " + activityFeedError);
       latestActivityPrivate = [];
       renderActivityList();
     });
@@ -407,6 +421,16 @@ function renderActivityList() {
 
   const activity = mergedActivity().filter(visibleToMe);
 
+  // Distinguish "genuinely nothing has happened yet" from "the feed failed to
+  // load" — these used to look identical ("No recent activity yet."), which is
+  // exactly what made the underlying permission/index bug invisible. Showing
+  // the raw Firestore error code here means the fix (or next bug) is visible
+  // on the phone itself, no devtools needed.
+  if (activityFeedError) {
+    host.innerHTML = `<p class="empty-state">Couldn't load notifications (${escapeHtml(activityFeedError)}). Pull to refresh, or tell your admin this code.</p>`;
+    return;
+  }
+
   if (!activity.length) {
     host.innerHTML = `<p class="empty-state">No recent activity yet.</p>`;
     return;
@@ -516,6 +540,7 @@ export function teardownRoutine() {
   latestNotices = [];
   latestActivityPublic = [];
   latestActivityPrivate = [];
+  activityFeedError = null;
   const host = document.getElementById("notice-tab-body");
   if (host) { delete host.dataset.shellBuilt; host.innerHTML = ""; }
 }
