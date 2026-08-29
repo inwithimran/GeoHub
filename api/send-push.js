@@ -74,7 +74,7 @@ async function collectTokensFor(db, uid, excludeUid) {
 }
 
 /** Sends to every pair in chunks of 500 (FCM's multicast limit), pruning dead tokens as it goes. */
-async function sendToTokens(messaging, db, pairs, notification, data = {}) {
+async function sendToTokens(messaging, db, pairs, data = {}) {
   if (!pairs.length) return { sent: 0, pruned: 0 };
   let sent = 0;
   let pruned = 0;
@@ -82,7 +82,13 @@ async function sendToTokens(messaging, db, pairs, notification, data = {}) {
     const chunk = pairs.slice(i, i + 500);
     const res = await messaging.sendEachForMulticast({
       tokens: chunk.map((p) => p.token),
-      notification,
+      // Data-only message — deliberately no top-level `notification` field.
+      // When a push includes a `notification` payload, the browser/OS shows
+      // it automatically in the background AND the service worker's
+      // onBackgroundMessage handler fires and calls showNotification() itself
+      // — two notifications for one push. Sending data-only means nothing is
+      // shown automatically, so the service worker's single explicit call
+      // (see firebase-messaging-sw.js) is the only one that ever displays.
       data,
       webpush: { fcmOptions: { link: data.url || "/" } }
     });
@@ -256,14 +262,15 @@ export default async function handler(req, res) {
     if (!allowed) return res.status(429).json({ ok: false, error: "Please wait a few seconds before triggering another notification." });
 
     const messaging = getMessaging(app);
-    const notification = buildNotification(type, { text, actorName, urgent });
+    const { title, body } = buildNotification(type, { text, actorName, urgent });
 
     // A new comment or like only notifies the post's author, not the whole department.
     const pairs = (type === "comment" || type === "like")
       ? await collectTokensFor(db, targetUid, callerUid)
       : await collectAllTokens(db, callerUid);
 
-    const result = await sendToTokens(messaging, db, pairs, notification, { url: "/", type });
+    // FCM data payloads only allow string values, hence the explicit casts.
+    const result = await sendToTokens(messaging, db, pairs, { url: "/", type: String(type), title, body });
     return res.status(200).json({ ok: true, ...result });
   } catch (err) {
     console.error("send-push error:", err);
