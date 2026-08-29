@@ -59,14 +59,22 @@ export function openImageCropper(file) {
     function finish(result) {
       if (settled) return;
       settled = true;
-      overlay.removeEventListener("click", onStageClickGuard, true);
+      overlay.removeEventListener("click", onStageClickGuard);
       overlay.remove();
       URL.revokeObjectURL(objectUrl);
       resolve(result);
     }
-    // Prevent the crop screen's own backdrop tap from doing anything unexpected.
-    function onStageClickGuard(e) { e.stopPropagation(); }
-    overlay.addEventListener("click", onStageClickGuard, true);
+    // Swallow a tap that lands on the overlay's own bare backdrop (so it
+    // doesn't leak through to whatever's behind it) — but ONLY when the
+    // click's target IS the overlay itself, and only in the bubble phase
+    // (default, no capture). The previous version ran in the capture
+    // phase and called stopPropagation() unconditionally for every click
+    // anywhere inside the overlay; stopping propagation during capture
+    // halts the event before it ever reaches a descendant's own listener,
+    // which silently broke both "Use Photo" and "Cancel" (their click
+    // handlers, below, never fired).
+    function onStageClickGuard(e) { if (e.target === overlay) e.stopPropagation(); }
+    overlay.addEventListener("click", onStageClickGuard);
 
     cancelBtn.addEventListener("click", () => finish(null));
 
