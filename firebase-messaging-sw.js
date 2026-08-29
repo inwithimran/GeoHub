@@ -22,9 +22,9 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage((payload) => {
-  const title = payload.notification?.title || "GeoHub";
+  const title = payload.data?.title || "GeoHub";
   const options = {
-    body: payload.notification?.body || "",
+    body: payload.data?.body || "",
     icon: "/icons/geohub-192.png", // optional — add this file, or remove this line
     badge: "/icons/geohub-badge.png", // optional — add this file, or remove this line
     data: { url: payload.data?.url || "/" }
