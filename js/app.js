@@ -20,6 +20,7 @@ import {
   avatarInner, nameWithBadge, isAdminEmail, resetScrollForTabs
 } from "./ui-utils.js";
 import { uploadImage } from "./cloudinary.js";
+import { isAcceptableImageFile } from "./media-picker.js";
 import { initPush, unregisterPushToken } from "./push.js";
 
 // ---------- Element references ----------
@@ -527,6 +528,7 @@ function openProfileDetailsModal(isFirstTime = false) {
   photoInput.addEventListener("change", () => {
     const file = photoInput.files?.[0];
     if (!file) return;
+    if (!isAcceptableImageFile(file)) { photoInput.value = ""; return; }
     selectedPhotoFile = file;
     photoPreview.innerHTML = `<span class="avatar-fill"><img src="${URL.createObjectURL(file)}" alt="" /></span>`;
   });

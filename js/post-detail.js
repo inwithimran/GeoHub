@@ -277,7 +277,7 @@ async function submitComment(postId, commentsEl, sendBtn, postAuthorUid) {
     // commented on their own post — that's not a meaningful notification.
     if (postAuthorUid && postAuthorUid !== auth.currentUser.uid) {
       logActivity({ type: "comment", text, targetUid: postAuthorUid, postId });
-      triggerPush({ type: "comment", text, actorName: currentProfile.name, targetUid: postAuthorUid });
+      triggerPush({ type: "comment", text, actorName: currentProfile.name, targetUid: postAuthorUid, postId });
     }
   } catch (err) {
     showToast("Couldn't send your comment: " + err.message);

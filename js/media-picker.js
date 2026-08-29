@@ -10,6 +10,27 @@
 // ============================================================
 import { escapeHtml, showToast } from "./ui-utils.js";
 
+// Guardrails applied before a picked file is ever handed to Cloudinary.
+// This runs BEFORE compression (js/cloudinary.js resizes/re-encodes valid
+// images), so it exists purely to reject the wrong kind of file early —
+// e.g. someone renaming a video/PDF to look like an image, or a huge
+// original photo straight off a phone camera that would otherwise sit in
+// memory as a full-size <img> + <canvas> for no reason.
+const MAX_RAW_FILE_BYTES = 15 * 1024 * 1024; // 15MB — generous for an unedited phone photo
+
+/** True (and lets it through) if this File looks like a real, reasonably-sized image. Exported for the profile-photo picker in app.js. */
+export function isAcceptableImageFile(file) {
+  if (!file.type || !file.type.startsWith("image/")) {
+    showToast(`"${file.name}" isn't an image — skipped.`);
+    return false;
+  }
+  if (file.size > MAX_RAW_FILE_BYTES) {
+    showToast(`"${file.name}" is too large (max 15MB) — skipped.`);
+    return false;
+  }
+  return true;
+}
+
 /** Markup for the "Add Photos" trigger + empty preview strip. `inputId` must be unique per modal instance. */
 export function imagePickerHtml(inputId, label = "Add Photos") {
   return `
@@ -53,7 +74,7 @@ export function wireImagePicker(root, inputId, { max = 6 } = {}) {
 
   trigger.addEventListener("click", () => input.click());
   input.addEventListener("change", () => {
-    const picked = Array.from(input.files || []);
+    const picked = Array.from(input.files || []).filter(isAcceptableImageFile);
     const room = max - files.length;
     if (picked.length > room) showToast(`You can attach up to ${max} photos.`);
     files = [...files, ...picked.slice(0, Math.max(0, room))];

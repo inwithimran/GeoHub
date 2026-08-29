@@ -2,7 +2,7 @@
 // AUTH.JS — Sign up, log in, log out, and auth-state watching.
 // Writes a profile document to Firestore at users/{uid} on signup.
 // ============================================================
-import { auth, db } from "./firebase-config.js";
+import { auth, db, ADMIN_EMAILS } from "./firebase-config.js";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -16,6 +16,30 @@ import {
   doc, setDoc, updateDoc, getDoc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
+// ============================================================
+// PRIVACY: the `users/{uid}` document is readable by every signed-in
+// classmate (that's what powers the Directory), so it can only ever
+// hold the "visible mirror" of phone/email — never the real values
+// when a student has hidden them. The real, unmasked values always
+// live in `users/{uid}/private/contact`, which Firestore rules only
+// let the student themself (or an admin) read. These two small
+// helpers compute the mirror and keep both documents in sync so the
+// rest of the app doesn't have to think about it.
+// ============================================================
+function isAdminEmailLocal(email) {
+  return !!email && ADMIN_EMAILS.includes(email);
+}
+/** What the public `users/{uid}` doc's phone/email fields should hold, given the real values + hide flags. */
+function visibleContactMirror({ phone, email, hidePhone, hideEmail }) {
+  return {
+    // The admin's email is intentionally always identifiable (it's how the
+    // whole app recognizes the CR/admin badge everywhere), so it's never
+    // masked here regardless of hideEmail.
+    email: (isAdminEmailLocal(email) || !hideEmail) ? (email || "") : "",
+    phone: hidePhone ? "" : (phone || "")
+  };
+}
+
 /** In-memory cache of the logged-in student's profile (name, roll, blood, phone). */
 export let currentProfile = null;
 
@@ -27,14 +51,20 @@ const googleProvider = new GoogleAuthProvider();
  */
 export async function signUp(data) {
   const cred = await createUserWithEmailAndPassword(auth, data.email, data.password);
+  const name = data.name.trim();
+  const roll = data.roll.trim();
+  const phone = data.phone.trim();
+  const email = data.email.trim();
+  const hidePhone = false;
+  const hideEmail = false;
+
   const profile = {
     uid: cred.user.uid,
-    name: data.name.trim(),
-    roll: data.roll.trim(),
+    name,
+    roll,
     bloodGroup: data.blood,
     gender: data.gender || "",
-    phone: data.phone.trim(),
-    email: data.email.trim(),
+    ...visibleContactMirror({ phone, email, hidePhone, hideEmail }),
     photoURL: "",
     bio: "",
     session: "",
@@ -42,12 +72,16 @@ export async function signUp(data) {
     hometown: "",
     address: "",
     socialLink: "",
-    hidePhone: false,
-    hideEmail: false,
+    hidePhone,
+    hideEmail,
     createdAt: serverTimestamp()
   };
   await setDoc(doc(db, "users", cred.user.uid), profile);
-  currentProfile = profile;
+  await setDoc(doc(db, "users", cred.user.uid, "private", "contact"), { phone, email });
+  // Keep the real (unmasked) values in memory for this session — the
+  // student editing their own profile should always see their real phone,
+  // never the possibly-blanked public mirror.
+  currentProfile = { ...profile, phone, email };
   return cred.user;
 }
 
@@ -102,11 +136,20 @@ export async function signInWithGoogle() {
  */
 export async function updateProfileDetails({ roll, blood, phone, bio, session, year, hometown, address, socialLink, gender, hidePhone, hideEmail, photoURL }) {
   const uid = auth.currentUser.uid;
+  const realPhone = phone.trim();
+  const realEmail = (currentProfile && currentProfile.email) || auth.currentUser.email || "";
+  const nextHidePhone = hidePhone !== undefined ? !!hidePhone : !!(currentProfile && currentProfile.hidePhone);
+  const nextHideEmail = hideEmail !== undefined ? !!hideEmail : !!(currentProfile && currentProfile.hideEmail);
+
   const updates = {
     roll: roll.trim(),
     bloodGroup: blood,
-    phone: phone.trim(),
-    profileIncomplete: false
+    profileIncomplete: false,
+    hidePhone: nextHidePhone,
+    hideEmail: nextHideEmail,
+    // Only the masked/visible mirror goes on the public doc — see
+    // visibleContactMirror() above.
+    ...visibleContactMirror({ phone: realPhone, email: realEmail, hidePhone: nextHidePhone, hideEmail: nextHideEmail })
   };
   if (bio !== undefined) updates.bio = bio.trim();
   if (session !== undefined) updates.session = session.trim();
@@ -115,12 +158,15 @@ export async function updateProfileDetails({ roll, blood, phone, bio, session, y
   if (address !== undefined) updates.address = address.trim();
   if (socialLink !== undefined) updates.socialLink = socialLink.trim();
   if (gender !== undefined && gender) updates.gender = gender;
-  if (hidePhone !== undefined) updates.hidePhone = !!hidePhone;
-  if (hideEmail !== undefined) updates.hideEmail = !!hideEmail;
   if (photoURL !== undefined && photoURL) updates.photoURL = photoURL;
 
   await updateDoc(doc(db, "users", uid), updates);
-  currentProfile = { ...currentProfile, ...updates };
+  // The real, unmasked phone always lives in the private subdocument, so a
+  // hidden number still round-trips correctly the next time this student
+  // opens their own edit form.
+  await setDoc(doc(db, "users", uid, "private", "contact"), { phone: realPhone, email: realEmail }, { merge: true });
+
+  currentProfile = { ...currentProfile, ...updates, phone: realPhone, email: realEmail };
   return currentProfile;
 }
 
@@ -129,10 +175,22 @@ export function logOut() {
   return signOut(auth);
 }
 
-/** Fetch a user's profile doc from Firestore by uid (used across the app). */
+/** Fetch a user's profile doc from Firestore by uid (used across the app).
+ *  Deliberately reads ONLY the public doc — for any uid other than the
+ *  caller's own, that's the masked/visible mirror, exactly as it should be. */
 export async function fetchProfile(uid) {
   const snap = await getDoc(doc(db, "users", uid));
   return snap.exists() ? snap.data() : null;
+}
+
+/** Fetch the CALLER's OWN real (unmasked) phone/email from the private subdocument. */
+async function fetchOwnContact(uid) {
+  try {
+    const snap = await getDoc(doc(db, "users", uid, "private", "contact"));
+    return snap.exists() ? snap.data() : null;
+  } catch {
+    return null; // e.g. doesn't exist yet for an older account — falls back to the public mirror
+  }
 }
 
 /**
@@ -171,6 +229,16 @@ export function watchAuthState(onLogin, onLogout) {
           profileIncomplete: true
         };
         await setDoc(doc(db, "users", user.uid), profile);
+        await setDoc(doc(db, "users", user.uid, "private", "contact"), { phone: "", email: user.email || "" });
+      }
+
+      // Merge in the real, unmasked phone/email from the private subdoc —
+      // otherwise a student who's hidden their number would see it come
+      // back blank in their own "Edit Profile" form after a page reload,
+      // since fetchProfile() above only ever returns the public mirror.
+      if (profile) {
+        const contact = await fetchOwnContact(user.uid);
+        if (contact) profile = { ...profile, phone: contact.phone ?? profile.phone, email: contact.email ?? profile.email };
       }
 
       currentProfile = profile;

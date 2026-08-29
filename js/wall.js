@@ -6,14 +6,14 @@
 // ============================================================
 import { db, auth } from "./firebase-config.js";
 import {
-  collection, addDoc, doc, updateDoc, deleteDoc, onSnapshot, query, orderBy,
+  collection, addDoc, doc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit,
   serverTimestamp, arrayUnion, arrayRemove, getDocs
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { currentProfile, fetchProfile } from "./auth.js";
 import {
   showToast, escapeHtml, timeAgo, openModal, closeModal,
   setBtnLoading, cacheUserProfile, getCachedProfile, clampableHtml, attachClampToggle,
-  avatarInner, nameWithBadge, kebabMenuHtml, wireKebabMenus, confirmDialog
+  avatarInner, nameWithBadge, kebabMenuHtml, wireKebabMenus, confirmDialog, isAdminEmail
 } from "./ui-utils.js";
 import { openUserProfilePage } from "./profile-view.js";
 import { uploadImages } from "./cloudinary.js";
@@ -26,6 +26,18 @@ const composerTrigger = document.getElementById("composer-trigger");
 
 let unsubscribePosts = null;
 
+// ============================================================
+// PAGINATION — loading every single post at once got expensive (in
+// both money and load time) as the Wall grew, so the realtime
+// listener is capped to a page size and "Load earlier posts" just
+// asks for a bigger page (re-subscribing is simpler and still fully
+// realtime, unlike a one-shot cursor query, at the cost of re-reading
+// the earlier posts too — an acceptable trade-off at this scale).
+// ============================================================
+const WALL_PAGE_SIZE = 20;
+let wallPageLimit = WALL_PAGE_SIZE;
+let lastPostCount = 0;
+
 /** Resolve a full-enough profile object (for the avatar/badge) from the shared cache, uid, and stored name. */
 export function authorProfile(uid, fallbackName) {
   const cached = getCachedProfile(uid);
@@ -35,9 +47,14 @@ export function authorProfile(uid, fallbackName) {
 /** Wire up the composer + start the realtime post listener. Call once on login. */
 export function initWall() {
   composerTrigger.addEventListener("click", openComposerModal);
+  subscribeWall();
+}
 
-  const q = query(collection(db, "posts"), orderBy("createdAt", "desc"));
+function subscribeWall() {
+  if (unsubscribePosts) unsubscribePosts();
+  const q = query(collection(db, "posts"), orderBy("createdAt", "desc"), limit(wallPageLimit));
   unsubscribePosts = onSnapshot(q, (snap) => {
+    lastPostCount = snap.size;
     if (snap.empty) {
       wallList.innerHTML = `<p class="empty-state">No posts yet. Be the first to write on the wall.</p>`;
       return;
@@ -45,6 +62,21 @@ export function initWall() {
     wallList.innerHTML = `<div class="flat-list feed-list"></div>`;
     const listEl = wallList.querySelector(".feed-list");
     snap.forEach((docSnap) => renderPost(docSnap.id, docSnap.data(), listEl));
+
+    // If we got back a full page, there may be more — offer to load them.
+    // (If fewer came back than we asked for, we've reached the very end.)
+    if (snap.size === wallPageLimit) {
+      const loadMoreBtn = document.createElement("button");
+      loadMoreBtn.type = "button";
+      loadMoreBtn.className = "btn-outline full wall-load-more";
+      loadMoreBtn.textContent = "Load earlier posts";
+      loadMoreBtn.addEventListener("click", () => {
+        setBtnLoading(loadMoreBtn, true, "Loading…");
+        wallPageLimit += WALL_PAGE_SIZE;
+        subscribeWall();
+      });
+      wallList.appendChild(loadMoreBtn);
+    }
   }, (err) => showToast("Couldn't load the wall: " + err.message));
 }
 
@@ -111,7 +143,7 @@ async function handleCreatePost(getImageFiles) {
     closeModal();
     showToast("Posted to the Student Wall.");
     logActivity({ type: "post", text, postId: postRef.id });
-    triggerPush({ type: "post", text, actorName: currentProfile.name });
+    triggerPush({ type: "post", text, actorName: currentProfile.name, postId: postRef.id });
   } catch (err) {
     errorEl.textContent = "Couldn't publish your post: " + err.message;
     setBtnLoading(btn, false);
@@ -157,6 +189,42 @@ export function openEditPostModal(postId, currentText, onSaved, currentImages = 
   });
 }
 
+// ============================================================
+// REPORT POST — lets a classmate flag a post for the admin/CR to
+// review, without giving them any power over the post themselves
+// (no edit, no delete — that stays owner/admin-only per the Firestore
+// rules). Writes to a "reports" collection only the admin can read.
+// ============================================================
+async function reportPost(postId, post) {
+  openModal(`
+    <h3>Report this post</h3>
+    <p class="modal-hint">This sends a note to the class admin/CR — it won't notify or affect the post's author.</p>
+    <textarea id="report-reason-input" class="composer-modal-textarea" rows="3" placeholder="What's wrong with this post? (optional)"></textarea>
+    <p id="report-error" class="form-error"></p>
+    <button type="button" class="btn-primary full" id="report-submit-btn">Send Report</button>
+  `);
+  document.getElementById("report-submit-btn").addEventListener("click", async (e) => {
+    setBtnLoading(e.currentTarget, true, "Sending…");
+    try {
+      await addDoc(collection(db, "reports"), {
+        postId,
+        postAuthorUid: post.authorUid,
+        postText: (post.text || "").slice(0, 300),
+        reason: document.getElementById("report-reason-input").value.trim(),
+        reportedByUid: auth.currentUser.uid,
+        reportedByName: currentProfile ? currentProfile.name : "A classmate",
+        createdAt: serverTimestamp(),
+        resolved: false
+      });
+      closeModal();
+      showToast("Report sent to the admin. Thanks for flagging it.");
+    } catch (err) {
+      document.getElementById("report-error").textContent = "Couldn't send report: " + err.message;
+      setBtnLoading(e.currentTarget, false);
+    }
+  });
+}
+
 /** Deletes every comment first (so nothing orphaned lingers server-side), then the post itself. */
 export async function deletePost(postId, onDeleted) {
   const commentsSnap = await getDocs(collection(db, "posts", postId, "comments"));
@@ -183,9 +251,24 @@ export function renderPost(postId, post, listEl, { onChanged } = {}) {
 
   const author = authorProfile(post.authorUid, post.authorName);
   const isOwnPost = post.authorUid === uid;
+  // An admin (CR) can remove any post as a moderation action — e.g. after
+  // a report — even one they didn't write. A student who didn't write the
+  // post (and isn't the admin) gets a "Report" option instead of edit/delete.
+  const isAdmin = isAdminEmail(auth.currentUser.email);
   const el = document.createElement("article");
   el.className = "feed-post";
   el.dataset.postId = postId;
+  let kebabActions = [];
+  if (isOwnPost) {
+    kebabActions = [
+      { action: "edit", label: "Edit Post" },
+      { action: "delete", label: "Delete Post", danger: true }
+    ];
+  } else if (isAdmin) {
+    kebabActions = [{ action: "delete", label: "Remove Post (Admin)", danger: true }];
+  } else {
+    kebabActions = [{ action: "report", label: "Report Post" }];
+  }
   el.innerHTML = `
     <div class="post-head">
       <button type="button" class="avatar avatar-btn" data-author="${post.authorUid}">${avatarInner(author)}</button>
@@ -193,10 +276,7 @@ export function renderPost(postId, post, listEl, { onChanged } = {}) {
         <button type="button" class="post-author-name" data-author="${post.authorUid}">${nameWithBadge(post.authorName, post.authorEmail)}</button>
         <small>${timeAgo(post.createdAt)}${post.editedAt ? " · edited" : ""}</small>
       </div>
-      ${isOwnPost ? kebabMenuHtml(postId, [
-        { action: "edit", label: "Edit Post" },
-        { action: "delete", label: "Delete Post", danger: true }
-      ]) : ""}
+      ${kebabMenuHtml(postId, kebabActions)}
     </div>
     ${clampableHtml(post.text, "post-text")}
     ${postImagesHtml(post.images)}
@@ -242,11 +322,14 @@ export function renderPost(postId, post, listEl, { onChanged } = {}) {
   wireKebabMenus(el, {
     edit: () => openEditPostModal(postId, post.text, onChanged, post.images || []),
     delete: () => confirmDialog({
-      title: "Delete this post?",
-      text: "This post and all of its comments will be removed from the Wall. This can't be undone.",
-      confirmLabel: "Delete",
+      title: isOwnPost ? "Delete this post?" : "Remove this post?",
+      text: isOwnPost
+        ? "This post and all of its comments will be removed from the Wall. This can't be undone."
+        : "This will remove the post and its comments from the Wall for everyone. This can't be undone.",
+      confirmLabel: isOwnPost ? "Delete" : "Remove",
       onConfirm: () => deletePost(postId, onChanged)
-    })
+    }),
+    report: () => reportPost(postId, post)
   });
 
   listEl.appendChild(el);
@@ -296,7 +379,7 @@ export async function toggleLike(postId, post, btnEl, countEl) {
     // else's post — never notify a student that they liked their own post.
     if (!wasLiked && authorUid && authorUid !== uid) {
       logActivity({ type: "like", targetUid: authorUid, postId });
-      triggerPush({ type: "like", actorName: currentProfile.name, targetUid: authorUid });
+      triggerPush({ type: "like", actorName: currentProfile.name, targetUid: authorUid, postId });
     }
   } catch (err) {
     // Revert the optimistic change if the write actually failed.
@@ -350,4 +433,5 @@ export async function openLikesModal(uids) {
 /** Detach the realtime listener (call on logout to avoid leaks). */
 export function teardownWall() {
   if (unsubscribePosts) unsubscribePosts();
+  wallPageLimit = WALL_PAGE_SIZE; // fresh page size on next login
 }

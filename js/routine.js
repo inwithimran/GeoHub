@@ -23,7 +23,7 @@
 import { db, auth, ADMIN_EMAILS } from "./firebase-config.js";
 import {
   collection, addDoc, updateDoc, deleteDoc, onSnapshot, query, where, orderBy, limit, serverTimestamp,
-  doc, getDoc
+  doc, getDoc, getDocs
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import {
   escapeHtml, timeAgo, fullDate, showToast, setBtnLoading, openModal, closeModal,
@@ -234,12 +234,98 @@ function renderNoticeTabBody() {
             <input type="checkbox" id="notice-urgent" /> Mark as urgent
           </label>
           <button id="notice-submit" type="button" class="btn-primary full notice-submit-btn">Post Notice</button>
+          <button id="view-reports-btn" type="button" class="btn-outline full">
+            <span id="view-reports-label">Reported Posts</span>
+          </button>
         </div>` : ""}
       <div id="notice-list"><p class="empty-state">Loading notices…</p></div>
     `;
-    if (isAdmin) document.getElementById("notice-submit").addEventListener("click", postNotice);
+    if (isAdmin) {
+      document.getElementById("notice-submit").addEventListener("click", postNotice);
+      document.getElementById("view-reports-btn").addEventListener("click", openReportsModal);
+      watchOpenReportCount();
+    }
   }
   renderNoticesList();
+}
+
+// ============================================================
+// ADMIN — REPORTED POSTS. A student's "Report Post" action (see
+// wall.js) writes here; only the admin can read this collection
+// (enforced in firestore.rules), so this whole block quietly does
+// nothing for a non-admin.
+// ============================================================
+let unsubscribeReportCount = null;
+
+/** Keeps the "Reported Posts (n)" button label live while the Notice tab is open. */
+function watchOpenReportCount() {
+  if (unsubscribeReportCount) return;
+  const q = query(collection(db, "reports"), where("resolved", "==", false));
+  unsubscribeReportCount = onSnapshot(q, (snap) => {
+    const label = document.getElementById("view-reports-label");
+    if (label) label.textContent = snap.empty ? "Reported Posts" : `Reported Posts (${snap.size})`;
+  }, () => { /* not admin, or offline — button just keeps its default label */ });
+}
+
+async function openReportsModal() {
+  openModal(`<h3>Reported Posts</h3><div id="reports-modal-list"><p class="empty-state">Loading…</p></div>`);
+  const listEl = document.getElementById("reports-modal-list");
+  try {
+    // NOTE: this where()+orderBy() combo needs a composite Firestore index.
+    // The very first time this runs, Firestore will throw an error containing
+    // a direct link to auto-create that index in the console — click it once
+    // and the query works from then on.
+    const q = query(collection(db, "reports"), where("resolved", "==", false), orderBy("createdAt", "desc"));
+    const snap = await getDocs(q);
+    if (snap.empty) {
+      listEl.innerHTML = `<p class="empty-state">No open reports. 🎉</p>`;
+      return;
+    }
+    listEl.innerHTML = `<div class="flat-list">` + snap.docs.map(d => {
+      const r = d.data();
+      return `
+        <div class="report-row" data-report-id="${escapeHtml(d.id)}" data-post-id="${escapeHtml(r.postId || "")}">
+          <p class="report-post-snippet">${escapeHtml(r.postText || "(post text unavailable)")}</p>
+          ${r.reason ? `<p class="report-reason">Reason: ${escapeHtml(r.reason)}</p>` : ""}
+          <small>Reported by ${escapeHtml(r.reportedByName || "a classmate")} · ${timeAgo(r.createdAt)}</small>
+          <div class="report-row-actions">
+            <button type="button" class="btn-outline small" data-report-action="view">View Post</button>
+            <button type="button" class="btn-outline small" data-report-action="dismiss">Dismiss</button>
+            <button type="button" class="btn-outline small danger-solid" data-report-action="remove">Remove Post</button>
+          </div>
+        </div>`;
+    }).join("") + `</div>`;
+
+    listEl.querySelectorAll(".report-row").forEach(row => {
+      const reportId = row.dataset.reportId;
+      const postId = row.dataset.postId;
+      row.querySelector('[data-report-action="view"]').addEventListener("click", async () => {
+        closeModal();
+        const { openPostDetailPage } = await import("./post-detail.js");
+        openPostDetailPage(postId);
+      });
+      row.querySelector('[data-report-action="dismiss"]').addEventListener("click", async (e) => {
+        setBtnLoading(e.currentTarget, true, "…");
+        try {
+          await updateDoc(doc(db, "reports", reportId), { resolved: true });
+          row.remove();
+        } catch (err) { showToast("Couldn't dismiss: " + err.message); setBtnLoading(e.currentTarget, false); }
+      });
+      row.querySelector('[data-report-action="remove"]').addEventListener("click", () => confirmDialog({
+        title: "Remove this post?",
+        text: "This deletes the reported post (and its comments) from the Wall and closes the report.",
+        confirmLabel: "Remove",
+        onConfirm: async () => {
+          const { deletePost } = await import("./wall.js");
+          if (postId) await deletePost(postId, () => {});
+          await updateDoc(doc(db, "reports", reportId), { resolved: true });
+          row.remove();
+        }
+      }));
+    });
+  } catch (err) {
+    listEl.innerHTML = `<p class="empty-state">Couldn't load reports: ${escapeHtml(err.message)}</p>`;
+  }
 }
 
 function renderNoticesList() {
@@ -358,7 +444,7 @@ async function postNotice() {
     urgent.checked = false;
     showToast("Notice posted.");
     logActivity({ type: "notice", text, noticeId: noticeRef.id });
-    triggerPush({ type: "notice", text, urgent: wasUrgent });
+    triggerPush({ type: "notice", text, urgent: wasUrgent, noticeId: noticeRef.id });
   } catch (err) {
     showToast("Couldn't post notice: " + err.message);
   } finally {
@@ -534,8 +620,10 @@ export function teardownRoutine() {
   if (unsubscribeNotices) unsubscribeNotices();
   if (unsubscribeActivityPublic) unsubscribeActivityPublic();
   if (unsubscribeActivityPrivate) unsubscribeActivityPrivate();
+  if (unsubscribeReportCount) unsubscribeReportCount();
   unsubscribeActivityPublic = null;
   unsubscribeActivityPrivate = null;
+  unsubscribeReportCount = null;
   latestNotices = [];
   latestActivityPublic = [];
   latestActivityPrivate = [];

@@ -159,7 +159,7 @@ async function submitResource() {
     closeModal();
     showToast("Resource shared with the department 🎉");
     logActivity({ type: "resource", text: title, resourceId: resRef.id });
-    triggerPush({ type: "resource", text: title, actorName: currentProfile.name });
+    triggerPush({ type: "resource", text: title, actorName: currentProfile.name, resourceId: resRef.id });
   } catch (err) {
     showToast("Couldn't share resource: " + err.message);
     setBtnLoading(btn, false);

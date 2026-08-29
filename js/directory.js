@@ -11,6 +11,12 @@ import { openUserProfilePage } from "./profile-view.js";
 
 const directoryList = document.getElementById("directory-list");
 const searchInput = document.getElementById("directory-search");
+// Built once the first batch of profiles arrives (see renderYearChips) —
+// a "Year" filter row inserted right above the results, same chip style
+// as the Notes & Sheet Hub categories, so a big department can narrow
+// the directory down instead of scrolling past everyone.
+let yearChipRow = null;
+let activeYear = "All";
 
 let allStudents = [];
 let unsubscribeDirectory = null;
@@ -24,15 +30,42 @@ export function initDirectory() {
       cacheUserProfile(d.id, data); // keep the shared cache warm for wall.js / profile-view.js
       return data;
     }).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    renderYearChips();
     renderDirectory();
   }, (err) => showToast("Couldn't load classmates: " + err.message));
+}
+
+/** Build/refresh the Year filter chips from whichever years are actually in use. */
+function renderYearChips() {
+  const years = [...new Set(allStudents.map(s => s.year).filter(Boolean))];
+  if (!years.length) { if (yearChipRow) { yearChipRow.remove(); yearChipRow = null; } return; }
+  if (activeYear !== "All" && !years.includes(activeYear)) activeYear = "All";
+
+  if (!yearChipRow) {
+    yearChipRow = document.createElement("div");
+    yearChipRow.className = "chip-row directory-year-chips";
+    directoryList.parentElement.insertBefore(yearChipRow, directoryList);
+  }
+  const chips = ["All", ...years];
+  yearChipRow.innerHTML = chips.map(y =>
+    `<button type="button" class="chip ${y === activeYear ? "active" : ""}" data-year="${escapeHtml(y)}">${escapeHtml(y)}</button>`
+  ).join("");
+  yearChipRow.querySelectorAll(".chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+      activeYear = chip.dataset.year;
+      yearChipRow.querySelectorAll(".chip").forEach(c => c.classList.toggle("active", c === chip));
+      renderDirectory();
+    });
+  });
 }
 
 function renderDirectory() {
   const term = searchInput.value.trim().toLowerCase();
   const filtered = allStudents.filter(s =>
-    (s.name || "").toLowerCase().includes(term) ||
-    (s.bloodGroup || "").toLowerCase().includes(term)
+    (activeYear === "All" || s.year === activeYear) &&
+    ((s.name || "").toLowerCase().includes(term) ||
+     (s.bloodGroup || "").toLowerCase().includes(term) ||
+     (s.roll || "").toLowerCase().includes(term))
   );
 
   if (!filtered.length) {
