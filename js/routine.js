@@ -27,7 +27,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import {
   escapeHtml, timeAgo, fullDate, showToast, setBtnLoading, openModal, closeModal,
-  avatarInner, nameWithBadge, getCachedProfile, kebabMenuHtml, wireKebabMenus, confirmDialog
+  avatarInner, nameWithBadge, getCachedProfile, kebabMenuHtml, wireKebabMenus, confirmDialog,
+  resetScrollForTabs
 } from "./ui-utils.js";
 import { currentProfile } from "./auth.js";
 import { triggerPush } from "./push-trigger.js";
@@ -39,9 +40,57 @@ function posterProfile(uid, fallbackName, fallbackEmail) {
 
 const routineTable = document.getElementById("routine-table");
 const notifBadge = document.getElementById("topbar-notif-badge");
+const noticeTabBadge = document.getElementById("notice-tab-badge");
+const notificationTabBadge = document.getElementById("notification-tab-badge");
+const markAllReadBtn = document.getElementById("notif-mark-all-btn");
 
-const NOTICES_SEEN_KEY = "geohub_notices_seen_at";
-const ACTIVITY_SEEN_KEY = "geohub_activity_seen_at";
+// ============================================================
+// PER-ITEM READ TRACKING — the bell badge, and each tab's own badge,
+// only clear once the SPECIFIC notice/notification behind the count has
+// been opened — not just because the Notices & Notifications page (or a
+// tab) was visited. Read state is a set of doc ids kept in localStorage,
+// scoped per signed-in uid (so a shared device doesn't leak one
+// classmate's read state into another's).
+// ============================================================
+function readIdsStorageKey(kind) {
+  return `geohub_${kind}_read_ids_${auth.currentUser?.uid || "anon"}`;
+}
+function loadReadIds(kind) {
+  try {
+    const raw = JSON.parse(localStorage.getItem(readIdsStorageKey(kind)) || "[]");
+    return new Set(Array.isArray(raw) ? raw : []);
+  } catch { return new Set(); }
+}
+function saveReadIds(kind, idSet) {
+  // Cap what's persisted so this can't grow unbounded across months of use —
+  // only the most recent ids matter for badge purposes.
+  localStorage.setItem(readIdsStorageKey(kind), JSON.stringify(Array.from(idSet).slice(-400)));
+}
+let noticeReadIds = new Set();
+let activityReadIds = new Set();
+
+/** Marks one notice as read; safe to call repeatedly (no-ops once already read). */
+export function markNoticeRead(noticeId) {
+  if (!noticeId || noticeReadIds.has(noticeId)) return;
+  noticeReadIds.add(noticeId);
+  saveReadIds("notice", noticeReadIds);
+  updateNoticeBadge();
+}
+function markActivityRead(activityId) {
+  if (!activityId || activityReadIds.has(activityId)) return;
+  activityReadIds.add(activityId);
+  saveReadIds("activity", activityReadIds);
+  updateNoticeBadge();
+  renderActivityList();
+}
+function markAllActivityRead() {
+  const ids = mergedActivity().filter(visibleToMe).map(a => a.id);
+  if (!ids.length) return;
+  ids.forEach(id => activityReadIds.add(id));
+  saveReadIds("activity", activityReadIds);
+  updateNoticeBadge();
+  renderActivityList();
+}
 
 let unsubscribeNotices = null;
 let unsubscribeActivityPublic = null;
@@ -88,6 +137,9 @@ function visibleToMe(a) {
 }
 
 export function initRoutine() {
+  noticeReadIds = loadReadIds("notice");
+  activityReadIds = loadReadIds("activity");
+
   const q = query(collection(db, "notices"), orderBy("createdAt", "desc"));
   unsubscribeNotices = onSnapshot(q, (snap) => {
     latestNotices = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -169,29 +221,41 @@ export function initRoutine() {
 
   loadRoutine();
   wireNoticesPageTabs();
+
+  if (markAllReadBtn && !markAllReadBtn.dataset.wired) {
+    markAllReadBtn.dataset.wired = "1";
+    markAllReadBtn.addEventListener("click", () => {
+      markAllActivityRead();
+      showToast("All notifications marked as read.");
+    });
+  }
 }
 
 // ============================================================
-// UNREAD BADGE — counts both unseen notices AND unseen activity
-// entries; either kind lights up the bell. Both are marked "seen"
-// together the moment the Notices & Notifications page is opened.
+// UNREAD BADGES — the header bell (total) and each header tab's own
+// badge (Notice / Notification, counted separately). See the per-item
+// read-tracking block near the top of this file for how "unread" is
+// decided.
 // ============================================================
+function setBadgeEl(el, count) {
+  if (!el) return;
+  el.textContent = count > 9 ? "9+" : String(count);
+  el.classList.toggle("hidden", count === 0);
+}
+
+/**
+ * Recomputes all three badges from per-item read state: the header bell
+ * (total), and each tab's own count (Notice / Notification, counted
+ * separately). None of these clear just because a tab or the page was
+ * opened — only reading (or deleting) the specific item behind the count
+ * does, via markNoticeRead()/markActivityRead()/markAllActivityRead().
+ */
 function updateNoticeBadge() {
-  if (!notifBadge) return;
-  const noticesSeenAt = Number(localStorage.getItem(NOTICES_SEEN_KEY) || 0);
-  const activitySeenAt = Number(localStorage.getItem(ACTIVITY_SEEN_KEY) || 0);
-  const unreadNotices = latestNotices.filter(n => (n.createdAt?.toDate?.().getTime() || 0) > noticesSeenAt).length;
-  const unreadActivity = mergedActivity().filter(visibleToMe).filter(a => (a.createdAt?.toDate?.().getTime() || 0) > activitySeenAt).length;
-  const unread = unreadNotices + unreadActivity;
-  notifBadge.textContent = unread > 9 ? "9+" : String(unread);
-  notifBadge.classList.toggle("hidden", unread === 0);
-}
-
-/** Called by app.js's router the moment the Notices & Notifications page is opened. */
-export function markNoticesPageSeen() {
-  localStorage.setItem(NOTICES_SEEN_KEY, String(Date.now()));
-  localStorage.setItem(ACTIVITY_SEEN_KEY, String(Date.now()));
-  updateNoticeBadge();
+  const unreadNotices = latestNotices.filter(n => !noticeReadIds.has(n.id)).length;
+  const unreadActivity = mergedActivity().filter(visibleToMe).filter(a => !activityReadIds.has(a.id)).length;
+  setBadgeEl(notifBadge, unreadNotices + unreadActivity);
+  setBadgeEl(noticeTabBadge, unreadNotices);
+  setBadgeEl(notificationTabBadge, unreadActivity);
 }
 
 // ============================================================
@@ -206,11 +270,13 @@ function wireNoticesPageTabs() {
   noticesPageWired = true;
 
   const tabBtns = section.querySelectorAll(".notices-page-tab-btn");
+  const tabsEl = section.querySelector(".notices-page-tabs");
   tabBtns.forEach(btn => {
     btn.addEventListener("click", () => {
       tabBtns.forEach(b => b.classList.toggle("active", b === btn));
       section.querySelectorAll(".notices-page-panel").forEach(p =>
         p.classList.toggle("active", p.dataset.panel === btn.dataset.tab));
+      resetScrollForTabs(tabsEl); // each tab starts at its own top, instead of inheriting the previous tab's scroll position
     });
   });
 }
@@ -377,6 +443,7 @@ function renderNoticesList() {
       confirmLabel: "Delete",
       onConfirm: async () => {
         await deleteDoc(doc(db, "notices", noticeId));
+        deleteActivityForNotice(noticeId); // best-effort: drop its "posted a notice" feed entry too
         showToast("Notice deleted.");
       }
     })
@@ -386,6 +453,7 @@ function renderNoticesList() {
 function openNoticeDetail(noticeId) {
   const n = latestNotices.find(x => x.id === noticeId);
   if (!n) return;
+  markNoticeRead(noticeId); // the Notice tab badge only drops once this specific notice has been opened
   openModal(`
     <div class="notice-detail-modal">
       <div class="notice-detail-head">
@@ -492,6 +560,32 @@ export async function logActivity({ type, text = "", targetUid = null, postId = 
   }
 }
 
+/**
+ * Cascade-delete cleanup: when the thing an activity entry is ABOUT gets
+ * deleted (a Wall post, a shared resource, a notice), its activity
+ * entries — the "X posted…"/"liked your post"/"commented on…" feed items,
+ * and the private per-uid ones targeted at the author — should disappear
+ * from the Notification tab too, instead of lingering as a notification
+ * for content that no longer exists. Best-effort: never blocks or fails
+ * the delete that triggered it (see firestore.rules for who's allowed to
+ * delete an activity doc).
+ */
+async function deleteActivityMatching(field, value) {
+  if (!value) return;
+  try {
+    const snap = await getDocs(query(collection(db, "activity"), where(field, "==", value)));
+    await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+  } catch (err) {
+    console.warn(`Couldn't clean up activity where ${field}=${value}:`, err.message);
+  }
+}
+/** Call after deleting a Wall post — removes its post/comment/like activity entries. */
+export function deleteActivityForPost(postId) { return deleteActivityMatching("postId", postId); }
+/** Call after deleting a shared resource — removes its "shared a note/sheet" entry. */
+export function deleteActivityForResource(resourceId) { return deleteActivityMatching("resourceId", resourceId); }
+/** Call after deleting a notice — removes its "posted a notice" entry. */
+export function deleteActivityForNotice(noticeId) { return deleteActivityMatching("noticeId", noticeId); }
+
 function truncate(text, max) {
   return text.length > max ? text.slice(0, max) + "…" : text;
 }
@@ -529,8 +623,11 @@ function renderActivityList() {
     return;
   }
 
-  host.innerHTML = `<div class="notice-flat-list">` + activity.map((a, i) => `
-    <div class="notice-row activity-row" data-index="${i}">
+  host.innerHTML = `<div class="notice-flat-list">` + activity.map((a, i) => {
+    const unread = !activityReadIds.has(a.id);
+    return `
+    <div class="activity-row ${unread ? "unread" : "read"}" data-index="${i}">
+      ${unread ? `<span class="activity-unread-dot"></span>` : ""}
       <div class="notice-row-top">
         <span class="avatar avatar-sm">${avatarInner(posterProfile(a.actorUid, a.actorName, a.actorEmail))}</span>
         <div class="notice-row-byline">
@@ -540,12 +637,16 @@ function renderActivityList() {
       </div>
       <p class="notice-row-text">${activityLine(a)}</p>
     </div>
-  `).join("") + `</div>`;
+  `;
+  }).join("") + `</div>`;
 
   host.querySelectorAll(".activity-row").forEach(row => {
     const a = activity[Number(row.dataset.index)];
     if (!a) return;
-    row.addEventListener("click", () => openActivityDestination(a));
+    row.addEventListener("click", () => {
+      markActivityRead(a.id); // Notification tab badge only drops once this specific entry has been opened
+      openActivityDestination(a);
+    });
   });
 }
 
@@ -635,6 +736,8 @@ export function teardownRoutine() {
   latestActivityPublic = [];
   latestActivityPrivate = [];
   activityFeedError = null;
+  noticeReadIds = new Set();
+  activityReadIds = new Set();
   const host = document.getElementById("notice-tab-body");
   if (host) { delete host.dataset.shellBuilt; host.innerHTML = ""; }
 }

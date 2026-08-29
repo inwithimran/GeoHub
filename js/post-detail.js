@@ -303,10 +303,18 @@ async function submitComment(postId, commentsEl, sendBtn, postAuthorUid) {
 // ============================================================
 function openEditCommentModal(postId, commentId, currentText) {
   openModal(`
-    <h3>Edit Comment</h3>
-    <textarea id="comment-edit-input" class="composer-modal-textarea" rows="3">${escapeHtml(currentText)}</textarea>
-    <p id="comment-edit-error" class="form-error"></p>
-    <button type="button" class="btn-primary full" id="comment-edit-save-btn">Save Changes</button>
+    <div class="composer-modal">
+      <div class="composer-modal-head">
+        <div class="avatar">${avatarInner(currentProfile || {})}</div>
+        <div>
+          <strong>${nameWithBadge(currentProfile ? currentProfile.name : "You", currentProfile ? currentProfile.email : "")}</strong>
+          <small>Editing your comment</small>
+        </div>
+      </div>
+      <textarea id="comment-edit-input" class="composer-modal-textarea" rows="3">${escapeHtml(currentText)}</textarea>
+      <p id="comment-edit-error" class="form-error"></p>
+      <button type="button" class="btn-primary full raised composer-post-btn" id="comment-edit-save-btn">Save Changes</button>
+    </div>
   `);
   document.getElementById("comment-edit-save-btn").addEventListener("click", async (e) => {
     const text = document.getElementById("comment-edit-input").value.trim();

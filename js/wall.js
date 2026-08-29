@@ -17,9 +17,9 @@ import {
 } from "./ui-utils.js";
 import { openUserProfilePage } from "./profile-view.js";
 import { uploadImages } from "./cloudinary.js";
-import { logActivity } from "./routine.js";
+import { logActivity, deleteActivityForPost } from "./routine.js";
 import { triggerPush } from "./push-trigger.js";
-import { imagePickerHtml, wireImagePicker, postImagesHtml, wireEditImagePicker } from "./media-picker.js";
+import { imagePickerHtml, wireImagePicker, postImagesHtml } from "./media-picker.js";
 
 const wallList = document.getElementById("wall-list");
 const composerTrigger = document.getElementById("composer-trigger");
@@ -105,10 +105,10 @@ function openComposerModal() {
   `);
   const textarea = document.getElementById("post-input");
   textarea.focus();
-  const getImageFiles = wireImagePicker(document.getElementById("modal-body"), "post-image-input");
-  document.getElementById("post-submit").addEventListener("click", () => handleCreatePost(getImageFiles));
+  const { getFiles } = wireImagePicker(document.getElementById("modal-body"), "post-image-input");
+  document.getElementById("post-submit").addEventListener("click", () => handleCreatePost(getFiles));
   textarea.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleCreatePost(getImageFiles);
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleCreatePost(getFiles);
   });
 }
 
@@ -155,15 +155,22 @@ async function handleCreatePost(getImageFiles) {
 // ============================================================
 export function openEditPostModal(postId, currentText, onSaved, currentImages = []) {
   openModal(`
-    <h3>Edit Post</h3>
-    <textarea id="post-edit-input" class="composer-modal-textarea" rows="6">${escapeHtml(currentText)}</textarea>
-    <div class="media-picker-existing" data-existing-grid="post-edit-image-input"></div>
-    ${imagePickerHtml("post-edit-image-input", "Add More Photos")}
-    <p id="post-edit-error" class="form-error"></p>
-    <button type="button" class="btn-primary full" id="post-edit-save-btn">Save Changes</button>
+    <div class="composer-modal">
+      <div class="composer-modal-head">
+        <div class="avatar">${avatarInner(currentProfile || {})}</div>
+        <div>
+          <strong>${nameWithBadge(currentProfile ? currentProfile.name : "You", currentProfile ? currentProfile.email : "")}</strong>
+          <small>Editing your post</small>
+        </div>
+      </div>
+      <textarea id="post-edit-input" class="composer-modal-textarea" rows="6">${escapeHtml(currentText)}</textarea>
+      ${imagePickerHtml("post-edit-image-input")}
+      <p id="post-edit-error" class="form-error"></p>
+      <button type="button" class="btn-primary full raised composer-post-btn" id="post-edit-save-btn">Save Changes</button>
+    </div>
   `);
   const modalBody = document.getElementById("modal-body");
-  const { getRemainingUrls, getNewFiles } = wireEditImagePicker(modalBody, "post-edit-image-input", currentImages);
+  const { getRemainingUrls, getFiles } = wireImagePicker(modalBody, "post-edit-image-input", { existingImages: currentImages });
 
   document.getElementById("post-edit-save-btn").addEventListener("click", async (e) => {
     const text = document.getElementById("post-edit-input").value.trim();
@@ -171,7 +178,7 @@ export function openEditPostModal(postId, currentText, onSaved, currentImages = 
     if (!text) { errorEl.textContent = "Post can't be empty."; return; }
     setBtnLoading(e.currentTarget, true, "Saving…");
     try {
-      const newFiles = getNewFiles();
+      const newFiles = getFiles();
       let uploaded = [];
       if (newFiles.length) {
         setBtnLoading(e.currentTarget, true, "Uploading photos…");
@@ -230,6 +237,7 @@ export async function deletePost(postId, onDeleted) {
   const commentsSnap = await getDocs(collection(db, "posts", postId, "comments"));
   await Promise.all(commentsSnap.docs.map(c => deleteDoc(c.ref)));
   await deleteDoc(doc(db, "posts", postId));
+  deleteActivityForPost(postId); // best-effort: drop the "posted"/"liked"/"commented" notifications this post generated
   showToast("Post deleted.");
   onDeleted?.();
 }

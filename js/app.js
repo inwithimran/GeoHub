@@ -12,7 +12,7 @@ import {
 import { initWall, teardownWall } from "./wall.js";
 import { initResources, teardownResources, loadUserResources } from "./resources.js";
 import { initDirectory, teardownDirectory } from "./directory.js";
-import { initRoutine, teardownRoutine, markNoticesPageSeen, registerNotificationsRouter } from "./routine.js";
+import { initRoutine, teardownRoutine, registerNotificationsRouter } from "./routine.js";
 import { openUserProfilePage, loadUserPosts, registerProfilePageRouter } from "./profile-view.js";
 import { openPostDetailPage, registerPostDetailRouter, teardownPostDetail } from "./post-detail.js";
 import {
@@ -21,6 +21,7 @@ import {
 } from "./ui-utils.js";
 import { uploadImage } from "./cloudinary.js";
 import { isAcceptableImageFile } from "./media-picker.js";
+import { openImageCropper } from "./image-cropper.js";
 import { initPush, unregisterPushToken } from "./push.js";
 
 // ---------- Element references ----------
@@ -246,7 +247,10 @@ function goToRoute(route, { fromPopstate = false, replace = false, state = {} } 
   document.getElementById("topbar-subtitle").textContent = route === "user-profile" ? "Classmate Profile" : "Geography & Environment";
 
   if (route === "profile") renderProfile();
-  if (route === "notices") markNoticesPageSeen();
+  // NOTE: opening the Notices & Notifications page (or either of its tabs)
+  // deliberately does NOT clear the bell/tab badges anymore — only reading
+  // (or deleting) the specific notice/notification behind the count does,
+  // via markNoticeRead()/markActivityRead() inside routine.js.
   // Leaving the Post Detail page — drop its live post/comments listeners
   // rather than leaving them subscribed in the background.
   if (currentRoute === "post-detail" && route !== "post-detail") teardownPostDetail();
@@ -440,11 +444,13 @@ function openProfileDetailsModal(isFirstTime = false) {
     ${isFirstTime ? `<p class="modal-hint">Welcome to GeoHub! We just need a few more details so classmates can find you in the directory.</p>` : ""}
 
     <div class="pd-photo-picker">
-      <div class="avatar avatar-lg pd-photo-preview" id="pd-photo-preview">${avatarInner(currentProfile)}</div>
-      <div class="pd-photo-actions">
-        <button type="button" class="btn-outline" id="pd-photo-btn">Change Photo</button>
-        <small>JPG or PNG, square photos look best.</small>
+      <div class="pd-photo-avatar-wrap">
+        <div class="avatar avatar-lg pd-photo-preview" id="pd-photo-preview">${avatarInner(currentProfile)}</div>
+        <button type="button" class="pd-photo-camera-btn" id="pd-photo-btn" aria-label="Change photo">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.5-2.5h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.4"/></svg>
+        </button>
       </div>
+      <small class="pd-photo-hint">Tap to change your photo — you'll be able to move &amp; zoom it to fit.</small>
       <input type="file" id="pd-photo-input" accept="image/*" class="hidden" />
     </div>
 
@@ -525,12 +531,15 @@ function openProfileDetailsModal(isFirstTime = false) {
   const photoInput = document.getElementById("pd-photo-input");
   const photoPreview = document.getElementById("pd-photo-preview");
   document.getElementById("pd-photo-btn").addEventListener("click", () => photoInput.click());
-  photoInput.addEventListener("change", () => {
+  photoInput.addEventListener("change", async () => {
     const file = photoInput.files?.[0];
+    photoInput.value = "";
     if (!file) return;
-    if (!isAcceptableImageFile(file)) { photoInput.value = ""; return; }
-    selectedPhotoFile = file;
-    photoPreview.innerHTML = `<span class="avatar-fill"><img src="${URL.createObjectURL(file)}" alt="" /></span>`;
+    if (!isAcceptableImageFile(file)) return;
+    const cropped = await openImageCropper(file); // move/zoom to a 1:1 crop before it's ever uploaded
+    if (!cropped) return; // user cancelled — keep whatever photo was showing
+    selectedPhotoFile = new File([cropped], "avatar.jpg", { type: "image/jpeg" });
+    photoPreview.innerHTML = `<span class="avatar-fill"><img src="${URL.createObjectURL(cropped)}" alt="" /></span>`;
   });
 
   document.getElementById("pd-save-btn").addEventListener("click", () => saveProfileDetails(isFirstTime, () => selectedPhotoFile));

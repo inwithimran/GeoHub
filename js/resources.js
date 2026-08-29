@@ -12,7 +12,7 @@ import {
   showToast, escapeHtml, openModal, closeModal, timeAgo, setBtnLoading,
   kebabMenuHtml, wireKebabMenus, confirmDialog
 } from "./ui-utils.js";
-import { logActivity } from "./routine.js";
+import { logActivity, deleteActivityForResource } from "./routine.js";
 import { triggerPush } from "./push-trigger.js";
 
 const chipRow = document.getElementById("resource-categories");
@@ -92,6 +92,7 @@ function renderResourceRows(resources, listEl, emptyMessage) {
       confirmLabel: "Delete",
       onConfirm: async () => {
         await deleteDoc(doc(db, "resources", resId));
+        deleteActivityForResource(resId); // best-effort: drop the "shared a note/sheet" notification too
         showToast("Resource deleted.");
       }
     })
