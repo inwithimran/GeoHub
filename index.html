@@ -279,6 +279,14 @@
   .btn-primary {
     @apply text-white px-5 py-3.5 rounded-full font-bold tracking-wide transition-transform;
     background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800));
+    /* A fixed line-height + min-height means the button renders at the
+       SAME height whether its content is plain label text (normal state)
+       or a spinner + wrapped <span> (setBtnLoading's "is-loading" state,
+       below) — without this, swapping that inner markup could compute a
+       very slightly different line-box height and nudge the button (and
+       anything below it in the modal) by a pixel or two right as loading
+       starts, which read as the button "growing"/the layout shifting. */
+    line-height:1.2; min-height:52px;
   }
   .btn-primary.raised { box-shadow: var(--shadow-btn); }
   .btn-primary:active { transform:scale(.98); filter:brightness(.95); }
@@ -297,6 +305,7 @@
   .btn-outline {
     @apply flex items-center justify-center gap-2 border-[1.5px] px-5 py-3 rounded-full font-bold bg-white transition-colors;
     border-color: var(--color-forest-700); color: var(--color-forest-700);
+    line-height:1.2; min-height:50px; /* same fixed-height reasoning as .btn-primary above */
   }
   .btn-outline.full { @apply w-full; }
   .btn-outline.danger { border-color: var(--color-danger-600); color: var(--color-danger-600); }
@@ -676,7 +685,7 @@
   .notice-row { @apply cursor-pointer; }
 
   /* ---------- Admin — Reported Posts modal ---------- */
-  .btn-outline.small { @apply text-[.78rem] w-auto; padding:7px 13px; }
+  .btn-outline.small { @apply text-[.78rem] w-auto; padding:7px 13px; min-height:35px; }
   .btn-outline.small.danger-solid { border-color: var(--color-danger-600); color: var(--color-danger-600); }
   .btn-outline.small.danger-solid:active { background: var(--color-danger-600); color:#fff; }
   .report-row {
