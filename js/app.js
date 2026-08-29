@@ -547,8 +547,8 @@ function openProfileDetailsModal(isFirstTime = false) {
         : `You've already changed your name recently — you can change it again in ${nameStatus.daysRemaining} day${nameStatus.daysRemaining === 1 ? "" : "s"}.`}</small>
     </label>
     <label class="field">
-      <span>Roll / Registration No.</span>
-      <input type="text" id="pd-roll" placeholder="e.g. 2024-GEO-014" value="${escapeHtml(currentProfile.roll || "")}" />
+      <span>Class Roll</span>
+      <input type="text" id="pd-roll" placeholder="e.g. 105" value="${escapeHtml(currentProfile.roll || "")}" />
     </label>
     <label class="field">
       <span>Blood Group</span>
