@@ -42,10 +42,11 @@ export async function initPush() {
     const messaging = getMessaging(app);
 
     // Foreground messages (app open in this tab): FCM doesn't auto-show a
-    // system notification for these, so surface it as an in-app toast.
+    // system notification for these, so surface it as an in-app toast. Data-
+    // only payload (see api/send-push.js), so title/body live under `.data`.
     onMessage(messaging, (payload) => {
-      const title = payload.notification?.title || "GeoHub";
-      const body = payload.notification?.body || "";
+      const title = payload.data?.title || "GeoHub";
+      const body = payload.data?.body || "";
       showToast(`${title}${body ? " — " + body : ""}`);
     });
 
