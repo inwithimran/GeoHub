@@ -22,7 +22,7 @@
 // ============================================================
 import { db, auth, ADMIN_EMAILS } from "./firebase-config.js";
 import {
-  collection, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit, serverTimestamp,
+  collection, addDoc, updateDoc, deleteDoc, onSnapshot, query, where, orderBy, limit, serverTimestamp,
   doc, getDoc
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import {
@@ -44,9 +44,14 @@ const NOTICES_SEEN_KEY = "geohub_notices_seen_at";
 const ACTIVITY_SEEN_KEY = "geohub_activity_seen_at";
 
 let unsubscribeNotices = null;
-let unsubscribeActivity = null;
+let unsubscribeActivityPublic = null;
+let unsubscribeActivityPrivate = null;
 let latestNotices = [];
-let latestActivity = [];
+// The "activity" feed is split into two separately-queried, separately-
+// listened slices — see the big comment above initRoutine() for why this
+// can't be a single onSnapshot the way `notices` is.
+let latestActivityPublic = [];   // type in [post, resource, notice] — visible to everyone
+let latestActivityPrivate = [];  // type in [comment, like] targeted at ME specifically
 let noticesPageWired = false;
 
 // app.js hands us its router (goToRoute) so clicking a notification can
@@ -55,12 +60,21 @@ let noticesPageWired = false;
 let goToRouteRef = null;
 export function registerNotificationsRouter(goToRoute) { goToRouteRef = goToRoute; }
 
+/** Merge the two slices back into one feed, newest first, capped like the old single query was. */
+function mergedActivity() {
+  return [...latestActivityPublic, ...latestActivityPrivate]
+    .sort((a, b) => (b.createdAt?.toDate?.().getTime() || 0) - (a.createdAt?.toDate?.().getTime() || 0))
+    .slice(0, 60);
+}
+
 /**
  * "comment" and "like" activity entries are a private "someone interacted
  * with YOUR post" notification — they should only ever be visible to the
  * post's author, never to the whole department. "post" / "resource" /
- * "notice" stay public. (Firestore rules also enforce this server-side;
- * this is just so the client trusts nothing that slips through.)
+ * "notice" stay public. (Firestore rules also enforce this server-side —
+ * see the query split below for why the client has to respect the same
+ * split; this filter is just so the client trusts nothing that slips
+ * through.)
  */
 function visibleToMe(a) {
   if (a.type === "comment" || a.type === "like") {
@@ -77,15 +91,64 @@ export function initRoutine() {
     renderNoticeTabBody();
   }, (err) => showToast("Couldn't load notices: " + err.message));
 
-  const aq = query(collection(db, "activity"), orderBy("createdAt", "desc"), limit(60));
-  unsubscribeActivity = onSnapshot(aq, (snap) => {
-    latestActivity = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  // ----------------------------------------------------------------
+  // IMPORTANT: this used to be ONE onSnapshot over the whole "activity"
+  // collection with no `where` clause. That silently broke live updates
+  // the moment a single "comment" or "like" doc existed anywhere: Firestore
+  // security rules are NOT filters — "rules are not filters" is the
+  // official Firestore behavior (a query is rejected outright, not
+  // filtered down, if it could possibly return a document the rules
+  // wouldn't let the caller read). Since comment/like docs are only
+  // readable by their targetUid, an unfiltered query over the whole
+  // collection became unsafe the instant one existed, so Firestore
+  // returned permission-denied for EVERY user's listener — and the old
+  // error handler here swallowed that silently as "no activity yet",
+  // which is exactly why the badge/list stopped updating live while push
+  // (a completely separate, server-side FCM path that never touches these
+  // rules) kept working fine. Splitting into two rule-safe queries fixes
+  // it: each one only asks for documents the rules already guarantee it
+  // can read.
+  //
+  // NOTE: both queries below combine a `where` with `orderBy` on a
+  // different field, so Firestore will require a composite index for
+  // each the first time they run — open the browser console, click the
+  // link in the error it prints, and it self-creates in a minute. Safe
+  // to ignore once created; it only needs doing once per Firebase project.
+  // ----------------------------------------------------------------
+  const publicQ = query(
+    collection(db, "activity"),
+    where("type", "in", ["post", "resource", "notice"]),
+    orderBy("createdAt", "desc"),
+    limit(60)
+  );
+  unsubscribeActivityPublic = onSnapshot(publicQ, (snap) => {
+    latestActivityPublic = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     updateNoticeBadge();
     renderActivityList();
-  }, () => { /* fine if the collection doesn't exist yet on a fresh project — just show "no activity" */
-    latestActivity = [];
+  }, (err) => {
+    console.error("Couldn't load public activity feed:", err.message);
+    latestActivityPublic = [];
     renderActivityList();
   });
+
+  const uid = auth.currentUser?.uid;
+  if (uid) {
+    const privateQ = query(
+      collection(db, "activity"),
+      where("targetUid", "==", uid),
+      orderBy("createdAt", "desc"),
+      limit(60)
+    );
+    unsubscribeActivityPrivate = onSnapshot(privateQ, (snap) => {
+      latestActivityPrivate = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      updateNoticeBadge();
+      renderActivityList();
+    }, (err) => {
+      console.error("Couldn't load your personal activity feed:", err.message);
+      latestActivityPrivate = [];
+      renderActivityList();
+    });
+  }
 
   loadRoutine();
   wireNoticesPageTabs();
@@ -101,7 +164,7 @@ function updateNoticeBadge() {
   const noticesSeenAt = Number(localStorage.getItem(NOTICES_SEEN_KEY) || 0);
   const activitySeenAt = Number(localStorage.getItem(ACTIVITY_SEEN_KEY) || 0);
   const unreadNotices = latestNotices.filter(n => (n.createdAt?.toDate?.().getTime() || 0) > noticesSeenAt).length;
-  const unreadActivity = latestActivity.filter(visibleToMe).filter(a => (a.createdAt?.toDate?.().getTime() || 0) > activitySeenAt).length;
+  const unreadActivity = mergedActivity().filter(visibleToMe).filter(a => (a.createdAt?.toDate?.().getTime() || 0) > activitySeenAt).length;
   const unread = unreadNotices + unreadActivity;
   notifBadge.textContent = unread > 9 ? "9+" : String(unread);
   notifBadge.classList.toggle("hidden", unread === 0);
@@ -342,7 +405,7 @@ function renderActivityList() {
   const host = document.getElementById("notification-list");
   if (!host) return;
 
-  const activity = latestActivity.filter(visibleToMe);
+  const activity = mergedActivity().filter(visibleToMe);
 
   if (!activity.length) {
     host.innerHTML = `<p class="empty-state">No recent activity yet.</p>`;
@@ -446,9 +509,13 @@ async function loadRoutine() {
 
 export function teardownRoutine() {
   if (unsubscribeNotices) unsubscribeNotices();
-  if (unsubscribeActivity) unsubscribeActivity();
+  if (unsubscribeActivityPublic) unsubscribeActivityPublic();
+  if (unsubscribeActivityPrivate) unsubscribeActivityPrivate();
+  unsubscribeActivityPublic = null;
+  unsubscribeActivityPrivate = null;
   latestNotices = [];
-  latestActivity = [];
+  latestActivityPublic = [];
+  latestActivityPrivate = [];
   const host = document.getElementById("notice-tab-body");
   if (host) { delete host.dataset.shellBuilt; host.innerHTML = ""; }
 }
