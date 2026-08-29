@@ -260,6 +260,7 @@ async function postNotice() {
     input.value = "";
     urgent.checked = false;
     showToast("Notice posted.");
+    logActivity({ type: "notice", text });
     triggerPush({ type: "notice", text, urgent: wasUrgent });
   } catch (err) {
     showToast("Couldn't post notice: " + err.message);
@@ -276,12 +277,13 @@ async function postNotice() {
 // ============================================================
 
 /** Best-effort activity log entry — never blocks or fails the action that triggered it. */
-export async function logActivity({ type, text = "" }) {
+export async function logActivity({ type, text = "", targetUid = null }) {
   if (!auth.currentUser) return;
   try {
     await addDoc(collection(db, "activity"), {
       type,
       text,
+      targetUid,
       actorUid: auth.currentUser.uid,
       actorName: currentProfile ? currentProfile.name : (auth.currentUser.email || "Someone"),
       actorEmail: auth.currentUser.email,
@@ -302,6 +304,8 @@ function activityLine(a) {
     case "post": return `posted on the Student Wall${quoted}`;
     case "resource": return `shared a note/sheet${a.text ? `: <strong>${escapeHtml(truncate(a.text, 70))}</strong>` : ""}`;
     case "comment": return `commented on a post${quoted}`;
+    case "like": return `liked your post`;
+    case "notice": return `posted a notice${quoted}`;
     default: return escapeHtml(a.text || "did something on GeoHub");
   }
 }

@@ -220,7 +220,7 @@ export function renderPost(postId, post, listEl, { onChanged } = {}) {
   el.querySelectorAll("[data-author]").forEach(b =>
     b.addEventListener("click", () => openUserProfilePage(post.authorUid)));
   el.querySelector(".leaf-like-btn").addEventListener("click", (e) => {
-    toggleLike(postId, liked, e.currentTarget);
+    toggleLike(postId, liked, e.currentTarget, post.authorUid);
   });
   el.querySelector(".comment-toggle-btn").addEventListener("click", () => toggleComments(postId, el, post.authorUid));
   el.querySelector(".post-like-count").addEventListener("click", () => openLikesModal(post.likes || []));
@@ -246,7 +246,7 @@ export function renderPost(postId, post, listEl, { onChanged } = {}) {
   }
 }
 
-async function toggleLike(postId, currentlyLiked, btnEl) {
+async function toggleLike(postId, currentlyLiked, btnEl, authorUid) {
   btnEl.disabled = true;
   btnEl.classList.add("like-pop");
   const ref = doc(db, "posts", postId);
@@ -254,6 +254,12 @@ async function toggleLike(postId, currentlyLiked, btnEl) {
     await updateDoc(ref, {
       likes: currentlyLiked ? arrayRemove(auth.currentUser.uid) : arrayUnion(auth.currentUser.uid)
     });
+    // Only notify on a fresh like (not on unlike), and only if someone
+    // else's post — never notify a student that they liked their own post.
+    if (!currentlyLiked && authorUid && authorUid !== auth.currentUser.uid) {
+      logActivity({ type: "like", targetUid: authorUid });
+      triggerPush({ type: "like", actorName: currentProfile.name, targetUid: authorUid });
+    }
   } catch (err) {
     showToast("Couldn't update your like: " + err.message);
   } finally {
@@ -394,6 +400,7 @@ async function submitComment(postId, block, sendBtn, authorUid) {
     });
     input.value = "";
     loadComments(postId, block, authorUid); // refresh thread
+    logActivity({ type: "comment", text, targetUid: authorUid });
     triggerPush({ type: "comment", text, actorName: currentProfile.name, targetUid: authorUid });
   } catch (err) {
     showToast("Couldn't send your comment: " + err.message);

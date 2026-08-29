@@ -270,7 +270,7 @@ export function attachClampToggle(container) {
     btn.addEventListener("click", () => {
       const textEl = btn.previousElementSibling;
       const expanded = textEl.classList.toggle("expanded");
-      btn.textContent = expanded ? "See less" : "… See more";
+      btn.textContent = expanded ? "See less" : "See more";
     });
   });
 }
@@ -279,7 +279,7 @@ export function attachClampToggle(container) {
 export function clampableHtml(rawText, extraClass = "") {
   const safe = escapeHtml(rawText);
   const isLong = rawText.length > 260;
-  return `<p class="clampable ${extraClass} ${isLong ? "is-clampable" : ""}">${safe}</p>${isLong ? `<button type="button" class="clamp-toggle">… See more</button>` : ""}`;
+  return `<p class="clampable ${extraClass} ${isLong ? "is-clampable" : ""}">${safe}</p>${isLong ? `<button type="button" class="clamp-toggle"> See more</button>` : ""}`;
 }
 
 // ============================================================
