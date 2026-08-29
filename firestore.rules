@@ -39,8 +39,20 @@ service cloud.firestore {
     }
 
     // ---- Activity feed (Notices & Notifications -> "Notification" tab) ----
+    // "post" / "resource" / "notice" entries are public announcements, so
+    // everyone signed in may read them. "comment" / "like" entries are a
+    // private "someone interacted with YOUR post" notification and must
+    // only be readable by the post's author (targetUid) — otherwise every
+    // student could read every comment/like notification meant for
+    // someone else. Firestore evaluates this per-document, so a query
+    // over the whole collection silently comes back with only the
+    // documents each reader is allowed to see.
     match /activity/{activityId} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() && (
+        !(resource.data.type in ["comment", "like"]) ||
+        resource.data.targetUid == request.auth.uid ||
+        resource.data.actorUid == request.auth.uid
+      );
       allow create: if isSignedIn() && request.resource.data.actorUid == request.auth.uid;
       allow update, delete: if false; // activity entries are an append-only log
     }

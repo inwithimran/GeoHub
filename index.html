@@ -387,6 +387,12 @@
       @apply flex flex-col text-white;
       grid-row: 1 / span 2; grid-column:1; padding:20px 14px;
       background: linear-gradient(180deg, var(--color-forest-900), var(--color-forest-950));
+      /* Pin the sidebar to the viewport instead of stretching to the full
+         (scrollable) page height — without this, the sidebar's box was as
+         tall as the whole Student Wall feed, which both dragged it along
+         when the feed scrolled AND pushed the logout button (bottom of
+         this flex column) way down past the fold. */
+      position: sticky; top:0; align-self:start; height:100vh; overflow-y:auto;
     }
     .sidebar-brand { @apply flex items-center gap-2.5 pb-6 px-2; }
     .sidebar-brand strong { @apply block text-[.95rem] font-bold; font-family:var(--font-display); }
@@ -458,6 +464,15 @@
     border-style:solid; border-width:0 16px 16px 0; border-color: transparent var(--color-gold-100) transparent transparent;
   }
   @media (hover:hover) { .feed-post:hover { box-shadow: var(--shadow-cardhover); } }
+
+  /* Brief highlight ring — used to draw the eye to the post/resource a
+     Notification-tab click just scrolled to. */
+  .post-flash { animation: post-flash-ring 1.6s ease; }
+  @keyframes post-flash-ring {
+    0%   { box-shadow: 0 0 0 3px var(--color-gold-500), var(--shadow-card); }
+    70%  { box-shadow: 0 0 0 3px var(--color-gold-500), var(--shadow-card); }
+    100% { box-shadow: var(--shadow-card); }
+  }
 
   .post-head { @apply flex items-center gap-2.5 mb-2.5; }
   .post-head .kebab-menu { @apply ml-auto -mr-1.5; }
