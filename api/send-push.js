@@ -96,6 +96,8 @@ function buildNotification(type, { text, actorName, urgent }) {
       return { title: urgent ? "⚠️ Urgent Notice" : "New Notice", body: truncate(text) };
     case "comment":
       return { title: `${actorName || "Someone"} commented on your post`, body: truncate(text) };
+    case "like":
+      return { title: `${actorName || "Someone"} liked your post`, body: "Tap to view." };
     default:
       return { title: "GeoHub", body: truncate(text) };
   }
@@ -124,8 +126,8 @@ export default async function handler(req, res) {
     const messaging = getMessaging(app);
     const notification = buildNotification(type, { text, actorName, urgent });
 
-    // A new comment only notifies the post's author, not the whole department.
-    const pairs = type === "comment"
+    // A new comment or like only notifies the post's author, not the whole department.
+    const pairs = (type === "comment" || type === "like")
       ? await collectTokensFor(db, targetUid, callerUid)
       : await collectAllTokens(db, callerUid);
 
