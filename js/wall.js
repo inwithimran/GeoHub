@@ -101,7 +101,7 @@ async function handleCreatePost(getImageFiles) {
       images = await uploadImages(files, { maxDim: 1600, quality: 0.78, folder: "geohub/posts" });
       setBtnLoading(btn, true, "Posting…");
     }
-    await addDoc(collection(db, "posts"), {
+    const postRef = await addDoc(collection(db, "posts"), {
       authorUid: auth.currentUser.uid,
       authorName: currentProfile.name,
       authorEmail: auth.currentUser.email,
@@ -112,7 +112,7 @@ async function handleCreatePost(getImageFiles) {
     });
     closeModal();
     showToast("Posted to the Student Wall.");
-    logActivity({ type: "post", text });
+    logActivity({ type: "post", text, postId: postRef.id });
     triggerPush({ type: "post", text, actorName: currentProfile.name });
   } catch (err) {
     errorEl.textContent = "Couldn't publish your post: " + err.message;
@@ -183,6 +183,7 @@ export function renderPost(postId, post, listEl, { onChanged } = {}) {
   const isOwnPost = post.authorUid === uid;
   const el = document.createElement("article");
   el.className = "feed-post";
+  el.dataset.postId = postId; // lets a Notification-tab click scroll straight to this post
   el.innerHTML = `
     <div class="post-head">
       <button type="button" class="avatar avatar-btn" data-author="${post.authorUid}">${avatarInner(author)}</button>
@@ -257,7 +258,7 @@ async function toggleLike(postId, currentlyLiked, btnEl, authorUid) {
     // Only notify on a fresh like (not on unlike), and only if someone
     // else's post — never notify a student that they liked their own post.
     if (!currentlyLiked && authorUid && authorUid !== auth.currentUser.uid) {
-      logActivity({ type: "like", targetUid: authorUid });
+      logActivity({ type: "like", targetUid: authorUid, postId });
       triggerPush({ type: "like", actorName: currentProfile.name, targetUid: authorUid });
     }
   } catch (err) {
@@ -400,8 +401,12 @@ async function submitComment(postId, block, sendBtn, authorUid) {
     });
     input.value = "";
     loadComments(postId, block, authorUid); // refresh thread
-    logActivity({ type: "comment", text, targetUid: authorUid });
-    triggerPush({ type: "comment", text, actorName: currentProfile.name, targetUid: authorUid });
+    // Only notify the post's author, and never notify someone that they
+    // commented on their own post — that's not a meaningful notification.
+    if (authorUid && authorUid !== auth.currentUser.uid) {
+      logActivity({ type: "comment", text, targetUid: authorUid, postId });
+      triggerPush({ type: "comment", text, actorName: currentProfile.name, targetUid: authorUid });
+    }
   } catch (err) {
     showToast("Couldn't send your comment: " + err.message);
     input.disabled = false;
@@ -441,4 +446,38 @@ function openEditCommentModal(postId, commentId, block, authorUid) {
 /** Detach the realtime listener (call on logout to avoid leaks). */
 export function teardownWall() {
   if (unsubscribePosts) unsubscribePosts();
+}
+
+// ============================================================
+// Jump to a specific post from the Notification tab — used for
+// "posted on the Wall" / "liked your post" / "commented on your post".
+// The Wall's realtime list is already mounted in the background even
+// while another route is showing, but posts can take a moment to
+// (re)render after a fresh snapshot, so this retries briefly before
+// giving up.
+// ============================================================
+export function focusPost(postId, { expandComments = false } = {}) {
+  let attempts = 0;
+  const tryFocus = () => {
+    const el = wallList.querySelector(`.feed-post[data-post-id="${postId}"]`);
+    if (!el) return false;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.add("post-flash");
+    setTimeout(() => el.classList.remove("post-flash"), 1600);
+    if (expandComments) {
+      const block = el.querySelector(`[data-comments-for="${postId}"]`);
+      if (block && block.classList.contains("hidden")) {
+        el.querySelector(".comment-toggle-btn")?.click();
+      }
+    }
+    return true;
+  };
+  if (tryFocus()) return;
+  const iv = setInterval(() => {
+    attempts++;
+    if (tryFocus() || attempts > 10) {
+      clearInterval(iv);
+      if (attempts > 10) showToast("Couldn't find that post — it may have been deleted.");
+    }
+  }, 200);
 }

@@ -66,7 +66,7 @@ function renderResourceRows(resources, listEl, emptyMessage) {
 
   const uid = auth.currentUser?.uid;
   listEl.innerHTML = `<div class="flat-list">` + resources.map(r => `
-    <div class="resource-row">
+    <div class="resource-row" data-res-id="${r.id}">
       <div class="resource-row-icon">${fileGlyph(r.category)}</div>
       <div class="resource-row-info">
         <span class="res-cat">${escapeHtml(r.category)}</span>
@@ -150,7 +150,7 @@ async function submitResource() {
 
   setBtnLoading(btn, true, "Publishing…");
   try {
-    await addDoc(collection(db, "resources"), {
+    const resRef = await addDoc(collection(db, "resources"), {
       title, category, link,
       contributorName: currentProfile.name,
       contributorUid: auth.currentUser.uid,
@@ -158,7 +158,7 @@ async function submitResource() {
     });
     closeModal();
     showToast("Resource shared with the department 🎉");
-    logActivity({ type: "resource", text: title });
+    logActivity({ type: "resource", text: title, resourceId: resRef.id });
     triggerPush({ type: "resource", text: title, actorName: currentProfile.name });
   } catch (err) {
     showToast("Couldn't share resource: " + err.message);
@@ -205,4 +205,27 @@ function openEditResourceModal(resId) {
 
 export function teardownResources() {
   if (unsubscribeResources) unsubscribeResources();
+}
+
+// ============================================================
+// Jump to a specific resource from the Notification tab. If the current
+// category chip filter would hide it, switch back to "All" first.
+// ============================================================
+export function focusResource(resourceId) {
+  const target = allResources.find(r => r.id === resourceId);
+  if (!target) { showToast("Couldn't find that resource — it may have been deleted."); return; }
+
+  if (activeCategory !== "All" && activeCategory !== target.category) {
+    activeCategory = "All";
+    chipRow.querySelectorAll(".chip").forEach(c => c.classList.toggle("active", c.dataset.cat === "All"));
+    renderResources();
+  }
+
+  requestAnimationFrame(() => {
+    const el = resourceList.querySelector(`.resource-row[data-res-id="${resourceId}"]`);
+    if (!el) { showToast("Couldn't find that resource — it may have been deleted."); return; }
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.add("post-flash");
+    setTimeout(() => el.classList.remove("post-flash"), 1600);
+  });
 }

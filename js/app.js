@@ -12,7 +12,7 @@ import {
 import { initWall, teardownWall } from "./wall.js";
 import { initResources, teardownResources, loadUserResources } from "./resources.js";
 import { initDirectory, teardownDirectory } from "./directory.js";
-import { initRoutine, teardownRoutine, markNoticesPageSeen } from "./routine.js";
+import { initRoutine, teardownRoutine, markNoticesPageSeen, registerNotificationsRouter } from "./routine.js";
 import { openUserProfilePage, loadUserPosts, registerProfilePageRouter } from "./profile-view.js";
 import {
   escapeHtml, openModal, closeModal, showToast, setBtnLoading, fullDate,
@@ -254,6 +254,7 @@ function goToRoute(route, { fromPopstate = false, replace = false, state = {} } 
   }
 }
 registerProfilePageRouter(goToRoute);
+registerNotificationsRouter(goToRoute);
 
 document.querySelectorAll(".nav-item[data-route]").forEach(btn => {
   btn.addEventListener("click", () => {

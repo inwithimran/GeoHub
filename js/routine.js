@@ -49,6 +49,26 @@ let latestNotices = [];
 let latestActivity = [];
 let noticesPageWired = false;
 
+// app.js hands us its router (goToRoute) so clicking a notification can
+// jump to another page (Wall / Notes hub / Notice tab), the same pattern
+// profile-view.js uses for registerProfilePageRouter.
+let goToRouteRef = null;
+export function registerNotificationsRouter(goToRoute) { goToRouteRef = goToRoute; }
+
+/**
+ * "comment" and "like" activity entries are a private "someone interacted
+ * with YOUR post" notification — they should only ever be visible to the
+ * post's author, never to the whole department. "post" / "resource" /
+ * "notice" stay public. (Firestore rules also enforce this server-side;
+ * this is just so the client trusts nothing that slips through.)
+ */
+function visibleToMe(a) {
+  if (a.type === "comment" || a.type === "like") {
+    return a.targetUid === auth.currentUser?.uid;
+  }
+  return true;
+}
+
 export function initRoutine() {
   const q = query(collection(db, "notices"), orderBy("createdAt", "desc"));
   unsubscribeNotices = onSnapshot(q, (snap) => {
@@ -81,7 +101,7 @@ function updateNoticeBadge() {
   const noticesSeenAt = Number(localStorage.getItem(NOTICES_SEEN_KEY) || 0);
   const activitySeenAt = Number(localStorage.getItem(ACTIVITY_SEEN_KEY) || 0);
   const unreadNotices = latestNotices.filter(n => (n.createdAt?.toDate?.().getTime() || 0) > noticesSeenAt).length;
-  const unreadActivity = latestActivity.filter(a => (a.createdAt?.toDate?.().getTime() || 0) > activitySeenAt).length;
+  const unreadActivity = latestActivity.filter(visibleToMe).filter(a => (a.createdAt?.toDate?.().getTime() || 0) > activitySeenAt).length;
   const unread = unreadNotices + unreadActivity;
   notifBadge.textContent = unread > 9 ? "9+" : String(unread);
   notifBadge.classList.toggle("hidden", unread === 0);
@@ -249,7 +269,7 @@ async function postNotice() {
   const wasUrgent = urgent.checked;
   setBtnLoading(submit, true, "Posting…");
   try {
-    await addDoc(collection(db, "notices"), {
+    const noticeRef = await addDoc(collection(db, "notices"), {
       text,
       urgent: wasUrgent,
       postedBy: auth.currentUser.email,
@@ -260,7 +280,7 @@ async function postNotice() {
     input.value = "";
     urgent.checked = false;
     showToast("Notice posted.");
-    logActivity({ type: "notice", text });
+    logActivity({ type: "notice", text, noticeId: noticeRef.id });
     triggerPush({ type: "notice", text, urgent: wasUrgent });
   } catch (err) {
     showToast("Couldn't post notice: " + err.message);
@@ -276,14 +296,22 @@ async function postNotice() {
 // reads the resulting "activity" collection.
 // ============================================================
 
-/** Best-effort activity log entry — never blocks or fails the action that triggered it. */
-export async function logActivity({ type, text = "", targetUid = null }) {
+/**
+ * Best-effort activity log entry — never blocks or fails the action that
+ * triggered it. postId/resourceId/noticeId identify the actual content the
+ * notification is about, so clicking it in the Notification tab can jump
+ * straight to that content instead of just opening the actor's profile.
+ */
+export async function logActivity({ type, text = "", targetUid = null, postId = null, resourceId = null, noticeId = null }) {
   if (!auth.currentUser) return;
   try {
     await addDoc(collection(db, "activity"), {
       type,
       text,
       targetUid,
+      postId,
+      resourceId,
+      noticeId,
       actorUid: auth.currentUser.uid,
       actorName: currentProfile ? currentProfile.name : (auth.currentUser.email || "Someone"),
       actorEmail: auth.currentUser.email,
@@ -314,13 +342,15 @@ function renderActivityList() {
   const host = document.getElementById("notification-list");
   if (!host) return;
 
-  if (!latestActivity.length) {
+  const activity = latestActivity.filter(visibleToMe);
+
+  if (!activity.length) {
     host.innerHTML = `<p class="empty-state">No recent activity yet.</p>`;
     return;
   }
 
-  host.innerHTML = `<div class="notice-flat-list">` + latestActivity.map(a => `
-    <div class="notice-row activity-row" data-uid="${escapeHtml(a.actorUid || "")}">
+  host.innerHTML = `<div class="notice-flat-list">` + activity.map((a, i) => `
+    <div class="notice-row activity-row" data-index="${i}">
       <div class="notice-row-top">
         <span class="avatar avatar-sm">${avatarInner(posterProfile(a.actorUid, a.actorName, a.actorEmail))}</span>
         <div class="notice-row-byline">
@@ -333,13 +363,55 @@ function renderActivityList() {
   `).join("") + `</div>`;
 
   host.querySelectorAll(".activity-row").forEach(row => {
-    const uid = row.dataset.uid;
-    if (!uid) return;
-    row.addEventListener("click", async () => {
-      const { openUserProfilePage } = await import("./profile-view.js");
-      openUserProfilePage(uid);
-    });
+    const a = activity[Number(row.dataset.index)];
+    if (!a) return;
+    row.addEventListener("click", () => openActivityDestination(a));
   });
+}
+
+// ============================================================
+// Clicking a notification should land on whatever it's actually about
+// (the post that got liked/commented on, the shared resource, the
+// notice) rather than always opening the actor's profile.
+// ============================================================
+async function openActivityDestination(a) {
+  switch (a.type) {
+    case "post":
+    case "like":
+    case "comment": {
+      if (!a.postId) return; // older entries logged before postId existed
+      const { focusPost } = await import("./wall.js");
+      if (goToRouteRef) goToRouteRef("wall");
+      focusPost(a.postId, { expandComments: a.type === "comment" });
+      break;
+    }
+    case "resource": {
+      if (!a.resourceId) return;
+      const { focusResource } = await import("./resources.js");
+      if (goToRouteRef) goToRouteRef("resources");
+      focusResource(a.resourceId);
+      break;
+    }
+    case "notice": {
+      if (goToRouteRef) goToRouteRef("notices");
+      switchToNoticeTab();
+      if (a.noticeId) openNoticeDetail(a.noticeId);
+      break;
+    }
+    default: {
+      if (!a.actorUid) return;
+      const { openUserProfilePage } = await import("./profile-view.js");
+      openUserProfilePage(a.actorUid);
+    }
+  }
+}
+
+/** Switches the Notices & Notifications page over to its "Notice" tab. */
+function switchToNoticeTab() {
+  const section = document.getElementById("section-notices");
+  if (!section) return;
+  const tabBtn = section.querySelector('.notices-page-tab-btn[data-tab="notice"]');
+  tabBtn?.click();
 }
 
 // ============================================================
