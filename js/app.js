@@ -14,6 +14,7 @@ import { initResources, teardownResources, loadUserResources } from "./resources
 import { initDirectory, teardownDirectory } from "./directory.js";
 import { initRoutine, teardownRoutine, markNoticesPageSeen, registerNotificationsRouter } from "./routine.js";
 import { openUserProfilePage, loadUserPosts, registerProfilePageRouter } from "./profile-view.js";
+import { openPostDetailPage, registerPostDetailRouter, teardownPostDetail } from "./post-detail.js";
 import {
   escapeHtml, openModal, closeModal, showToast, setBtnLoading, fullDate,
   avatarInner, nameWithBadge, isAdminEmail, resetScrollForTabs
@@ -216,7 +217,8 @@ const routeTitles = {
   routine: "Weekly Routine",
   profile: "My Profile",
   notices: "Notices & Notifications",
-  "user-profile": "Profile" // overwritten with the classmate's name once loaded
+  "user-profile": "Profile", // overwritten with the classmate's name once loaded
+  "post-detail": "Post" // overwritten with "<name>'s Post" once loaded
 };
 
 let currentRoute = "wall";
@@ -244,17 +246,21 @@ function goToRoute(route, { fromPopstate = false, replace = false, state = {} } 
 
   if (route === "profile") renderProfile();
   if (route === "notices") markNoticesPageSeen();
+  // Leaving the Post Detail page — drop its live post/comments listeners
+  // rather than leaving them subscribed in the background.
+  if (currentRoute === "post-detail" && route !== "post-detail") teardownPostDetail();
 
   currentRoute = route;
   const historyState = { geohubRoute: route, ...state };
   if (replace) {
     history.replaceState(historyState, "");
-  } else if (!fromPopstate && (route !== history.state?.geohubRoute || route === "user-profile")) {
+  } else if (!fromPopstate && (route !== history.state?.geohubRoute || route === "user-profile" || route === "post-detail")) {
     history.pushState(historyState, "");
   }
 }
 registerProfilePageRouter(goToRoute);
 registerNotificationsRouter(goToRoute);
+registerPostDetailRouter(goToRoute);
 
 document.querySelectorAll(".nav-item[data-route]").forEach(btn => {
   btn.addEventListener("click", () => {
@@ -273,6 +279,8 @@ window.addEventListener("popstate", (e) => {
   if (e.state && e.state.geohubRoute) {
     if (e.state.geohubRoute === "user-profile" && e.state.profileUid) {
       openUserProfilePage(e.state.profileUid, { fromPopstate: true });
+    } else if (e.state.geohubRoute === "post-detail" && e.state.postId) {
+      openPostDetailPage(e.state.postId, { fromPopstate: true });
     } else {
       goToRoute(e.state.geohubRoute, { fromPopstate: true });
     }
@@ -612,6 +620,7 @@ watchAuthState(
       teardownResources();
       teardownDirectory();
       teardownRoutine();
+      teardownPostDetail();
       featuresInitialized = false;
     }
     // Reset auth forms (and any stuck loading buttons) for the next login

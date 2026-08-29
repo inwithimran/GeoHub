@@ -19,17 +19,15 @@ import { openUserProfilePage } from "./profile-view.js";
 import { uploadImages } from "./cloudinary.js";
 import { logActivity } from "./routine.js";
 import { triggerPush } from "./push-trigger.js";
-import { imagePickerHtml, wireImagePicker, postImagesHtml, wireEditImagePicker, wirePostImageViewer } from "./media-picker.js";
+import { imagePickerHtml, wireImagePicker, postImagesHtml, wireEditImagePicker } from "./media-picker.js";
 
 const wallList = document.getElementById("wall-list");
 const composerTrigger = document.getElementById("composer-trigger");
 
 let unsubscribePosts = null;
-// Tracks which posts currently have their comment thread expanded
-const openComments = new Set();
 
 /** Resolve a full-enough profile object (for the avatar/badge) from the shared cache, uid, and stored name. */
-function authorProfile(uid, fallbackName) {
+export function authorProfile(uid, fallbackName) {
   const cached = getCachedProfile(uid);
   return cached || { uid, name: fallbackName };
 }
@@ -172,7 +170,11 @@ export async function deletePost(postId, onDeleted) {
 // POST RENDERING — flat feed row, no card chrome. Shared by the
 // realtime Wall feed AND a profile's "Posts" tab (own or a
 // classmate's), so likes/comments/kebab all work identically
-// everywhere a post can appear.
+// everywhere a post can appear. Tapping the post itself (its text,
+// its photos, empty space, or the Comment pill) opens the full Post
+// Detail page — only the Like button, the like-count/"liked by"
+// pill, the author's avatar/name, and the kebab menu are excluded
+// from that, since they're their own controls.
 // ============================================================
 export function renderPost(postId, post, listEl, { onChanged } = {}) {
   const uid = auth.currentUser.uid;
@@ -183,7 +185,7 @@ export function renderPost(postId, post, listEl, { onChanged } = {}) {
   const isOwnPost = post.authorUid === uid;
   const el = document.createElement("article");
   el.className = "feed-post";
-  el.dataset.postId = postId; // lets a Notification-tab click scroll straight to this post
+  el.dataset.postId = postId;
   el.innerHTML = `
     <div class="post-head">
       <button type="button" class="avatar avatar-btn" data-author="${post.authorUid}">${avatarInner(author)}</button>
@@ -215,18 +217,28 @@ export function renderPost(postId, post, listEl, { onChanged } = {}) {
         <span class="leaf-mini"></span> ${likeCount} ${likeCount === 1 ? "like" : "likes"}
       </button>
     </div>
-    <div class="comments-block hidden" data-comments-for="${postId}"></div>
   `;
+
+  const likeBtn = el.querySelector(".leaf-like-btn");
+  const likeCountBtn = el.querySelector(".post-like-count");
 
   el.querySelectorAll("[data-author]").forEach(b =>
     b.addEventListener("click", () => openUserProfilePage(post.authorUid)));
-  el.querySelector(".leaf-like-btn").addEventListener("click", (e) => {
-    toggleLike(postId, liked, e.currentTarget, post.authorUid);
+  likeBtn.addEventListener("click", () => toggleLike(postId, post, likeBtn, likeCountBtn));
+  likeCountBtn.addEventListener("click", () => openLikesModal(post.likes || []));
+  el.querySelector(".comment-toggle-btn").addEventListener("click", async () => {
+    const { openPostDetailPage } = await import("./post-detail.js");
+    openPostDetailPage(postId, { focusComment: true });
   });
-  el.querySelector(".comment-toggle-btn").addEventListener("click", () => toggleComments(postId, el, post.authorUid));
-  el.querySelector(".post-like-count").addEventListener("click", () => openLikesModal(post.likes || []));
+  // Any other tap on the card (text, photos, empty space) opens the Post
+  // Detail page — Facebook-style. The controls above are excluded here so
+  // they keep doing their own thing instead of also navigating.
+  el.addEventListener("click", async (e) => {
+    if (e.target.closest(".leaf-like-btn, .post-like-count, .kebab-menu, [data-author], .comment-toggle-btn, .clamp-toggle")) return;
+    const { openPostDetailPage } = await import("./post-detail.js");
+    openPostDetailPage(postId);
+  });
   attachClampToggle(el);
-  wirePostImageViewer(el);
   wireKebabMenus(el, {
     edit: () => openEditPostModal(postId, post.text, onChanged, post.images || []),
     delete: () => confirmDialog({
@@ -238,30 +250,58 @@ export function renderPost(postId, post, listEl, { onChanged } = {}) {
   });
 
   listEl.appendChild(el);
-
-  // Re-open comment thread if it was open before this re-render
-  if (openComments.has(postId)) {
-    const block = el.querySelector(`[data-comments-for="${postId}"]`);
-    block.classList.remove("hidden");
-    loadComments(postId, block, post.authorUid);
-  }
 }
 
-async function toggleLike(postId, currentlyLiked, btnEl, authorUid) {
+/**
+ * Paint a like button + its count pill to match `likes`. Pulled out of
+ * toggleLike() so both it (optimistic update) and any listener-driven
+ * re-render can reach the exact same visual result.
+ */
+export function paintLikeButton(btnEl, countEl, likes) {
+  const uid = auth.currentUser.uid;
+  const liked = likes.includes(uid);
+  const count = likes.length;
+  btnEl.classList.toggle("liked", liked);
+  btnEl.setAttribute("aria-pressed", String(liked));
+  btnEl.querySelector("svg").setAttribute("fill", liked ? "currentColor" : "none");
+  const label = btnEl.querySelectorAll(":scope > span")[1];
+  if (label) label.textContent = liked ? "Liked" : "Like";
+  countEl.classList.toggle("hidden", count === 0);
+  countEl.innerHTML = `<span class="leaf-mini"></span> ${count} ${count === 1 ? "like" : "likes"}`;
+}
+
+/**
+ * Like/unlike a post. Updates the button + count pill immediately (rather
+ * than waiting on a re-render), so this looks and feels identical whether
+ * it's tapped from the Wall's realtime feed or from a one-shot list like a
+ * profile's Posts tab or the Post Detail page — none of which necessarily
+ * re-render themselves on their own after this call.
+ */
+export async function toggleLike(postId, post, btnEl, countEl) {
+  const uid = auth.currentUser.uid;
+  const wasLiked = (post.likes || []).includes(uid);
+  const authorUid = post.authorUid;
+
+  post.likes = wasLiked ? (post.likes || []).filter(u => u !== uid) : [...(post.likes || []), uid];
+  paintLikeButton(btnEl, countEl, post.likes);
+
   btnEl.disabled = true;
   btnEl.classList.add("like-pop");
   const ref = doc(db, "posts", postId);
   try {
     await updateDoc(ref, {
-      likes: currentlyLiked ? arrayRemove(auth.currentUser.uid) : arrayUnion(auth.currentUser.uid)
+      likes: wasLiked ? arrayRemove(uid) : arrayUnion(uid)
     });
     // Only notify on a fresh like (not on unlike), and only if someone
     // else's post — never notify a student that they liked their own post.
-    if (!currentlyLiked && authorUid && authorUid !== auth.currentUser.uid) {
+    if (!wasLiked && authorUid && authorUid !== uid) {
       logActivity({ type: "like", targetUid: authorUid, postId });
       triggerPush({ type: "like", actorName: currentProfile.name, targetUid: authorUid });
     }
   } catch (err) {
+    // Revert the optimistic change if the write actually failed.
+    post.likes = wasLiked ? [...(post.likes || []), uid] : (post.likes || []).filter(u => u !== uid);
+    paintLikeButton(btnEl, countEl, post.likes);
     showToast("Couldn't update your like: " + err.message);
   } finally {
     btnEl.disabled = false;
@@ -273,7 +313,7 @@ async function toggleLike(postId, currentlyLiked, btnEl, authorUid) {
 // "WHO LIKED THIS" — resolves each uid to a name via the shared
 // profile cache (warmed by directory.js), fetching any it's missing.
 // ============================================================
-async function openLikesModal(uids) {
+export async function openLikesModal(uids) {
   if (!uids.length) return;
   openModal(`<div class="profile-modal-loading"><span class="btn-spinner dark"></span> Loading…</div>`);
 
@@ -307,177 +347,7 @@ async function openLikesModal(uids) {
     }));
 }
 
-// ============================================================
-// COMMENTS — professional inline thread (avatar + name + text)
-// ============================================================
-function toggleComments(postId, postEl, authorUid) {
-  const block = postEl.querySelector(`[data-comments-for="${postId}"]`);
-  const isOpen = !block.classList.contains("hidden");
-  if (isOpen) {
-    block.classList.add("hidden");
-    openComments.delete(postId);
-  } else {
-    block.classList.remove("hidden");
-    openComments.add(postId);
-    loadComments(postId, block, authorUid);
-  }
-}
-
-async function loadComments(postId, block, authorUid) {
-  block.innerHTML = `<p class="empty-state comments-loading"><span class="btn-spinner dark"></span> Loading comments…</p>`;
-  const q = query(collection(db, "posts", postId, "comments"), orderBy("createdAt", "asc"));
-  const snap = await getDocs(q);
-
-  const uid = auth.currentUser.uid;
-  let html = "";
-  snap.forEach((c) => {
-    const data = c.data();
-    const author = authorProfile(data.authorUid, data.authorName);
-    const isOwnComment = data.authorUid === uid;
-    html += `
-      <div class="comment-item">
-        <button type="button" class="avatar avatar-sm avatar-btn" data-author="${data.authorUid}">${avatarInner(author)}</button>
-        <div class="comment-body">
-          <button type="button" class="comment-author" data-author="${data.authorUid}">${nameWithBadge(data.authorName, data.authorEmail)}</button>
-          <p>${escapeHtml(data.text)}</p>
-          <small>${timeAgo(data.createdAt)}${data.editedAt ? " · edited" : ""}</small>
-        </div>
-        ${isOwnComment ? kebabMenuHtml(c.id, [
-          { action: "edit", label: "Edit Comment" },
-          { action: "delete", label: "Delete Comment", danger: true }
-        ]) : ""}
-      </div>`;
-  });
-  if (!snap.size) html = `<p class="empty-state" style="padding:10px 0;">No comments yet — be the first to reply.</p>`;
-
-  html += `
-    <div class="comment-input-row">
-      <div class="avatar avatar-sm">${avatarInner(currentProfile || {})}</div>
-      <input type="text" placeholder="Write a comment…" data-comment-input="${postId}" />
-      <button type="button" class="comment-send-btn" data-comment-send="${postId}">
-        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-      </button>
-    </div>`;
-  block.innerHTML = html;
-
-  block.querySelectorAll("[data-author]").forEach(b =>
-    b.addEventListener("click", () => openUserProfilePage(b.dataset.author)));
-
-  wireKebabMenus(block, {
-    edit: (commentId) => openEditCommentModal(postId, commentId, block, authorUid),
-    delete: (commentId) => confirmDialog({
-      title: "Delete this comment?",
-      text: "This comment will be removed from the thread. This can't be undone.",
-      confirmLabel: "Delete",
-      onConfirm: async () => {
-        await deleteDoc(doc(db, "posts", postId, "comments", commentId));
-        loadComments(postId, block, authorUid);
-      }
-    })
-  });
-
-  const sendBtn = block.querySelector(`[data-comment-send="${postId}"]`);
-  sendBtn.addEventListener("click", () => submitComment(postId, block, sendBtn, authorUid));
-  block.querySelector(`[data-comment-input="${postId}"]`).addEventListener("keydown", (e) => {
-    if (e.key === "Enter") submitComment(postId, block, sendBtn, authorUid);
-  });
-}
-
-async function submitComment(postId, block, sendBtn, authorUid) {
-  const input = block.querySelector(`[data-comment-input="${postId}"]`);
-  const text = input.value.trim();
-  if (!text) return;
-
-  input.disabled = true;
-  sendBtn.classList.add("is-loading");
-  sendBtn.disabled = true;
-  try {
-    await addDoc(collection(db, "posts", postId, "comments"), {
-      authorUid: auth.currentUser.uid,
-      authorName: currentProfile.name,
-      authorEmail: auth.currentUser.email,
-      text,
-      createdAt: serverTimestamp()
-    });
-    input.value = "";
-    loadComments(postId, block, authorUid); // refresh thread
-    // Only notify the post's author, and never notify someone that they
-    // commented on their own post — that's not a meaningful notification.
-    if (authorUid && authorUid !== auth.currentUser.uid) {
-      logActivity({ type: "comment", text, targetUid: authorUid, postId });
-      triggerPush({ type: "comment", text, actorName: currentProfile.name, targetUid: authorUid });
-    }
-  } catch (err) {
-    showToast("Couldn't send your comment: " + err.message);
-    input.disabled = false;
-    sendBtn.classList.remove("is-loading");
-    sendBtn.disabled = false;
-  }
-}
-
-// ============================================================
-// EDIT OWN COMMENT — reached via the comment's three-dot menu
-// ============================================================
-function openEditCommentModal(postId, commentId, block, authorUid) {
-  const inputEl = block.querySelector(`[data-kebab-id="${commentId}"]`)?.closest(".comment-item")?.querySelector(".comment-body p");
-  const currentText = inputEl ? inputEl.textContent : "";
-  openModal(`
-    <h3>Edit Comment</h3>
-    <textarea id="comment-edit-input" class="composer-modal-textarea" rows="3">${escapeHtml(currentText)}</textarea>
-    <p id="comment-edit-error" class="form-error"></p>
-    <button type="button" class="btn-primary full" id="comment-edit-save-btn">Save Changes</button>
-  `);
-  document.getElementById("comment-edit-save-btn").addEventListener("click", async (e) => {
-    const text = document.getElementById("comment-edit-input").value.trim();
-    const errorEl = document.getElementById("comment-edit-error");
-    if (!text) { errorEl.textContent = "Comment can't be empty."; return; }
-    setBtnLoading(e.currentTarget, true, "Saving…");
-    try {
-      await updateDoc(doc(db, "posts", postId, "comments", commentId), { text, editedAt: serverTimestamp() });
-      closeModal();
-      loadComments(postId, block, authorUid);
-    } catch (err) {
-      errorEl.textContent = "Couldn't save changes: " + err.message;
-      setBtnLoading(e.currentTarget, false);
-    }
-  });
-}
-
 /** Detach the realtime listener (call on logout to avoid leaks). */
 export function teardownWall() {
   if (unsubscribePosts) unsubscribePosts();
-}
-
-// ============================================================
-// Jump to a specific post from the Notification tab — used for
-// "posted on the Wall" / "liked your post" / "commented on your post".
-// The Wall's realtime list is already mounted in the background even
-// while another route is showing, but posts can take a moment to
-// (re)render after a fresh snapshot, so this retries briefly before
-// giving up.
-// ============================================================
-export function focusPost(postId, { expandComments = false } = {}) {
-  let attempts = 0;
-  const tryFocus = () => {
-    const el = wallList.querySelector(`.feed-post[data-post-id="${postId}"]`);
-    if (!el) return false;
-    el.scrollIntoView({ behavior: "smooth", block: "center" });
-    el.classList.add("post-flash");
-    setTimeout(() => el.classList.remove("post-flash"), 1600);
-    if (expandComments) {
-      const block = el.querySelector(`[data-comments-for="${postId}"]`);
-      if (block && block.classList.contains("hidden")) {
-        el.querySelector(".comment-toggle-btn")?.click();
-      }
-    }
-    return true;
-  };
-  if (tryFocus()) return;
-  const iv = setInterval(() => {
-    attempts++;
-    if (tryFocus() || attempts > 10) {
-      clearInterval(iv);
-      if (attempts > 10) showToast("Couldn't find that post — it may have been deleted.");
-    }
-  }, 200);
 }

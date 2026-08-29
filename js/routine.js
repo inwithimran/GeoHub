@@ -467,9 +467,8 @@ async function openActivityDestination(a) {
     case "like":
     case "comment": {
       if (!a.postId) return; // older entries logged before postId existed
-      const { focusPost } = await import("./wall.js");
-      if (goToRouteRef) goToRouteRef("wall");
-      focusPost(a.postId, { expandComments: a.type === "comment" });
+      const { openPostDetailPage } = await import("./post-detail.js");
+      openPostDetailPage(a.postId, { focusComment: a.type === "comment" });
       break;
     }
     case "resource": {
