@@ -74,12 +74,26 @@ service cloud.firestore {
     // documents each reader is allowed to see.
     match /activity/{activityId} {
       allow read: if isSignedIn() && (
+        isAdmin() ||
         !(resource.data.type in ["comment", "like"]) ||
         resource.data.targetUid == request.auth.uid ||
         resource.data.actorUid == request.auth.uid
       );
       allow create: if isSignedIn() && request.resource.data.actorUid == request.auth.uid;
-      allow update, delete: if false; // activity entries are an append-only log
+      allow update: if false; // no field may ever be edited after the fact
+      // Activity entries are otherwise an append-only log — the one
+      // exception is cleanup when the thing an entry is ABOUT gets deleted
+      // (a Wall post's "posted"/"liked"/"commented" entries, a resource's
+      // "shared a note" entry, a notice's "posted a notice" entry), so a
+      // deleted post doesn't leave a dangling notification behind. Only the
+      // actor who logged it, the person it was targeted at (a post's
+      // author, for comment/like entries), or an admin (moderation
+      // removals) may delete it.
+      allow delete: if isSignedIn() && (
+        isAdmin() ||
+        resource.data.actorUid == request.auth.uid ||
+        resource.data.targetUid == request.auth.uid
+      );
     }
 
     // ---- Student Wall posts ----

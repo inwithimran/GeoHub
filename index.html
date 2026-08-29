@@ -796,24 +796,36 @@
      gender-silhouette fallback, just with a real photo inside. ---------- */
   .avatar-fill img { width:100%; height:100%; object-fit:cover; display:block; }
 
-  /* ---------- Profile photo picker (Edit Profile modal) ---------- */
-  .pd-photo-picker { @apply flex items-center gap-3.5 mb-4; }
-  .pd-photo-preview { @apply shrink-0; }
-  .pd-photo-actions { @apply flex flex-col items-start gap-1; }
-  .pd-photo-actions small { @apply text-xs; color: var(--color-ink-faint); }
-
-  /* ---------- Media picker — "Add Photos" trigger + live preview grid,
-     shared by the post composer and Edit Post modal ---------- */
-  .media-picker { @apply mb-1; }
-  .media-picker-btn {
-    @apply inline-flex items-center gap-2 text-[.82rem] font-bold rounded-full transition-colors;
-    color: var(--color-forest-700); background: var(--color-forest-50); border:1.5px dashed var(--color-forest-200);
-    padding:8px 15px;
+  /* ---------- Profile photo picker (Edit Profile modal) — circular
+     preview with a Facebook-style camera badge; tapping it opens the
+     move/zoom cropper (see .cropper-* below) before anything uploads. ---------- */
+  .pd-photo-picker { @apply flex flex-col items-center gap-2 mb-5; }
+  .pd-photo-avatar-wrap { @apply relative shrink-0; }
+  .pd-photo-preview.avatar-lg { width:96px; height:96px; }
+  .pd-photo-camera-btn {
+    @apply absolute flex items-center justify-center rounded-full text-white transition-transform;
+    bottom:-2px; right:-2px; width:30px; height:30px; background: var(--color-forest-700);
+    box-shadow:0 0 0 3px var(--color-surface), var(--shadow-btn);
   }
-  .media-picker-btn:active { background: var(--color-forest-100); }
-  .media-picker-existing:empty { @apply hidden; }
-  .media-picker-grid, .media-picker-existing {
-    @apply grid gap-2 mt-2.5; grid-template-columns:repeat(auto-fill, minmax(72px, 1fr));
+  .pd-photo-camera-btn:active { transform:scale(.92); background: var(--color-forest-800); }
+  .pd-photo-hint { @apply text-xs text-center max-w-[220px]; color: var(--color-ink-faint); }
+
+  /* ---------- Media picker — a square image+ "add" tile sized like a
+     thumbnail, sharing one live grid with every attached photo (existing
+     + newly-picked), used by the post composer and Edit Post modal ---------- */
+  .media-picker { @apply mb-1; }
+  .media-picker-grid {
+    @apply grid gap-2 mt-1; grid-template-columns:repeat(auto-fill, minmax(72px, 1fr));
+  }
+  .media-picker-add {
+    @apply relative flex items-center justify-center rounded-xl transition-colors;
+    aspect-ratio:1/1; border:1.5px dashed var(--color-forest-200); background: var(--color-forest-50); color: var(--color-forest-600);
+  }
+  .media-picker-add:active { background: var(--color-forest-100); }
+  .media-picker-add.is-disabled { @apply opacity-40; }
+  .media-picker-add-plus {
+    @apply absolute flex items-center justify-center rounded-full text-white;
+    bottom:-4px; right:-4px; width:18px; height:18px; background: var(--color-forest-600); box-shadow:0 0 0 2px var(--color-surface);
   }
   .media-thumb { @apply relative rounded-xl overflow-hidden; aspect-ratio:1/1; box-shadow: var(--shadow-card); }
   .media-thumb img { @apply w-full h-full object-cover block; }
@@ -822,6 +834,25 @@
     top:4px; right:4px; width:20px; height:20px; background: rgba(23,36,28,.75);
   }
   .media-thumb-remove:active { background: rgba(23,36,28,.95); transform:scale(.92); }
+
+  /* ---------- Image cropper (profile photo: drag to pan, pinch/slide/
+     scroll to zoom, circular 1:1 frame) — its own full-screen overlay,
+     independent of the bottom-sheet modal system. ---------- */
+  .cropper-overlay { @apply fixed inset-0 z-[550] flex flex-col text-white; background: rgba(8,14,9,.97); }
+  .cropper-topbar { @apply flex items-center justify-between px-3 shrink-0; height:54px; }
+  .cropper-topbar button { @apply text-[.88rem] font-bold px-2.5 py-1.5 rounded-lg; }
+  .cropper-topbar button:active { background: rgba(255,255,255,.08); }
+  .cropper-cancel { color: rgba(255,255,255,.75); }
+  .cropper-save { color: var(--color-gold-500); }
+  .cropper-save:disabled { @apply opacity-40; }
+  .cropper-topbar h4 { @apply text-[.9rem] font-extrabold; font-family: var(--font-display); }
+  .cropper-stage { @apply relative flex-1 flex items-center justify-center overflow-hidden; touch-action:none; }
+  .cropper-viewport { @apply relative overflow-hidden rounded-full; box-shadow:0 0 0 2000px rgba(8,14,9,.85); }
+  .cropper-viewport img { @apply absolute select-none pointer-events-none; max-width:none; transform-origin:0 0; }
+  .cropper-controls { @apply flex items-center gap-3 px-6 shrink-0; height:64px; }
+  .cropper-zoom-icon { @apply shrink-0; color: rgba(255,255,255,.55); }
+  .cropper-zoom-slider { @apply w-full; accent-color: var(--color-gold-500); }
+  .cropper-hint { @apply text-center text-xs pb-4 shrink-0; color: rgba(255,255,255,.5); }
 
   /* ---------- Post image grid (feed card) ---------- */
   .post-image-grid { @apply grid gap-1 rounded-2xl overflow-hidden my-2; }
@@ -856,7 +887,48 @@
   .notices-page-panel { @apply hidden flex-col gap-3.5; }
   #notice-tab-body { @apply flex flex-col gap-3.5; }
   .notices-page-panel.active { @apply flex animate-fade-up; }
-  .activity-row { cursor: pointer; }
+
+  /* Per-tab unread badge — Notice and Notification each count only their
+     own unread items, and (unlike the header bell) only clear once the
+     specific item behind the count has actually been opened/read. */
+  .tab-badge {
+    @apply inline-flex items-center justify-center text-white font-extrabold rounded-full align-middle;
+    min-width:16px; height:16px; font-size:.6rem; padding:0 4px; margin-left:6px; margin-top:-1px;
+    background: linear-gradient(135deg, var(--color-danger-500), var(--color-danger-600));
+    box-shadow:0 2px 5px rgba(0,0,0,.2);
+  }
+
+  /* ---------- Notification card (Notification tab) — a distinct, flatter
+     "notification" look vs. the torn-paper Notice board card, so the two
+     tabs read as different kinds of content at a glance. Unread entries
+     are tinted, bold, and carry a dot; read ones fade back to plain. ---------- */
+  .notif-panel-head { @apply flex items-center justify-between px-1 mb-0.5; }
+  .notif-panel-head-title { @apply text-[.7rem] font-extrabold uppercase tracking-wide; color: var(--color-ink-faint); }
+  .notif-mark-all-btn {
+    @apply flex items-center justify-center rounded-full shrink-0 transition-colors;
+    width:32px; height:32px; color: var(--color-forest-700); background: var(--color-forest-100);
+  }
+  .notif-mark-all-btn:active { background: var(--color-forest-200); transform:scale(.94); }
+  .activity-row {
+    @apply relative flex flex-col gap-0 cursor-pointer transition-colors;
+    padding:13px 30px 12px 17px; border-radius:14px; border:1px solid var(--color-line);
+    background: var(--color-surface); box-shadow: var(--shadow-card);
+  }
+  .activity-row::before {
+    content:""; @apply absolute; left:0; top:10px; bottom:10px; width:3.5px; border-radius:3px;
+    background: var(--color-line);
+  }
+  .activity-row.unread { background: var(--color-forest-50); border-color: rgba(26,76,48,.18); }
+  .activity-row.unread::before { background: linear-gradient(180deg, var(--color-forest-500), var(--color-forest-700)); }
+  .activity-row.unread .notice-row-text { font-weight:700; color: var(--color-ink); }
+  .activity-row.unread .notice-row-name { color: var(--color-forest-800); }
+  .activity-row.read { opacity:.6; }
+  .activity-row.read .notice-row-text { font-weight:400; }
+  .activity-unread-dot {
+    @apply absolute rounded-full; top:14px; right:13px; width:8px; height:8px;
+    background: linear-gradient(135deg, var(--color-danger-500), var(--color-danger-600));
+    box-shadow:0 0 0 2.5px var(--color-surface);
+  }
 
   /* ---------- Modal / toast ---------- */
   .modal-overlay { @apply fixed inset-0 z-[100] flex items-end justify-center; background: rgba(8,14,9,.55); backdrop-filter:blur(2px); }
@@ -1302,13 +1374,23 @@
       <!-- ===== SECTION 8: NOTICES & NOTIFICATIONS (own page, not a modal) ===== -->
       <section id="section-notices" class="route-section">
         <div class="notices-page-tabs" role="tablist">
-          <button type="button" class="notices-page-tab-btn active" data-tab="notice">Notice</button>
-          <button type="button" class="notices-page-tab-btn" data-tab="notification">Notification</button>
+          <button type="button" class="notices-page-tab-btn active" data-tab="notice">
+            Notice<span class="tab-badge hidden" id="notice-tab-badge">0</span>
+          </button>
+          <button type="button" class="notices-page-tab-btn" data-tab="notification">
+            Notification<span class="tab-badge hidden" id="notification-tab-badge">0</span>
+          </button>
         </div>
         <div class="notices-page-panel active" data-panel="notice">
           <div id="notice-tab-body"><p class="empty-state">Loading notices…</p></div>
         </div>
         <div class="notices-page-panel" data-panel="notification">
+          <div class="notif-panel-head">
+            <span class="notif-panel-head-title">Notifications</span>
+            <button type="button" class="notif-mark-all-btn" id="notif-mark-all-btn" title="Mark all as read" aria-label="Mark all as read">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            </button>
+          </div>
           <div id="notification-list"><p class="empty-state">Loading…</p></div>
         </div>
       </section>
