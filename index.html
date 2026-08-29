@@ -755,6 +755,78 @@
   .switch-row input:checked + .switch-track { background: var(--color-forest-600); }
   .switch-row input:checked + .switch-track .switch-thumb { transform:translateX(18px); }
 
+  /* ---------- Kebab z-index fix: elevate the whole card above its
+     siblings while its own dropdown is open. Needed because some cards
+     (notice-row, in particular) use a CSS transform, which creates its
+     own stacking context and traps a plain z-index inside it. ---------- */
+  .kebab-stack-top { position:relative; z-index:40; }
+
+  /* ---------- Avatar photo (Cloudinary) — same circular frame as the
+     gender-silhouette fallback, just with a real photo inside. ---------- */
+  .avatar-fill img { width:100%; height:100%; object-fit:cover; display:block; }
+
+  /* ---------- Profile photo picker (Edit Profile modal) ---------- */
+  .pd-photo-picker { @apply flex items-center gap-3.5 mb-4; }
+  .pd-photo-preview { @apply shrink-0; }
+  .pd-photo-actions { @apply flex flex-col items-start gap-1; }
+  .pd-photo-actions small { @apply text-xs; color: var(--color-ink-faint); }
+
+  /* ---------- Media picker — "Add Photos" trigger + live preview grid,
+     shared by the post composer and Edit Post modal ---------- */
+  .media-picker { @apply mb-1; }
+  .media-picker-btn {
+    @apply inline-flex items-center gap-2 text-[.82rem] font-bold rounded-full transition-colors;
+    color: var(--color-forest-700); background: var(--color-forest-50); border:1.5px dashed var(--color-forest-200);
+    padding:8px 15px;
+  }
+  .media-picker-btn:active { background: var(--color-forest-100); }
+  .media-picker-existing:empty { @apply hidden; }
+  .media-picker-grid, .media-picker-existing {
+    @apply grid gap-2 mt-2.5; grid-template-columns:repeat(auto-fill, minmax(72px, 1fr));
+  }
+  .media-thumb { @apply relative rounded-xl overflow-hidden; aspect-ratio:1/1; box-shadow: var(--shadow-card); }
+  .media-thumb img { @apply w-full h-full object-cover block; }
+  .media-thumb-remove {
+    @apply absolute flex items-center justify-center rounded-full text-white;
+    top:4px; right:4px; width:20px; height:20px; background: rgba(23,36,28,.75);
+  }
+  .media-thumb-remove:active { background: rgba(23,36,28,.95); transform:scale(.92); }
+
+  /* ---------- Post image grid (feed card) ---------- */
+  .post-image-grid { @apply grid gap-1 rounded-2xl overflow-hidden my-2; }
+  .post-image-grid.one { grid-template-columns:1fr; }
+  .post-image-grid.two, .post-image-grid.three, .post-image-grid.many { grid-template-columns:1fr 1fr; }
+  .post-image-grid.three .post-image-item:first-child,
+  .post-image-grid.many .post-image-item:first-child { grid-row: span 2; }
+  .post-image-item { @apply relative block w-full h-full p-0 border-0 bg-transparent; aspect-ratio:1/1; }
+  .post-image-grid.one .post-image-item { aspect-ratio:16/10; }
+  .post-image-item img { @apply w-full h-full object-cover block; }
+  .post-image-more {
+    @apply absolute inset-0 flex items-center justify-center text-white font-extrabold text-lg;
+    background: rgba(11,32,21,.55);
+  }
+
+  /* ---------- Full-screen image viewer (tap a post photo to enlarge) ---------- */
+  .image-viewer-overlay {
+    @apply fixed inset-0 z-[400] flex items-center justify-center p-5;
+    background: rgba(8,14,9,.92);
+  }
+  .image-viewer-overlay img { @apply max-w-full max-h-full rounded-lg; object-fit:contain; }
+  .image-viewer-close {
+    @apply absolute flex items-center justify-center rounded-full text-white;
+    top:16px; right:16px; width:38px; height:38px; background: rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.24);
+  }
+
+  /* ---------- Notices & Notifications page — two header tabs, same
+     visual language as the Profile page's Info/Posts/Notes tabs ---------- */
+  .notices-page-tabs { @apply flex items-center gap-2 mb-1; }
+  .notices-page-tab-btn { @apply flex-1 px-6 py-2.5 rounded-full text-sm font-bold text-center transition-colors; background: var(--color-paper-deep); color: var(--color-ink-soft); }
+  .notices-page-tab-btn.active { @apply text-white; background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800)); box-shadow: var(--shadow-btn); }
+  .notices-page-panel { @apply hidden flex-col gap-3.5; }
+  #notice-tab-body { @apply flex flex-col gap-3.5; }
+  .notices-page-panel.active { @apply flex animate-fade-up; }
+  .activity-row { cursor: pointer; }
+
   /* ---------- Modal / toast ---------- */
   .modal-overlay { @apply fixed inset-0 z-[100] flex items-end justify-center; background: rgba(8,14,9,.55); backdrop-filter:blur(2px); }
   .modal-sheet { @apply relative bg-surface w-full rounded-t-[26px] overflow-y-auto animate-sheet-up; max-width:480px; padding:10px 22px 26px; max-height:88vh; }
@@ -1181,6 +1253,20 @@
           </button>
         </div>
         <div id="user-profile-card" class="profile-card-panel"></div>
+      </section>
+
+      <!-- ===== SECTION 7: NOTICES & NOTIFICATIONS (own page, not a modal) ===== -->
+      <section id="section-notices" class="route-section">
+        <div class="notices-page-tabs" role="tablist">
+          <button type="button" class="notices-page-tab-btn active" data-tab="notice">Notice</button>
+          <button type="button" class="notices-page-tab-btn" data-tab="notification">Notification</button>
+        </div>
+        <div class="notices-page-panel active" data-panel="notice">
+          <div id="notice-tab-body"><p class="empty-state">Loading notices…</p></div>
+        </div>
+        <div class="notices-page-panel" data-panel="notification">
+          <div id="notification-list"><p class="empty-state">Loading…</p></div>
+        </div>
       </section>
 
     </main>

@@ -28,6 +28,21 @@ service cloud.firestore {
       allow create: if isOwner(uid);              // only during signup, by that student
       allow update: if isOwner(uid);              // students can edit only their own profile
       allow delete: if false;
+
+      // Push-notification device tokens (js/push.js) — a student can only
+      // register/revoke tokens on their OWN account. The Vercel API route
+      // in /api/send-push.js reads across everyone's tokens via the Admin
+      // SDK, which bypasses these rules entirely, so this stays owner-only.
+      match /fcmTokens/{token} {
+        allow read, write: if isOwner(uid);
+      }
+    }
+
+    // ---- Activity feed (Notices & Notifications -> "Notification" tab) ----
+    match /activity/{activityId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.actorUid == request.auth.uid;
+      allow update, delete: if false; // activity entries are an append-only log
     }
 
     // ---- Student Wall posts ----
