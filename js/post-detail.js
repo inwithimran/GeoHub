@@ -25,7 +25,7 @@ import {
 } from "./ui-utils.js";
 import { authorProfile, openEditPostModal, deletePost, toggleLike, openLikesModal } from "./wall.js";
 import { openUserProfilePage } from "./profile-view.js";
-import { postImagesHtml, wirePostImageViewer } from "./media-picker.js";
+import { postImagesHtml, wirePostImageViewer, applyPostImageRatios } from "./media-picker.js";
 import { triggerPush } from "./push-trigger.js";
 import { logActivity } from "./routine.js";
 
@@ -194,6 +194,7 @@ function renderPostDetail(postId, post, comments, container, { focusComment, onD
   likeCountBtn.addEventListener("click", () => openLikesModal(post.likes || []));
   postEl.querySelector(".comment-jump-btn").addEventListener("click", () => focusCommentInput(container));
   attachClampToggle(postEl);
+  applyPostImageRatios(postEl);
   wirePostImageViewer(postEl);
   wireKebabMenus(postEl, {
     edit: () => openEditPostModal(postId, post.text, () => {}, post.images || []),

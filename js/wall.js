@@ -19,7 +19,7 @@ import { openUserProfilePage } from "./profile-view.js";
 import { uploadImages } from "./cloudinary.js";
 import { logActivity, deleteActivityForPost } from "./routine.js";
 import { triggerPush } from "./push-trigger.js";
-import { imagePickerHtml, wireImagePicker, postImagesHtml } from "./media-picker.js";
+import { imagePickerHtml, wireImagePicker, postImagesHtml, applyPostImageRatios } from "./media-picker.js";
 
 const wallList = document.getElementById("wall-list");
 const composerTrigger = document.getElementById("composer-trigger");
@@ -327,6 +327,7 @@ export function renderPost(postId, post, listEl, { onChanged } = {}) {
     openPostDetailPage(postId);
   });
   attachClampToggle(el);
+  applyPostImageRatios(el);
   wireKebabMenus(el, {
     edit: () => openEditPostModal(postId, post.text, onChanged, post.images || []),
     delete: () => confirmDialog({

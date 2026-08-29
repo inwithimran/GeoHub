@@ -127,6 +127,31 @@ export function postImagesHtml(images = []) {
     </div>`;
 }
 
+// Single-photo posts show the photo at (a clamped version of) its own
+// aspect ratio instead of always being force-cropped into a fixed box —
+// these bounds keep an extreme portrait/landscape photo from blowing up
+// the feed card too tall or too short, matching the cap most feeds use.
+const SINGLE_IMAGE_MIN_RATIO = 0.66; // tallest allowed (portrait)
+const SINGLE_IMAGE_MAX_RATIO = 1.91; // widest allowed (landscape)
+
+/** Set each single-photo post's card to its real (clamped) aspect ratio once the image has loaded. Idempotent — safe to call on every re-render. */
+export function applyPostImageRatios(root) {
+  root.querySelectorAll(".post-image-grid.one .post-image-item").forEach(item => {
+    if (item.dataset.ratioApplied) return;
+    const img = item.querySelector("img");
+    if (!img) return;
+    const setRatio = () => {
+      if (!img.naturalWidth || !img.naturalHeight) return;
+      item.dataset.ratioApplied = "1";
+      const raw = img.naturalWidth / img.naturalHeight;
+      const ratio = Math.min(SINGLE_IMAGE_MAX_RATIO, Math.max(SINGLE_IMAGE_MIN_RATIO, raw));
+      item.style.aspectRatio = String(ratio);
+    };
+    if (img.complete) setRatio();
+    else img.addEventListener("load", setRatio, { once: true });
+  });
+}
+
 /** Wires tap-to-enlarge for every `[data-view-image]` under `root` (idempotent — safe to call on every re-render). */
 export function wirePostImageViewer(root) {
   root.querySelectorAll("[data-view-image]").forEach(btn => {

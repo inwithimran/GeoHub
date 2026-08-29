@@ -4,11 +4,14 @@
 // the auth screen and the app shell, and handles SPA routing
 // between the 5 sections via the sidebar / bottom nav.
 // ============================================================
-import { DEPARTMENT_NAME, COLLEGE_NAME } from "./firebase-config.js";
+import { DEPARTMENT_NAME, COLLEGE_NAME, auth } from "./firebase-config.js";
 import {
   signUp, logIn, logOut, watchAuthState, friendlyAuthError, currentProfile,
-  signInWithGoogle, updateProfileDetails
+  signInWithGoogle, updateProfileDetails, nameChangeStatus
 } from "./auth.js";
+import {
+  sendPasswordResetEmail
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import { initWall, teardownWall } from "./wall.js";
 import { initResources, teardownResources, loadUserResources } from "./resources.js";
 import { initDirectory, teardownDirectory } from "./directory.js";
@@ -219,6 +222,7 @@ const routeTitles = {
   routine: "Weekly Routine",
   profile: "My Profile",
   notices: "Notices & Notifications",
+  settings: "Settings",
   "user-profile": "Profile", // overwritten with the classmate's name once loaded
   "post-detail": "Post" // overwritten with "<name>'s Post" once loaded
 };
@@ -244,9 +248,17 @@ function goToRoute(route, { fromPopstate = false, replace = false, state = {} } 
     btn.classList.toggle("active", btn.dataset.route === route);
   });
   document.getElementById("topbar-title").textContent = routeTitles[route] || "GeoHub";
-  document.getElementById("topbar-subtitle").textContent = route === "user-profile" ? "Classmate Profile" : "Geography & Environment";
+  document.getElementById("topbar-subtitle").textContent = route === "user-profile" ? "Classmate Profile" : route === "settings" ? "App preferences & account" : "Geography & Environment";
 
   if (route === "profile") renderProfile();
+  if (route === "settings") renderSettingsPage();
+  // Fix for every route sharing one page-level scroll container: navigating
+  // used to leave the window at whatever scrollTop the previous screen left
+  // behind, so e.g. Wall (scrolled halfway down) -> Profile could open
+  // already "scrolled" past its own top. Reset on every navigation — including
+  // classmate A's profile -> classmate B's profile, which keeps the same
+  // "user-profile" route but is a brand new page underneath it.
+  window.scrollTo({ top: 0, behavior: "auto" });
   // NOTE: opening the Notices & Notifications page (or either of its tabs)
   // deliberately does NOT clear the bell/tab badges anymore — only reading
   // (or deleting) the specific notice/notification behind the count does,
@@ -274,6 +286,9 @@ document.querySelectorAll(".nav-item[data-route]").forEach(btn => {
 });
 document.getElementById("topbar-notif-btn").addEventListener("click", () => {
   if (currentRoute !== "notices") goToRoute("notices");
+});
+document.getElementById("topbar-settings-btn").addEventListener("click", () => {
+  if (currentRoute !== "settings") goToRoute("settings");
 });
 
 // Device/browser back button: step back to whichever section is recorded
@@ -331,7 +346,7 @@ function confirmLogout() {
   });
 }
 document.getElementById("logout-btn-desktop").addEventListener("click", confirmLogout);
-document.getElementById("logout-btn-mobile").addEventListener("click", confirmLogout);
+document.getElementById("logout-btn-settings").addEventListener("click", confirmLogout);
 
 // ============================================================
 // PROFILE SECTION — card-free, flowing layout for the logged-in student
@@ -388,12 +403,6 @@ function renderProfile() {
         <div class="profile-flow-details">
           ${rows.map(([label, val]) => `<div class="profile-detail-row"><span>${label}</span><span>${val}</span></div>`).join("")}
         </div>
-        <div class="profile-flow-actions">
-          <button type="button" id="profile-edit-btn" class="profile-edit-btn">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-            Edit Profile &amp; Privacy
-          </button>
-        </div>
       </div>
 
       <div class="profile-tab-panel" data-tab-panel="posts">
@@ -405,7 +414,10 @@ function renderProfile() {
       </div>
     </div>
   `;
-  document.getElementById("profile-edit-btn").addEventListener("click", () => openProfileDetailsModal(false));
+  // The pencil FAB on the avatar is the one and only "edit profile" entry
+  // point on this page now (the Settings page also links here) — there
+  // used to be a second, redundant "Edit Profile & Privacy" button at the
+  // bottom of the Info tab.
   document.getElementById("profile-edit-fab").addEventListener("click", () => openProfileDetailsModal(false));
 
   const profileCardEl = document.getElementById("profile-card");
@@ -432,6 +444,76 @@ function renderProfile() {
 }
 
 // ============================================================
+// SETTINGS PAGE — reached via the gear icon next to the header
+// bell. A handful of real, working settings (not placeholders):
+// jump-off points to Edit Profile & Privacy and a password reset
+// email, a push-notifications toggle, an About blurb, and Log Out
+// as the very last thing on the page.
+// ============================================================
+function renderSettingsPage() {
+  const pushToggle = document.getElementById("settings-push-toggle");
+  const pushStatus = document.getElementById("settings-push-status");
+  const resetPwBtn = document.getElementById("settings-reset-password-btn");
+
+  document.getElementById("settings-edit-profile-btn").onclick = () => openProfileDetailsModal(false);
+
+  // Password reset only makes sense for an email/password account — a
+  // Google-only sign-in has no GeoHub password to reset.
+  const hasPasswordProvider = !!auth.currentUser?.providerData?.some(p => p.providerId === "password");
+  resetPwBtn.classList.toggle("hidden", !hasPasswordProvider);
+  resetPwBtn.onclick = async () => {
+    const email = auth.currentUser?.email;
+    if (!email) return;
+    setBtnLoading(resetPwBtn, true, "Sending…");
+    try {
+      await sendPasswordResetEmail(auth, email);
+      showToast(`Password reset link sent to ${email}.`);
+    } catch (err) {
+      showToast("Couldn't send reset email: " + err.message);
+    } finally {
+      setBtnLoading(resetPwBtn, false);
+    }
+  };
+
+  // Push notifications — reflects real browser support/permission rather
+  // than an arbitrary in-app flag, so the switch never lies about whether
+  // notifications will actually arrive.
+  const pushSupported = ("Notification" in window) && ("serviceWorker" in navigator);
+  if (!pushSupported) {
+    pushToggle.disabled = true;
+    pushToggle.checked = false;
+    pushStatus.textContent = "Not supported in this browser.";
+  } else if (Notification.permission === "denied") {
+    pushToggle.disabled = true;
+    pushToggle.checked = false;
+    pushStatus.textContent = "Blocked in your browser's site settings.";
+  } else {
+    pushToggle.disabled = false;
+    pushToggle.checked = Notification.permission === "granted";
+    pushStatus.textContent = pushToggle.checked
+      ? "You'll be notified about posts, likes & comments."
+      : "Get notified about posts, likes & comments.";
+  }
+  pushToggle.onchange = async () => {
+    if (pushToggle.checked) {
+      await initPush();
+      const granted = Notification.permission === "granted";
+      pushToggle.checked = granted;
+      pushStatus.textContent = granted
+        ? "You'll be notified about posts, likes & comments."
+        : "Get notified about posts, likes & comments.";
+      if (!granted) showToast("Notifications permission wasn't granted.");
+    } else {
+      pushToggle.disabled = true;
+      await unregisterPushToken();
+      pushToggle.disabled = false;
+      pushStatus.textContent = "Get notified about posts, likes & comments.";
+      showToast("This device won't receive push notifications anymore.");
+    }
+  };
+}
+
+// ============================================================
 // COMPLETE / EDIT PROFILE DETAILS — used right after a first-time
 // Google sign-in (roll/blood/phone are unknown) and later from the
 // "Edit" button on My Profile.
@@ -439,6 +521,9 @@ function renderProfile() {
 function openProfileDetailsModal(isFirstTime = false) {
   // First-time completion (right after a Google sign-in) is mandatory —
   // no close button, and it can't be dismissed until it's saved.
+  // A brand-new profile has never changed its name before (nameChangedAt
+  // is null), so this is always editable during first-time completion.
+  const nameStatus = isFirstTime ? { canChange: true, daysRemaining: 0 } : nameChangeStatus();
   openModal(`
     <h3>${isFirstTime ? "Finish setting up your profile" : "Edit your details"}</h3>
     ${isFirstTime ? `<p class="modal-hint">Welcome to GeoHub! We just need a few more details so classmates can find you in the directory.</p>` : ""}
@@ -454,6 +539,13 @@ function openProfileDetailsModal(isFirstTime = false) {
       <input type="file" id="pd-photo-input" accept="image/*" class="hidden" />
     </div>
 
+    <label class="field">
+      <span>Full Name</span>
+      <input type="text" id="pd-name" placeholder="Your full name" value="${escapeHtml(currentProfile.name || "")}" ${nameStatus.canChange ? "" : "disabled"} />
+      <small class="pd-name-hint">${nameStatus.canChange
+        ? "You can change your name once every 7 days."
+        : `You've already changed your name recently — you can change it again in ${nameStatus.daysRemaining} day${nameStatus.daysRemaining === 1 ? "" : "s"}.`}</small>
+    </label>
     <label class="field">
       <span>Roll / Registration No.</span>
       <input type="text" id="pd-roll" placeholder="e.g. 2024-GEO-014" value="${escapeHtml(currentProfile.roll || "")}" />
@@ -547,6 +639,8 @@ function openProfileDetailsModal(isFirstTime = false) {
 
 async function saveProfileDetails(isFirstTime, getSelectedPhotoFile) {
   const btn = document.getElementById("pd-save-btn");
+  const nameInput = document.getElementById("pd-name");
+  const name = nameInput.disabled ? currentProfile.name : nameInput.value.trim();
   const roll = document.getElementById("pd-roll").value.trim();
   const blood = document.getElementById("pd-blood").value;
   const gender = document.getElementById("pd-gender").value;
@@ -561,8 +655,8 @@ async function saveProfileDetails(isFirstTime, getSelectedPhotoFile) {
   const hideEmail = document.getElementById("pd-hide-email").checked;
   const errorEl = document.getElementById("pd-error");
 
-  if (!roll || !blood || !phone || !gender) {
-    errorEl.textContent = "Please fill in roll, blood group, gender and phone.";
+  if (!name || !roll || !blood || !phone || !gender) {
+    errorEl.textContent = "Please fill in name, roll, blood group, gender and phone.";
     return;
   }
   errorEl.textContent = "";
@@ -575,12 +669,14 @@ async function saveProfileDetails(isFirstTime, getSelectedPhotoFile) {
       photoURL = await uploadImage(selectedPhotoFile, { maxDim: 600, quality: 0.85, folder: "geohub/avatars" });
       setBtnLoading(btn, true, "Saving…");
     }
-    await updateProfileDetails({ roll, blood, gender, phone, year, session, hometown, address, socialLink, bio, hidePhone, hideEmail, photoURL });
+    await updateProfileDetails({ name, roll, blood, gender, phone, year, session, hometown, address, socialLink, bio, hidePhone, hideEmail, photoURL });
     closeModal({ force: true }); // needed for the mandatory first-time flow, harmless otherwise
     showToast(isFirstTime ? "Profile complete — welcome aboard!" : "Profile updated.");
     if (!document.getElementById("section-profile").classList.contains("hidden")) renderProfile();
   } catch (err) {
-    errorEl.textContent = "Couldn't save your details. Please try again.";
+    errorEl.textContent = err.message && err.message.startsWith("You can change your name again")
+      ? err.message
+      : "Couldn't save your details. Please try again.";
     setBtnLoading(btn, false);
   }
 }

@@ -45,6 +45,35 @@ export let currentProfile = null;
 
 const googleProvider = new GoogleAuthProvider();
 
+// ============================================================
+// NAME CHANGE COOLDOWN — a student may change their display name, but
+// only once every 7 days. `nameChangedAt` on the profile doc records the
+// last time it actually changed (null until the first edit, so the very
+// first change is never blocked). Enforced here for the UI AND, for real,
+// in firestore.rules — this client-side check alone is just a courtesy;
+// it can't be trusted to stop someone from writing to Firestore directly.
+// ============================================================
+const NAME_CHANGE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+
+function toMillis(ts) {
+  if (!ts) return 0;
+  if (typeof ts.toMillis === "function") return ts.toMillis(); // Firestore Timestamp
+  if (typeof ts.toDate === "function") return ts.toDate().getTime();
+  if (ts instanceof Date) return ts.getTime();
+  return 0;
+}
+
+/** Whether the logged-in student can change their name right now, and if not, how many days until they can. */
+export function nameChangeStatus() {
+  const lastMs = toMillis(currentProfile?.nameChangedAt);
+  if (!lastMs) return { canChange: true, daysRemaining: 0 };
+  const elapsed = Date.now() - lastMs;
+  if (elapsed >= NAME_CHANGE_COOLDOWN_MS) return { canChange: true, daysRemaining: 0 };
+  const daysRemaining = Math.max(1, Math.ceil((NAME_CHANGE_COOLDOWN_MS - elapsed) / (24 * 60 * 60 * 1000)));
+  return { canChange: false, daysRemaining };
+}
+
+
 /**
  * Create a new account, then create the matching Firestore profile doc.
  * @param {{name:string, roll:string, blood:string, phone:string, email:string, password:string}} data
@@ -74,6 +103,7 @@ export async function signUp(data) {
     socialLink: "",
     hidePhone,
     hideEmail,
+    nameChangedAt: null,
     createdAt: serverTimestamp()
   };
   await setDoc(doc(db, "users", cred.user.uid), profile);
@@ -134,7 +164,7 @@ export async function signInWithGoogle() {
  * privacy toggles that control what classmates can see (and whether
  * they can call this student).
  */
-export async function updateProfileDetails({ roll, blood, phone, bio, session, year, hometown, address, socialLink, gender, hidePhone, hideEmail, photoURL }) {
+export async function updateProfileDetails({ name, roll, blood, phone, bio, session, year, hometown, address, socialLink, gender, hidePhone, hideEmail, photoURL }) {
   const uid = auth.currentUser.uid;
   const realPhone = phone.trim();
   const realEmail = (currentProfile && currentProfile.email) || auth.currentUser.email || "";
@@ -160,6 +190,22 @@ export async function updateProfileDetails({ roll, blood, phone, bio, session, y
   if (gender !== undefined && gender) updates.gender = gender;
   if (photoURL !== undefined && photoURL) updates.photoURL = photoURL;
 
+  // Name change — gated to once every 7 days (see nameChangeStatus above).
+  // A no-op edit (unchanged, or same text after trimming) never touches
+  // nameChangedAt, so re-saving the rest of the form never starts a fresh
+  // cooldown by accident.
+  if (name !== undefined) {
+    const trimmedName = name.trim();
+    if (trimmedName && trimmedName !== (currentProfile?.name || "")) {
+      const status = nameChangeStatus();
+      if (!status.canChange) {
+        throw new Error(`You can change your name again in ${status.daysRemaining} day${status.daysRemaining === 1 ? "" : "s"}.`);
+      }
+      updates.name = trimmedName;
+      updates.nameChangedAt = serverTimestamp();
+    }
+  }
+
   await updateDoc(doc(db, "users", uid), updates);
   // The real, unmasked phone always lives in the private subdocument, so a
   // hidden number still round-trips correctly the next time this student
@@ -167,6 +213,10 @@ export async function updateProfileDetails({ roll, blood, phone, bio, session, y
   await setDoc(doc(db, "users", uid, "private", "contact"), { phone: realPhone, email: realEmail }, { merge: true });
 
   currentProfile = { ...currentProfile, ...updates, phone: realPhone, email: realEmail };
+  // serverTimestamp() above is a write-time sentinel, not a real value —
+  // stand in a local Date so nameChangeStatus() has something to compare
+  // against immediately, until the next fetch replaces it with the real one.
+  if (updates.nameChangedAt) currentProfile.nameChangedAt = new Date();
   return currentProfile;
 }
 
@@ -225,6 +275,7 @@ export function watchAuthState(onLogin, onLogout) {
           socialLink: "",
           hidePhone: false,
           hideEmail: false,
+          nameChangedAt: null,
           createdAt: serverTimestamp(),
           profileIncomplete: true
         };
