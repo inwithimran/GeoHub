@@ -675,6 +675,22 @@
   .notice-row-top .kebab-menu { @apply ml-auto -mr-1.5 -mt-1; }
   .notice-row { @apply cursor-pointer; }
 
+  /* ---------- Admin — Reported Posts modal ---------- */
+  .btn-outline.small { @apply text-[.78rem] w-auto; padding:7px 13px; }
+  .btn-outline.small.danger-solid { border-color: var(--color-danger-600); color: var(--color-danger-600); }
+  .btn-outline.small.danger-solid:active { background: var(--color-danger-600); color:#fff; }
+  .report-row {
+    @apply flex flex-col gap-1.5 rounded-2xl bg-surface;
+    padding:14px; border:1px solid var(--color-line);
+  }
+  .report-post-snippet { @apply text-[.88rem] leading-snug; color: var(--color-ink); }
+  .report-reason { @apply text-[.82rem] font-semibold; color: var(--color-clay-600); }
+  .report-row small { @apply text-xs; color: var(--color-ink-faint); }
+  .report-row-actions { @apply flex gap-2 mt-1.5 flex-wrap; }
+
+  /* ---------- Directory — Year filter chips ---------- */
+  .directory-year-chips { @apply mb-2.5; }
+
   .routine-day { @apply relative bg-surface rounded-2xl shadow-[var(--shadow-card)] border overflow-hidden; padding:0 16px 8px; border-color:rgba(26,76,48,.06); }
   .routine-day h4 {
     @apply text-[.74rem] font-extrabold uppercase text-white -mx-4 mb-1.5;
@@ -1236,7 +1252,7 @@
       <section id="section-directory" class="route-section">
         <div class="search-bar">
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input type="text" id="directory-search" placeholder="Search by name or blood group (e.g. B+)" />
+          <input type="text" id="directory-search" placeholder="Search by name, roll, or blood group (e.g. B+)" />
         </div>
         <div id="directory-list">
           <p class="empty-state">Loading classmates…</p>

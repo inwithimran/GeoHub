@@ -21,13 +21,38 @@ service cloud.firestore {
         "in.with.imran@gmail.com"
       ];
     }
+    // True if this update ONLY touches the given set of fields (used to let
+    // "anyone signed in" flip a single narrow field — like a like/vote array —
+    // without opening up the rest of the document to editing by non-owners).
+    function onlyChangedFields(fields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
+    }
 
     // ---- Student profiles (also powers the Classmate Directory) ----
+    // NOTE: real phone/email now live in the users/{uid}/private/contact
+    // subdocument (owner + admin read only, see below). The `phone` and
+    // `email` fields on THIS public document are only ever written as
+    // "visible mirrors" by the app (js/auth.js) — blanked out client-side
+    // whenever the student has hidePhone/hideEmail turned on — because
+    // Firestore rules can't hide individual fields of a document that's
+    // otherwise readable. Anyone editing this document by hand (e.g. via
+    // the Firebase console) should keep that mirroring in mind.
     match /users/{uid} {
       allow read: if isSignedIn();               // any classmate can view the directory
       allow create: if isOwner(uid);              // only during signup, by that student
       allow update: if isOwner(uid);              // students can edit only their own profile
       allow delete: if false;
+
+      // Real, unmasked contact details. Only the student themself (to
+      // populate their own edit form) or an admin (for real emergencies —
+      // e.g. reaching a student the CR needs to contact directly) can
+      // read this. Regular classmates never can, even if they know the
+      // uid and try to read it directly — this is what actually enforces
+      // "Hide my phone/email", rather than just hiding it in the UI.
+      match /private/{docId} {
+        allow read: if isOwner(uid) || isAdmin();
+        allow write: if isOwner(uid);
+      }
 
       // Push-notification device tokens (js/push.js) — a student can only
       // register/revoke tokens on their OWN account. The Vercel API route
@@ -61,14 +86,23 @@ service cloud.firestore {
     match /posts/{postId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.authorUid == request.auth.uid;
-      // Allow the author to edit their own post, OR anyone signed in to toggle the "likes" array
-      allow update: if isSignedIn();
-      allow delete: if isOwner(resource.data.authorUid);
+      // The author can edit anything on their own post. Anyone else who's
+      // signed in may ONLY flip the "likes" array (tapping Like/Unlike) —
+      // every other field is locked to the author. An admin may also
+      // delete-by-clearing... no: moderation is a separate delete rule below,
+      // not routed through update, so a moderator can never silently rewrite
+      // someone's post text.
+      allow update: if isOwner(resource.data.authorUid) ||
+        (isSignedIn() && onlyChangedFields(["likes"]));
+      // The author can delete their own post; an admin can remove any post
+      // as a moderation action (e.g. after a report).
+      allow delete: if isOwner(resource.data.authorUid) || isAdmin();
 
       match /comments/{commentId} {
         allow read: if isSignedIn();
         allow create: if isSignedIn() && request.resource.data.authorUid == request.auth.uid;
-        allow update, delete: if isOwner(resource.data.authorUid);
+        allow update: if isOwner(resource.data.authorUid);
+        allow delete: if isOwner(resource.data.authorUid) || isAdmin();
       }
     }
 
@@ -76,7 +110,8 @@ service cloud.firestore {
     match /resources/{resId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.contributorUid == request.auth.uid;
-      allow update, delete: if isOwner(resource.data.contributorUid);
+      allow update: if isOwner(resource.data.contributorUid);
+      allow delete: if isOwner(resource.data.contributorUid) || isAdmin();
     }
 
     // ---- Notice board: only CR/admin can write, everyone can read ----
@@ -90,6 +125,24 @@ service cloud.firestore {
     match /routine/{docId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
+    }
+
+    // ---- Reports (Wall posts a student flags for the admin/CR to review) ----
+    // Any signed-in student can file a report; only the admin can read the
+    // queue or resolve (delete) a report once it's been handled.
+    match /reports/{reportId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn() && request.resource.data.reportedByUid == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // ---- Per-user push-notification rate limiting ----
+    // Written only by the Vercel API route (api/send-push.js) via the Admin
+    // SDK, which bypasses these rules — this match just makes sure no
+    // student can read or tamper with their own cooldown timer from the
+    // client to bypass the spam guard.
+    match /pushRateLimits/{uid} {
+      allow read, write: if false;
     }
   }
 }
