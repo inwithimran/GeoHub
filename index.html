@@ -81,10 +81,14 @@
   --animate-ring:     ring-spin .9s cubic-bezier(.5,0,.5,1) infinite;
   --animate-ring-rev: ring-spin 1.5s linear infinite reverse;
   --animate-contour:  contour-drift 26s linear infinite;
+  --animate-modal-pop: modal-pop .2s cubic-bezier(.2,.8,.3,1) both;
+  --animate-shimmer:   shimmer 1.4s ease-in-out infinite;
 }
 
 @keyframes fade-up   { from{ opacity:0; transform:translateY(5px);} to{ opacity:1; transform:translateY(0);} }
 @keyframes sheet-up   { from{ opacity:0; transform:translateY(42px);} to{ opacity:1; transform:translateY(0);} }
+@keyframes modal-pop  { from{ opacity:0; transform:translateY(10px) scale(.97);} to{ opacity:1; transform:translateY(0) scale(1);} }
+@keyframes shimmer    { 0%{ background-position:-120% 0;} 100%{ background-position:120% 0;} }
 @keyframes form-in    { from{ opacity:0; transform:translateY(6px);} to{ opacity:1; transform:translateY(0);} }
 @keyframes leaf-pop   { 0%{ transform:scale(1) rotate(0);} 45%{ transform:scale(1.35) rotate(-12deg);} 100%{ transform:scale(1) rotate(0);} }
 @keyframes dot-pulse  { 0%,80%,100%{ opacity:.3; transform:scale(.85);} 40%{ opacity:1; transform:scale(1.12);} }
@@ -245,6 +249,10 @@
   .field input:focus, .field select:focus, textarea:focus, #notice-input:focus {
     outline:none; border-bottom-width:2px; border-color: var(--color-forest-600); background: var(--color-forest-50);
   }
+  .field input:disabled, .field select:disabled, .field textarea:disabled {
+    @apply opacity-60 cursor-not-allowed;
+  }
+  .pd-name-hint { @apply text-[.72rem] leading-snug pl-1; color: var(--color-ink-faint); }
 
   /* .field-line — Log In / Sign Up fields only: no box, transparent
      background, underline only, with a small leading icon. */
@@ -354,12 +362,14 @@
   #topbar-title { @apply text-[1rem] font-extrabold whitespace-nowrap overflow-hidden text-ellipsis; }
   #topbar-subtitle { @apply text-[.68rem] opacity-80 font-semibold whitespace-nowrap overflow-hidden text-ellipsis; }
 
-  /* ---------- Header notification bell (replaces the old profile button) ---------- */
+  /* ---------- Header notification bell + settings gear (replaces the old profile button) ---------- */
+  .topbar-actions { @apply flex items-center shrink-0; gap:8px; }
   .topbar-notif-btn {
     @apply relative flex items-center justify-center shrink-0 rounded-full transition-transform;
     width:38px; height:38px; background: rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.16); color:#fff;
   }
   .topbar-notif-btn:active { background: rgba(255,255,255,.2); transform:scale(.93); }
+  @media (hover:hover) { .topbar-notif-btn:hover { background: rgba(255,255,255,.2); } }
   .notif-badge {
     @apply absolute flex items-center justify-center text-white font-extrabold rounded-full;
     top:-4px; right:-4px; min-width:17px; height:17px; font-size:.6rem; padding:0 4px;
@@ -745,7 +755,7 @@
   .profile-stat-chip span { @apply text-[.62rem] font-bold uppercase tracking-wide; color: var(--color-ink-faint); }
 
   .profile-flow-details {
-    @apply mt-4 text-left bg-surface rounded-[22px] shadow-[var(--shadow-card)];
+    @apply text-left bg-surface rounded-[22px] shadow-[var(--shadow-card)];
     padding:6px 16px; border:1px solid rgba(26,76,48,.05);
   }
   .profile-flow-actions { @apply text-center; padding:18px 0 22px; }
@@ -754,14 +764,16 @@
   .profile-detail-row span:first-child { @apply font-semibold shrink-0; color: var(--color-ink-faint); }
   .profile-detail-row span:last-child { @apply font-bold text-right break-words; }
   .hidden-field-tag { @apply text-[.66rem] font-extrabold rounded-md ml-1.5 uppercase tracking-wide; background: var(--color-paper-deep); color: var(--color-ink-faint); padding:2px 7px; }
-  .profile-edit-btn { @apply inline-flex items-center gap-1.5 text-sm font-bold text-white rounded-full; background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-700)); padding:11px 22px; box-shadow: var(--shadow-btn); }
 
   /* ---------- Profile page header tabs (Info / Posts) — shared by
      "My Profile" and any classmate's full profile page. ---------- */
   .profile-tabs { @apply relative z-[1] flex items-center justify-center gap-2 mt-5 mb-1; }
   .profile-tab-btn { @apply px-6 py-2 rounded-full text-sm font-bold transition-colors; background: var(--color-paper-deep); color: var(--color-ink-soft); }
   .profile-tab-btn.active { @apply text-white; background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800)); box-shadow: var(--shadow-btn); }
-  .profile-tab-panel { @apply hidden; }
+  /* Every tab panel (Info/Posts/Notes) gets the same top gap under the
+     tab bar — previously only Info had this margin (on its own inner
+     details card), so switching to Posts/Notes visually "jumped up". */
+  .profile-tab-panel { @apply hidden; margin-top:16px; }
   .profile-tab-panel.active { @apply block animate-fade-up; }
 
   /* ---------- Full-page classmate profile (drill-down, not a modal) ---------- */
@@ -870,8 +882,33 @@
   .post-image-grid.three .post-image-item:first-child,
   .post-image-grid.many .post-image-item:first-child { grid-row: span 2; }
   .post-image-item { @apply relative block w-full h-full p-0 border-0 bg-transparent; aspect-ratio:1/1; }
-  .post-image-grid.one .post-image-item { aspect-ratio:16/10; }
+  /* Single-photo posts show the photo at (a clamped version of) its own
+     ratio instead of always being force-cropped to a fixed 16:10 box —
+     applyPostImageRatios() in media-picker.js sets the real aspect-ratio
+     inline once the image has loaded; this is just the pre-load fallback. */
+  .post-image-grid.one .post-image-item { aspect-ratio:4/3; background: var(--color-paper-deep); }
   .post-image-item img { @apply w-full h-full object-cover block; }
+
+  /* ---------- Wall skeleton loading (shown while the first page of posts
+     is still being fetched) ---------- */
+  .skeleton-post { @apply bg-surface rounded-2xl overflow-hidden; padding:14px 16px 16px; box-shadow: var(--shadow-card); border:1px solid rgba(26,76,48,.06); }
+  .skeleton-post-head { @apply flex items-center gap-2.5 mb-3.5; }
+  .skeleton-line, .skeleton-avatar, .skeleton-block { position:relative; overflow:hidden; background: var(--color-paper-deep); }
+  .skeleton-line::after, .skeleton-avatar::after, .skeleton-block::after {
+    content:""; position:absolute; inset:0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent);
+    background-size:200% 100%; animation: var(--animate-shimmer);
+  }
+  .skeleton-avatar { @apply rounded-full shrink-0; width:38px; height:38px; }
+  .skeleton-head-lines { @apply flex-1 flex flex-col gap-1.5; }
+  .skeleton-line { @apply rounded-full; height:9px; }
+  .skeleton-line.sk-40 { width:40%; }
+  .skeleton-line.sk-25 { width:25%; }
+  .skeleton-line.sk-90 { width:90%; }
+  .skeleton-line.sk-70 { width:70%; }
+  .skeleton-line.sk-50 { width:50%; }
+  .skeleton-post-text { @apply flex flex-col gap-2 mb-3; }
+  .skeleton-block { @apply rounded-xl; height:160px; }
   .post-image-more {
     @apply absolute inset-0 flex items-center justify-center text-white font-extrabold text-lg;
     background: rgba(11,32,21,.55);
@@ -939,6 +976,34 @@
     box-shadow:0 0 0 2.5px var(--color-surface);
   }
 
+  /* ---------- Settings page (opened via the header gear icon) ---------- */
+  .settings-page { @apply flex flex-col; gap:18px; }
+  .settings-group { @apply bg-surface rounded-[20px] overflow-hidden; box-shadow: var(--shadow-card); border:1px solid rgba(26,76,48,.06); }
+  .settings-group-title { @apply text-[.7rem] font-extrabold uppercase tracking-wide; color: var(--color-ink-faint); padding:14px 16px 4px; }
+  .settings-row { @apply w-full flex items-center gap-3 text-left transition-colors border-b; padding:13px 16px; border-color: var(--color-line); }
+  .settings-group .settings-row:last-child { @apply border-b-0; }
+  button.settings-row:active { background: var(--color-paper-deep); }
+  .settings-row-icon {
+    @apply flex items-center justify-center shrink-0 rounded-full; width:36px; height:36px;
+    background: var(--color-forest-50); color: var(--color-forest-700);
+  }
+  .settings-row-text { @apply flex-1 min-w-0 flex flex-col; }
+  .settings-row-text strong { @apply text-[.87rem] font-bold; color: var(--color-ink); }
+  .settings-row-text small { @apply text-[.74rem] mt-0.5 leading-snug; color: var(--color-ink-faint); }
+  .settings-row-chevron { @apply shrink-0; color: var(--color-ink-faint); }
+  .settings-row-switch { @apply cursor-default; }
+  .settings-toggle { @apply relative shrink-0 cursor-pointer; }
+  .settings-toggle input { @apply absolute opacity-0 w-0 h-0; }
+  .settings-toggle input:checked + .switch-track { background: var(--color-forest-600); }
+  .settings-toggle input:checked + .switch-track .switch-thumb { transform:translateX(18px); }
+  .settings-toggle input:disabled + .switch-track { opacity:.45; }
+  .settings-logout-row { @apply mt-1; }
+  .settings-version { @apply text-center text-[.72rem] pb-2; color: var(--color-ink-faint); }
+
+  @media (min-width:900px) {
+    .settings-page { max-width:520px; }
+  }
+
   /* ---------- Modal / toast ---------- */
   .modal-overlay { @apply fixed inset-0 z-[100] flex items-end justify-center; background: rgba(8,14,9,.55); backdrop-filter:blur(2px); }
   .modal-sheet { @apply relative bg-surface w-full rounded-t-[26px] overflow-y-auto animate-sheet-up; max-width:480px; padding:10px 22px 26px; max-height:88vh; }
@@ -948,6 +1013,20 @@
   }
   .modal-close-btn:active { transform:scale(.92); background: rgba(23,36,28,.95); }
   .modal-overlay.no-close .modal-close-btn { @apply hidden; }
+
+  /* Desktop: a proper centered dialog instead of the mobile bottom sheet —
+     the sheet's "slides up from the screen edge, square bottom corners"
+     look only makes sense pinned to a phone viewport; on a wide desktop
+     window it read as an odd floating strip, so it gets its own layout,
+     rounded-all-round card and a simple fade+scale instead of sheet-up. */
+  @media (min-width:900px) {
+    .modal-overlay { @apply items-center; padding:24px; }
+    .modal-sheet {
+      @apply rounded-[22px] animate-modal-pop; max-width:520px; max-height:min(88vh, 720px); padding:22px 26px 28px;
+      box-shadow:0 24px 60px -12px rgba(8,20,12,.35), 0 0 0 1px rgba(26,76,48,.06);
+    }
+    .modal-handle { @apply hidden; }
+  }
   .modal-handle { @apply mx-auto rounded; width:38px; height:4px; background: var(--color-line); margin:8px auto 16px; }
   .modal-sheet h3 { @apply text-[1.08rem] font-extrabold mb-4; }
   .modal-sheet .field { @apply mb-3.5; }
@@ -1136,14 +1215,14 @@
             <span>Full Name</span>
             <div class="field-line-input-wrap">
               <span class="field-line-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c0-4.1 3.4-7 7.5-7s7.5 2.9 7.5 7"/></svg></span>
-              <input type="text" id="signup-name" required placeholder="e.g. Rafiul Islam" autocomplete="name" />
+              <input type="text" id="signup-name" required placeholder="e.g. Tabib Imran" autocomplete="name" />
             </div>
           </label>
           <label class="field-line">
-            <span>Roll / Registration No.</span>
+            <span>Class Roll</span>
             <div class="field-line-input-wrap">
               <span class="field-line-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></span>
-              <input type="text" id="signup-roll" required placeholder="e.g. 2024-GEO-014" />
+              <input type="text" id="signup-roll" required placeholder="e.g. 105" />
             </div>
           </label>
           <label class="field-line">
@@ -1247,7 +1326,7 @@
           <span class="icon" data-icon="directory"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.4"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M16 8.2a3.2 3.2 0 1 1 3.4 5.4"/><path d="M18 14.3c2.4.4 3.5 2.1 3.5 5.2"/></svg></span> Classmates
         </button>
         <button class="nav-item" data-route="routine">
-          <span class="icon" data-icon="routine"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="16" rx="2.5"/><line x1="3.5" y1="9.5" x2="20.5" y2="9.5"/><line x1="8" y1="2.5" x2="8" y2="6.5"/><line x1="16" y1="2.5" x2="16" y2="6.5"/><line x1="7.5" y1="13.5" x2="12.5" y2="13.5"/><line x1="7.5" y1="17" x2="16.5" y2="17"/></svg></span> Routine &amp; Notices
+          <span class="icon" data-icon="routine"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="16" rx="2.5"/><line x1="3.5" y1="9.5" x2="20.5" y2="9.5"/><line x1="8" y1="2.5" x2="8" y2="6.5"/><line x1="16" y1="2.5" x2="16" y2="6.5"/><line x1="7.5" y1="13.5" x2="12.5" y2="13.5"/><line x1="7.5" y1="17" x2="16.5" y2="17"/></svg></span> Routine
         </button>
         <button class="nav-item" data-route="profile">
           <span class="icon" data-icon="profile"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c0-4.1 3.4-7 7.5-7s7.5 2.9 7.5 7"/></svg></span> My Profile
@@ -1280,10 +1359,15 @@
           <small id="topbar-subtitle">Geography &amp; Environment</small>
         </div>
       </div>
-      <button type="button" class="topbar-notif-btn" id="topbar-notif-btn" aria-label="Notifications">
-        <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-        <span class="notif-badge hidden" id="topbar-notif-badge">0</span>
-      </button>
+      <div class="topbar-actions">
+        <button type="button" class="topbar-notif-btn" id="topbar-notif-btn" aria-label="Notifications">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span class="notif-badge hidden" id="topbar-notif-badge">0</span>
+        </button>
+        <button type="button" class="topbar-notif-btn" id="topbar-settings-btn" aria-label="Settings">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+      </div>
     </header>
 
     <!-- ---------- MAIN CONTENT ---------- -->
@@ -1302,7 +1386,23 @@
           </span>
         </button>
         <div id="wall-list">
-          <p class="empty-state">No posts yet. Be the first to write on the wall.</p>
+          <div class="flat-list feed-list" id="wall-skeleton">
+            <div class="skeleton-post">
+              <div class="skeleton-post-head">
+                <div class="skeleton-avatar"></div>
+                <div class="skeleton-head-lines"><div class="skeleton-line sk-40"></div><div class="skeleton-line sk-25"></div></div>
+              </div>
+              <div class="skeleton-post-text"><div class="skeleton-line sk-90"></div><div class="skeleton-line sk-70"></div></div>
+              <div class="skeleton-block"></div>
+            </div>
+            <div class="skeleton-post">
+              <div class="skeleton-post-head">
+                <div class="skeleton-avatar"></div>
+                <div class="skeleton-head-lines"><div class="skeleton-line sk-40"></div><div class="skeleton-line sk-25"></div></div>
+              </div>
+              <div class="skeleton-post-text"><div class="skeleton-line sk-90"></div><div class="skeleton-line sk-50"></div></div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -1351,7 +1451,6 @@
       <!-- ===== SECTION 5: MY PROFILE ===== -->
       <section id="section-profile" class="route-section">
         <div id="profile-card" class="profile-card-panel"></div>
-        <button id="logout-btn-mobile" class="btn-outline full danger">Log Out</button>
       </section>
 
       <!-- ===== SECTION 6: A CLASSMATE'S PROFILE (drill-down page, not a modal) ===== -->
@@ -1401,6 +1500,55 @@
             </button>
           </div>
           <div id="notification-list"><p class="empty-state">Loading…</p></div>
+        </div>
+      </section>
+
+      <!-- ===== SECTION 9: SETTINGS (opened via the header gear icon) ===== -->
+      <section id="section-settings" class="route-section">
+        <div class="settings-page">
+          <div class="settings-group">
+            <div class="settings-group-title">Account</div>
+            <button type="button" class="settings-row" id="settings-edit-profile-btn">
+              <span class="settings-row-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              </span>
+              <span class="settings-row-text"><strong>Edit Profile &amp; Privacy</strong><small>Details, photo, and what classmates can see</small></span>
+              <svg class="settings-row-chevron" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
+            <button type="button" class="settings-row" id="settings-reset-password-btn">
+              <span class="settings-row-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10.5" width="16" height="10" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg>
+              </span>
+              <span class="settings-row-text"><strong>Reset Password</strong><small>Send a password reset link to your email</small></span>
+              <svg class="settings-row-chevron" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
+          </div>
+
+          <div class="settings-group">
+            <div class="settings-group-title">Notifications</div>
+            <div class="settings-row settings-row-switch">
+              <span class="settings-row-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              </span>
+              <span class="settings-row-text"><strong>Push Notifications</strong><small id="settings-push-status">Get notified about posts, likes &amp; comments</small></span>
+              <label class="settings-toggle">
+                <input type="checkbox" id="settings-push-toggle" />
+                <span class="switch-track"><span class="switch-thumb"></span></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="settings-group-title">About</div>
+            <div class="settings-row settings-row-switch">
+              <span class="settings-row-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="16" x2="12" y2="11.5"/><circle cx="12" cy="8" r=".6" fill="currentColor" stroke="none"/></svg>
+              </span>
+              <span class="settings-row-text"><strong>GeoHub</strong><small>Student community app for the Geography &amp; Environment department</small></span>
+            </div>
+          </div>
+
+          <button type="button" id="logout-btn-settings" class="btn-outline full danger settings-logout-row">Log Out</button>
         </div>
       </section>
 

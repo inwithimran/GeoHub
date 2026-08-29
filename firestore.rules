@@ -27,6 +27,21 @@ service cloud.firestore {
     function onlyChangedFields(fields) {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
     }
+    // A student may change their own display name, but only once every 7
+    // days — mirrors js/auth.js's nameChangeStatus()/updateProfileDetails(),
+    // enforced here for real since a client-side check alone can't stop
+    // someone writing to Firestore directly. Either `name` isn't changing
+    // at all, or enough time has passed since `nameChangedAt` (never set =
+    // never blocked) AND the write stamps `nameChangedAt` to right now, so
+    // a client can't change the name while claiming an old timestamp.
+    function nameChangeAllowed() {
+      return request.resource.data.name == resource.data.name ||
+        (
+          (!('nameChangedAt' in resource.data) || resource.data.nameChangedAt == null ||
+            request.time > resource.data.nameChangedAt + duration.value(7, 'd')) &&
+          request.resource.data.nameChangedAt == request.time
+        );
+    }
 
     // ---- Student profiles (also powers the Classmate Directory) ----
     // NOTE: real phone/email now live in the users/{uid}/private/contact
@@ -40,7 +55,7 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if isSignedIn();               // any classmate can view the directory
       allow create: if isOwner(uid);              // only during signup, by that student
-      allow update: if isOwner(uid);              // students can edit only their own profile
+      allow update: if isOwner(uid) && nameChangeAllowed(); // students can edit only their own profile
       allow delete: if false;
 
       // Real, unmasked contact details. Only the student themself (to
