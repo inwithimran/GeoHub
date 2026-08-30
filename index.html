@@ -163,8 +163,7 @@
             mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
   }
   .loader-mark {
-    @apply w-14 h-14 rounded-2xl flex items-center justify-center relative z-[2] text-white overflow-hidden;
-    background: rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.28); box-shadow:0 10px 24px rgba(0,0,0,.25);
+    @apply w-14 h-14 flex items-center justify-center relative z-[2] text-white;
     animation: mark-breathe 2.2s ease-in-out infinite;
   }
   .loading-text-block { @apply flex flex-col items-center gap-3; }
@@ -198,7 +197,7 @@
   .auth-compass { @apply absolute pointer-events-none; width:250px; height:250px; right:-70px; bottom:-80px; opacity:.15; }
   .auth-compass svg { @apply w-full h-full; color:#fff; animation: compass-spin 70s linear infinite; }
 
-  .logo-mark-small { @apply w-[38px] h-[38px] rounded-xl bg-white flex items-center justify-center shrink-0 overflow-hidden; color: var(--color-forest-700); }
+  .logo-mark-small { @apply w-[38px] h-[38px] flex items-center justify-center shrink-0; color: var(--color-forest-700); }
   .auth-brand-top { @apply relative z-[1] flex items-center gap-2.5; }
   .auth-brand-top strong { @apply block text-[.95rem] font-extrabold tracking-wide; font-family: var(--font-display); }
   .auth-brand-top small { @apply block opacity-70 text-[.66rem] font-bold uppercase tracking-wider mt-0.5; }
@@ -368,7 +367,7 @@
     box-shadow: 0 4px 18px rgba(15,46,29,.2);
   }
   .topbar-left { @apply flex items-center gap-2.5 min-w-0; }
-  .topbar-logo { background: rgba(255,255,255,.14) !important; color:#fff !important; border:1px solid rgba(255,255,255,.22); }
+  .topbar-logo { color:#fff !important; }
   .topbar-titles { @apply min-w-0 flex flex-col; }
   #topbar-title { @apply text-[1rem] font-extrabold whitespace-nowrap overflow-hidden text-ellipsis; }
   #topbar-subtitle { @apply text-[.68rem] opacity-80 font-semibold whitespace-nowrap overflow-hidden text-ellipsis; }
