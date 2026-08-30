@@ -17,6 +17,7 @@ import { initResources, teardownResources, loadUserResources } from "./resources
 import { initDirectory, teardownDirectory } from "./directory.js";
 import { initRoutine, teardownRoutine, registerNotificationsRouter } from "./routine.js";
 import { initPresence, teardownPresence } from "./presence.js";
+import { initMessages, teardownMessages, registerDmThreadRouter, openDmThread, getOpenDmUid, teardownDmThread } from "./messages.js";
 import { openUserProfilePage, loadUserPosts, registerProfilePageRouter, getOpenProfileUid, teardownProfilePage } from "./profile-view.js";
 import { openPostDetailPage, registerPostDetailRouter, teardownPostDetail, getOpenPostId } from "./post-detail.js";
 import {
@@ -270,7 +271,8 @@ const routeTitles = {
   notices: "Notices & Notifications",
   settings: "Settings",
   "user-profile": "Profile", // overwritten with the classmate's name once loaded
-  "post-detail": "Post" // overwritten with "<name>'s Post" once loaded
+  "post-detail": "Post", // overwritten with "<name>'s Post" once loaded
+  "dm-thread": "Direct Message" // overwritten with the classmate's name once loaded
 };
 
 let currentRoute = "wall";
@@ -284,7 +286,7 @@ let currentRoute = "wall";
 // Post Detail / a classmate's Profile are excluded — those are drill-down
 // pages opened fresh each time (from a tap), not persistent tabs, so they
 // intentionally always open at the top.
-const SCROLL_MEMORY_EXCLUDED_ROUTES = new Set(["post-detail", "user-profile"]);
+const SCROLL_MEMORY_EXCLUDED_ROUTES = new Set(["post-detail", "user-profile", "dm-thread"]);
 let scrollPositions = {}; // route -> last scrollY
 
 // ============================================================
@@ -313,7 +315,7 @@ function goToRoute(route, { fromPopstate = false, replace = false, state = {} } 
     if (active) btn.setAttribute("aria-current", "page"); else btn.removeAttribute("aria-current");
   });
   document.getElementById("topbar-title").textContent = routeTitles[route] || "GeoHub";
-  document.getElementById("topbar-subtitle").textContent = route === "user-profile" ? "Classmate Profile" : route === "settings" ? "App preferences & account" : "Geography & Environment";
+  document.getElementById("topbar-subtitle").textContent = route === "user-profile" ? "Classmate Profile" : route === "dm-thread" ? "Direct Message" : route === "settings" ? "App preferences & account" : "Geography & Environment";
 
   if (route === "profile") renderProfile();
   if (route === "settings") renderSettingsPage();
@@ -331,6 +333,7 @@ function goToRoute(route, { fromPopstate = false, replace = false, state = {} } 
   // rather than leaving them subscribed in the background.
   if (currentRoute === "post-detail" && route !== "post-detail") teardownPostDetail();
   if (currentRoute === "user-profile" && route !== "user-profile") teardownProfilePage();
+  if (currentRoute === "dm-thread" && route !== "dm-thread") teardownDmThread();
 
   currentRoute = route;
   const historyState = { geohubRoute: route, ...state };
@@ -343,6 +346,7 @@ function goToRoute(route, { fromPopstate = false, replace = false, state = {} } 
 registerProfilePageRouter(goToRoute);
 registerNotificationsRouter(goToRoute);
 registerPostDetailRouter(goToRoute);
+registerDmThreadRouter(goToRoute);
 
 document.querySelectorAll(".nav-item[data-route]").forEach(btn => {
   btn.addEventListener("click", () => {
@@ -377,6 +381,9 @@ window.addEventListener("popstate", (e) => {
     } else if (e.state.geohubRoute === "post-detail" && e.state.postId) {
       if (e.state.geohubRoute === currentRoute && e.state.postId === getOpenPostId()) return;
       openPostDetailPage(e.state.postId, { fromPopstate: true });
+    } else if (e.state.geohubRoute === "dm-thread" && e.state.dmUid) {
+      if (e.state.geohubRoute === currentRoute && e.state.dmUid === getOpenDmUid()) return;
+      openDmThread(e.state.dmUid, { fromPopstate: true });
     } else {
       if (e.state.geohubRoute === currentRoute) return;
       goToRoute(e.state.geohubRoute, { fromPopstate: true });
@@ -824,6 +831,7 @@ watchAuthState(
       initDirectory();
       initRoutine();
       initPresence();
+      initMessages();
       featuresInitialized = true;
     }
     goToRoute("wall", { replace: true });
@@ -852,6 +860,7 @@ watchAuthState(
       teardownRoutine();
       teardownPostDetail();
       teardownPresence();
+      teardownMessages();
       featuresInitialized = false;
     }
     // Reset auth forms (and any stuck loading buttons) for the next login

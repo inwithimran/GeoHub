@@ -4,11 +4,12 @@
 // doubles as their directory entry — no separate collection needed).
 // Also doubles as the shared profile cache used across the app.
 // ============================================================
-import { db } from "./firebase-config.js";
+import { auth, db } from "./firebase-config.js";
 import { collection, onSnapshot, query, limit } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { escapeHtml, showToast, setBtnLoading, cacheUserProfile, avatarInner, nameWithBadge, friendlyError } from "./ui-utils.js";
 import { presenceDotHtml } from "./presence.js";
 import { openUserProfilePage } from "./profile-view.js";
+import { openDmThread } from "./messages.js";
 
 const directoryList = document.getElementById("directory-list");
 const searchInput = document.getElementById("directory-search");
@@ -113,6 +114,11 @@ function renderDirectory() {
         </div>
       </div>
       <span class="blood-badge">${escapeHtml(s.bloodGroup || "—")}</span>
+      ${s.uid && s.uid !== auth.currentUser?.uid
+        ? `<button type="button" class="msg-btn" data-no-row-click data-msg-uid="${escapeHtml(s.uid)}" title="Message ${escapeHtml((s.name||"").split(" ")[0]||"")}">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h16a1 1 0 0 1 1 1V16a1 1 0 0 1-1 1H8l-4.5 4V6.5a1 1 0 0 1 1-1z"/></svg>
+          </button>`
+        : ""}
       ${s.hidePhone || !s.phone
         ? `<span class="call-btn call-btn-disabled" title="${s.phone ? "Number hidden" : "No number on file"}">
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.68 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.32 1.85.55 2.81.68A2 2 0 0 1 22 16.92z"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
@@ -125,8 +131,14 @@ function renderDirectory() {
 
   directoryList.querySelectorAll(".directory-row").forEach(row => {
     row.addEventListener("click", (e) => {
-      if (e.target.closest("[data-no-row-click]")) return; // let the Call link work normally
+      if (e.target.closest("[data-no-row-click]")) return; // let the Call/Message buttons work on their own
       openUserProfilePage(row.dataset.uid);
+    });
+  });
+  directoryList.querySelectorAll(".msg-btn[data-msg-uid]").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openDmThread(btn.dataset.msgUid);
     });
   });
 

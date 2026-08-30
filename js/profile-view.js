@@ -19,6 +19,7 @@ import {
 import { loadUserResources } from "./resources.js";
 import { renderPost } from "./wall.js";
 import { presenceTextHtml } from "./presence.js";
+import { openDmThread } from "./messages.js";
 
 const cardEl = document.getElementById("user-profile-card");
 const backBtn = document.getElementById("user-profile-back-btn");
@@ -148,10 +149,14 @@ function renderProfilePage(profile, uid) {
         <div class="profile-flow-details">
           ${rows.map(([label, val]) => `<div class="profile-detail-row"><span>${label}</span><span>${val}</span></div>`).join("")}
         </div>
-        <div class="profile-flow-actions">
+        <div class="profile-flow-actions" style="display:flex; gap:10px;">
           ${(!profile.hidePhone && profile.phone)
             ? `<a class="btn-primary full" href="tel:${escapeHtml(profile.phone)}">Call ${escapeHtml((profile.name || "").split(" ")[0] || "")}</a>`
-            : `<p class="pv-call-disabled">This student has hidden their contact number.</p>`}
+            : `<p class="pv-call-disabled" style="flex:1">This student has hidden their contact number.</p>`}
+          <button type="button" id="user-profile-message-btn" class="btn-outline full msg-btn">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h16a1 1 0 0 1 1 1V16a1 1 0 0 1-1 1H8l-4.5 4V6.5a1 1 0 0 1 1-1z"/></svg>
+            Message
+          </button>
         </div>
       </div>
 
@@ -164,6 +169,8 @@ function renderProfilePage(profile, uid) {
       </div>
     </div>
   `;
+
+  cardEl.querySelector("#user-profile-message-btn")?.addEventListener("click", () => openDmThread(uid));
 
   const tabBtns = cardEl.querySelectorAll(".profile-tab-btn");
   const tabPanels = cardEl.querySelectorAll(".profile-tab-panel");
