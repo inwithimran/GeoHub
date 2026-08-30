@@ -10,8 +10,9 @@
 import { auth } from "./firebase-config.js";
 
 /**
- * @param {{type:"post"|"resource"|"notice"|"comment"|"like"|"mention", text?:string, actorName?:string, urgent?:boolean, targetUid?:string, postId?:string}} payload
+ * @param {{type:"post"|"resource"|"notice"|"comment"|"like"|"mention"|"report", text?:string, actorName?:string, urgent?:boolean, targetUid?:string, postId?:string, reportId?:string}} payload
  *   targetUid is required for types "comment", "like" and "mention" (who should be notified).
+ *   reportId is required for type "report" (goes to the admin(s) only, never the whole department).
  */
 export async function triggerPush(payload) {
   try {

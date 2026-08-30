@@ -334,11 +334,12 @@ async function reportPost(postId, post) {
   document.getElementById("report-submit-btn").addEventListener("click", async (e) => {
     setBtnLoading(e.currentTarget, true, "Sending…");
     try {
-      await addDoc(collection(db, "reports"), {
+      const reason = document.getElementById("report-reason-input").value.trim();
+      const reportRef = await addDoc(collection(db, "reports"), {
         postId,
         postAuthorUid: post.authorUid,
         postText: (post.text || "").slice(0, 300),
-        reason: document.getElementById("report-reason-input").value.trim(),
+        reason,
         reportedByUid: auth.currentUser.uid,
         reportedByName: currentProfile ? currentProfile.name : "A classmate",
         createdAt: serverTimestamp(),
@@ -346,6 +347,10 @@ async function reportPost(postId, post) {
       });
       closeModal();
       showToast("Report sent to the admin. Thanks for flagging it.");
+      // Live bell/report-button badges pick this up via the "reports"
+      // listener in routine.js; this push is what reaches the admin even
+      // when GeoHub isn't currently open on their device.
+      triggerPush({ type: "report", text: reason, actorName: currentProfile ? currentProfile.name : "A classmate", reportId: reportRef.id });
     } catch (err) {
       document.getElementById("report-error").textContent = "Couldn't send report: " + err.message;
       setBtnLoading(e.currentTarget, false);

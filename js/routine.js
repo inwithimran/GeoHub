@@ -23,7 +23,7 @@
 import { db, auth, ADMIN_EMAILS } from "./firebase-config.js";
 import {
   collection, addDoc, updateDoc, deleteDoc, onSnapshot, query, where, orderBy, limit, serverTimestamp,
-  doc, getDoc, getDocs
+  doc, getDoc, getDocs, setDoc
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import {
   escapeHtml, timeAgo, fullDate, showToast, setBtnLoading, openModal, closeModal,
@@ -48,26 +48,66 @@ const markAllReadBtn = document.getElementById("notif-mark-all-btn");
 // PER-ITEM READ TRACKING — the bell badge, and each tab's own badge,
 // only clear once the SPECIFIC notice/notification behind the count has
 // been opened — not just because the Notices & Notifications page (or a
-// tab) was visited. Read state is a set of doc ids kept in localStorage,
-// scoped per signed-in uid (so a shared device doesn't leak one
-// classmate's read state into another's).
+// tab) was visited. Read state is a set of doc ids, scoped per signed-in
+// uid (so a shared device doesn't leak one classmate's read state into
+// another's).
+//
+// Persisted in TWO places: localStorage (instant, no round-trip — so the
+// badges paint correctly the moment the page loads) AND Firestore, under
+// users/{uid}/readState/{kind} (owner-only, see firestore.rules). The
+// Firestore copy is what makes this survive "Clear site data"/reinstalling
+// the app/switching devices — localStorage alone doesn't, since wiping
+// browser storage wipes it right along with everything else, which used
+// to make every notice/notification look unread again even though the
+// person had already seen them all. On init we read localStorage first
+// (for an instant, flicker-free badge) and then merge in whatever
+// Firestore has (which may know about reads localStorage doesn't, e.g.
+// after a data clear or on a different device); every mark-as-read after
+// that writes to both.
 // ============================================================
 function readIdsStorageKey(kind) {
   return `geohub_${kind}_read_ids_${auth.currentUser?.uid || "anon"}`;
 }
-function loadReadIds(kind) {
+function loadReadIdsLocal(kind) {
   try {
     const raw = JSON.parse(localStorage.getItem(readIdsStorageKey(kind)) || "[]");
     return new Set(Array.isArray(raw) ? raw : []);
   } catch { return new Set(); }
 }
+/** Best-effort pull from Firestore, merged into whatever's already in `idSet`. Returns the same Set. */
+async function mergeReadIdsFromCloud(kind, idSet) {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return idSet;
+  try {
+    const snap = await getDoc(doc(db, "users", uid, "readState", kind));
+    if (snap.exists()) {
+      const cloudIds = snap.data().ids;
+      if (Array.isArray(cloudIds)) cloudIds.forEach(id => idSet.add(id));
+    }
+  } catch (err) {
+    console.warn(`Couldn't sync ${kind} read state from the cloud:`, err.message);
+  }
+  return idSet;
+}
 function saveReadIds(kind, idSet) {
   // Cap what's persisted so this can't grow unbounded across months of use —
   // only the most recent ids matter for badge purposes.
-  localStorage.setItem(readIdsStorageKey(kind), JSON.stringify(Array.from(idSet).slice(-400)));
+  const ids = Array.from(idSet).slice(-400);
+  localStorage.setItem(readIdsStorageKey(kind), JSON.stringify(ids));
+  const uid = auth.currentUser?.uid;
+  if (uid) {
+    setDoc(doc(db, "users", uid, "readState", kind), { ids, updatedAt: serverTimestamp() })
+      .catch(err => console.warn(`Couldn't save ${kind} read state to the cloud:`, err.message));
+  }
 }
 let noticeReadIds = new Set();
 let activityReadIds = new Set();
+// "Deleted" notifications — same idea and same local+cloud persistence as
+// the read-id sets above, but for entries the person explicitly removed
+// from their own Notification tab (see dismissActivity()). This only ever
+// hides the entry from THIS person's feed/badges — the underlying activity
+// document (which may be visible to other classmates too) is untouched.
+let dismissedActivityIds = new Set();
 
 /** Marks one notice as read; safe to call repeatedly (no-ops once already read). */
 export function markNoticeRead(noticeId) {
@@ -84,10 +124,18 @@ function markActivityRead(activityId) {
   renderActivityList();
 }
 function markAllActivityRead() {
-  const ids = mergedActivity().filter(visibleToMe).map(a => a.id);
+  const ids = mergedActivity().filter(visibleToMe).filter(a => !dismissedActivityIds.has(a.id)).map(a => a.id);
   if (!ids.length) return;
   ids.forEach(id => activityReadIds.add(id));
   saveReadIds("activity", activityReadIds);
+  updateNoticeBadge();
+  renderActivityList();
+}
+/** Removes one notification from THIS person's Notification tab/badges for good. */
+function dismissActivity(activityId) {
+  if (!activityId || dismissedActivityIds.has(activityId)) return;
+  dismissedActivityIds.add(activityId);
+  saveReadIds("activity_dismissed", dismissedActivityIds);
   updateNoticeBadge();
   renderActivityList();
 }
@@ -137,8 +185,34 @@ function visibleToMe(a) {
 }
 
 export function initRoutine() {
-  noticeReadIds = loadReadIds("notice");
-  activityReadIds = loadReadIds("activity");
+  // Paint instantly from whatever's cached locally...
+  noticeReadIds = loadReadIdsLocal("notice");
+  activityReadIds = loadReadIdsLocal("activity");
+  dismissedActivityIds = loadReadIdsLocal("activity_dismissed");
+  // ...then merge in Firestore's copy (see the big comment on this block
+  // above), which is what makes read/deleted state survive a cleared
+  // localStorage. Each merge re-saves locally too, so next launch is
+  // instant again without needing another round-trip.
+  mergeReadIdsFromCloud("notice", noticeReadIds).then(merged => {
+    noticeReadIds = merged;
+    saveReadIds("notice", noticeReadIds);
+    updateNoticeBadge();
+    renderNoticeTabBody();
+  });
+  mergeReadIdsFromCloud("activity", activityReadIds).then(merged => {
+    activityReadIds = merged;
+    saveReadIds("activity", activityReadIds);
+    updateNoticeBadge();
+    renderActivityList();
+  });
+  mergeReadIdsFromCloud("activity_dismissed", dismissedActivityIds).then(merged => {
+    dismissedActivityIds = merged;
+    saveReadIds("activity_dismissed", dismissedActivityIds);
+    updateNoticeBadge();
+    renderActivityList();
+  });
+
+  if (ADMIN_EMAILS.includes(auth.currentUser?.email || "")) watchOpenReportCount();
 
   const q = query(collection(db, "notices"), orderBy("createdAt", "desc"));
   unsubscribeNotices = onSnapshot(q, (snap) => {
@@ -252,10 +326,18 @@ function setBadgeEl(el, count) {
  */
 function updateNoticeBadge() {
   const unreadNotices = latestNotices.filter(n => !noticeReadIds.has(n.id)).length;
-  const unreadActivity = mergedActivity().filter(visibleToMe).filter(a => !activityReadIds.has(a.id)).length;
-  setBadgeEl(notifBadge, unreadNotices + unreadActivity);
+  const unreadActivity = mergedActivity().filter(visibleToMe)
+    .filter(a => !dismissedActivityIds.has(a.id) && !activityReadIds.has(a.id)).length;
+  // Open (unresolved) reports are the admin's own kind of "unread" —
+  // filing one is what "reads" it, same spirit as everything else on
+  // this badge, so it's folded straight into the bell + the button's
+  // own badge rather than needing a separate per-item read-id set.
+  const isAdmin = !!(auth.currentUser && ADMIN_EMAILS.includes(auth.currentUser.email));
+  const unreadReports = isAdmin ? openReportCount : 0;
+  setBadgeEl(notifBadge, unreadNotices + unreadActivity + unreadReports);
   setBadgeEl(noticeTabBadge, unreadNotices);
   setBadgeEl(notificationTabBadge, unreadActivity);
+  setBadgeEl(document.getElementById("reports-tab-badge"), unreadReports);
 }
 
 // ============================================================
@@ -305,6 +387,7 @@ function renderNoticeTabBody() {
           <button id="notice-submit" type="button" class="btn-primary full notice-submit-btn">Post Notice</button>
           <button id="view-reports-btn" type="button" class="btn-outline full">
             <span id="view-reports-label">Reported Posts</span>
+            <span class="tab-badge hidden" id="reports-tab-badge">0</span>
           </button>
         </div>` : ""}
       <div id="notice-list"><p class="empty-state">Loading notices…</p></div>
@@ -312,7 +395,11 @@ function renderNoticeTabBody() {
     if (isAdmin) {
       document.getElementById("notice-submit").addEventListener("click", postNotice);
       document.getElementById("view-reports-btn").addEventListener("click", openReportsModal);
-      watchOpenReportCount();
+      // The listener itself is already running (started in initRoutine as
+      // soon as an admin session begins, so the bell badge is live even
+      // before this tab is ever opened) — just paint whatever count it's
+      // already seen onto this newly-built button.
+      setBadgeEl(document.getElementById("reports-tab-badge"), openReportCount);
     }
   }
   renderNoticesList();
@@ -325,15 +412,26 @@ function renderNoticeTabBody() {
 // nothing for a non-admin.
 // ============================================================
 let unsubscribeReportCount = null;
+let openReportCount = 0;
 
-/** Keeps the "Reported Posts (n)" button label live while the Notice tab is open. */
+/**
+ * Keeps the open-report count live for the whole admin session — started
+ * from initRoutine() as soon as an admin signs in (not lazily when the
+ * Notice tab happens to be opened), so the bell badge and this button's
+ * own badge both reflect new reports right away, and so a push arriving
+ * for one is backed by the same "something needs your attention" signal
+ * shown in the UI.
+ */
 function watchOpenReportCount() {
   if (unsubscribeReportCount) return;
   const q = query(collection(db, "reports"), where("resolved", "==", false));
   unsubscribeReportCount = onSnapshot(q, (snap) => {
+    openReportCount = snap.size;
     const label = document.getElementById("view-reports-label");
-    if (label) label.textContent = snap.empty ? "Reported Posts" : `Reported Posts (${snap.size})`;
-  }, () => { /* not admin, or offline — button just keeps its default label */ });
+    if (label) label.textContent = "Reported Posts";
+    setBadgeEl(document.getElementById("reports-tab-badge"), openReportCount);
+    updateNoticeBadge();
+  }, () => { /* not admin, or offline — badge just stays at its last known count */ });
 }
 
 async function openReportsModal() {
@@ -607,7 +705,7 @@ function renderActivityList() {
   const host = document.getElementById("notification-list");
   if (!host) return;
 
-  const activity = mergedActivity().filter(visibleToMe);
+  const activity = mergedActivity().filter(visibleToMe).filter(a => !dismissedActivityIds.has(a.id));
 
   // Distinguish "genuinely nothing has happened yet" from "the feed failed to
   // load" — these used to look identical ("No recent activity yet."), which is
@@ -635,6 +733,7 @@ function renderActivityList() {
           <span class="notice-row-name">${nameWithBadge(a.actorName || "Someone", a.actorEmail)}</span>
           <small>${timeAgo(a.createdAt)}</small>
         </div>
+        ${kebabMenuHtml(a.id, [{ action: "delete", label: "Delete Notification", danger: true }])}
       </div>
       <p class="notice-row-text">${activityLine(a)}</p>
     </div>
@@ -644,10 +743,17 @@ function renderActivityList() {
   host.querySelectorAll(".activity-row").forEach(row => {
     const a = activity[Number(row.dataset.index)];
     if (!a) return;
-    row.addEventListener("click", () => {
+    row.addEventListener("click", (e) => {
+      if (e.target.closest(".kebab-menu")) return; // let the kebab handle its own click
       markActivityRead(a.id); // Notification tab badge only drops once this specific entry has been opened
       openActivityDestination(a);
     });
+  });
+
+  wireKebabMenus(host, {
+    // Removes it from THIS person's Notification tab only — see
+    // dismissActivity() for why nothing is deleted server-side.
+    delete: (activityId) => dismissActivity(activityId)
   });
 }
 
@@ -734,12 +840,14 @@ export function teardownRoutine() {
   unsubscribeActivityPublic = null;
   unsubscribeActivityPrivate = null;
   unsubscribeReportCount = null;
+  openReportCount = 0;
   latestNotices = [];
   latestActivityPublic = [];
   latestActivityPrivate = [];
   activityFeedError = null;
   noticeReadIds = new Set();
   activityReadIds = new Set();
+  dismissedActivityIds = new Set();
   const host = document.getElementById("notice-tab-body");
   if (host) { delete host.dataset.shellBuilt; host.innerHTML = ""; }
 }

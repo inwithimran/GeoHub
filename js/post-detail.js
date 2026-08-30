@@ -129,7 +129,7 @@ function renderPostDetail(postId, post, comments, container, { focusComment, onD
   const prevScrollY = window.scrollY;
 
   const commentsHtml = comments.length
-    ? comments.map(c => commentItemHtml(c, uid)).join("")
+    ? comments.map(c => commentItemHtml(c, uid, isOwnPost)).join("")
     : `<p class="empty-state" style="padding:10px 0;">No comments yet — be the first to reply.</p>`;
 
   let kebabActions = [];
@@ -253,9 +253,21 @@ function reactionsOfPost(post) {
   return post.reactions || Object.fromEntries((post.likes || []).map((u) => [u, "👍"]));
 }
 
-function commentItemHtml(c, uid) {
+/**
+ * `isPostOwner` — true when the person viewing the thread authored the
+ * POST itself (not necessarily this comment). They can only ever EDIT
+ * their own comments, same as anyone, but may DELETE any comment on their
+ * own post — moderating their own thread, same spirit as being able to
+ * delete the post itself. See firestore.rules' comments match for the
+ * server-side half of this.
+ */
+function commentItemHtml(c, uid, isPostOwner) {
   const author = authorProfile(c.authorUid, c.authorName);
   const isOwnComment = c.authorUid === uid;
+  const canDelete = isOwnComment || isPostOwner;
+  const kebabActions = [];
+  if (isOwnComment) kebabActions.push({ action: "edit", label: "Edit Comment" });
+  if (canDelete) kebabActions.push({ action: "delete", label: isOwnComment ? "Delete Comment" : "Remove Comment", danger: true });
   return `
     <div class="comment-item">
       <button type="button" class="avatar avatar-sm avatar-btn" data-author="${c.authorUid}">${avatarInner(author)}</button>
@@ -264,10 +276,7 @@ function commentItemHtml(c, uid) {
         <p>${richTextHtml(c.text, c.mentions)}</p>
         <small>${timeAgo(c.createdAt)}${c.editedAt ? " · edited" : ""}</small>
       </div>
-      ${isOwnComment ? kebabMenuHtml(c.id, [
-        { action: "edit", label: "Edit Comment" },
-        { action: "delete", label: "Delete Comment", danger: true }
-      ]) : ""}
+      ${kebabActions.length ? kebabMenuHtml(c.id, kebabActions) : ""}
     </div>`;
 }
 
