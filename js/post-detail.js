@@ -21,7 +21,7 @@ import { currentProfile } from "./auth.js";
 import {
   showToast, escapeHtml, timeAgo, openModal, closeModal, setBtnLoading,
   clampableRichHtml, richTextHtml, wireRichTextClicks, attachClampToggle, avatarInner, nameWithBadge,
-  kebabMenuHtml, wireKebabMenus, confirmDialog, isAdminEmail
+  kebabMenuHtml, wireKebabMenus, confirmDialog, isAdminEmail, wireCharCounter
 } from "./ui-utils.js";
 import {
   authorProfile, openEditPostModal, deletePost, wireMentions,
@@ -45,6 +45,10 @@ export function registerPostDetailRouter(goToRoute) { goToRouteRef = goToRoute; 
 let unsubscribePost = null;
 let unsubscribeComments = null;
 let currentPostId = null;
+
+// A comment is meant to be a quick reply, not a second post — capped
+// well below POST_TEXT_LIMIT in wall.js.
+const COMMENT_TEXT_LIMIT = 500;
 
 /**
  * Open the Post Detail page for `postId`. Pass { focusComment: true } when
@@ -216,11 +220,12 @@ function renderPostDetail(postId, post, comments, container, { focusComment, com
       ${commentsHtml}
       <div class="comment-input-row">
         <div class="avatar avatar-sm">${avatarInner(currentProfile || {})}</div>
-        <input type="text" placeholder="Write a comment… (@mention a classmate)" />
+        <input type="text" placeholder="Write a comment… (@mention a classmate)" maxlength="${COMMENT_TEXT_LIMIT}" />
         <button type="button" class="comment-send-btn">
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         </button>
       </div>
+      <div class="char-counter comment-char-counter"></div>
     </div>
   `;
 
@@ -231,6 +236,7 @@ function renderPostDetail(postId, post, comments, container, { focusComment, com
     input.focus();
     if (selStart != null) input.setSelectionRange(selStart, selEnd);
   }
+  wireCommentCounter(container, input);
   window.scrollTo(0, prevScrollY); // rebuilding the DOM can otherwise snap the page back to the top
 
   // ---------- post-level wiring ----------
@@ -324,6 +330,25 @@ function commentItemHtml(c, uid, isPostOwner) {
     </div>`;
 }
 
+/**
+ * Wires the comment box's live "n/limit" counter. Doesn't use the generic
+ * wireCharCounter() from ui-utils.js because the counter here sits below
+ * the whole avatar/input/send-button row rather than directly after the
+ * <input> itself — this re-render (see renderPostDetail) rebuilds that
+ * row from scratch every time anyway, so it's rewired fresh each time.
+ */
+function wireCommentCounter(container, input) {
+  const counter = container.querySelector(".comment-char-counter");
+  if (!input || !counter) return;
+  const update = () => {
+    const len = input.value.length;
+    counter.textContent = `${len}/${COMMENT_TEXT_LIMIT}`;
+    counter.classList.toggle("char-counter-warn", len >= COMMENT_TEXT_LIMIT * 0.9);
+  };
+  input.addEventListener("input", update);
+  update();
+}
+
 function focusCommentInput(container) {
   const input = container.querySelector(".comment-input-row input");
   if (!input) return;
@@ -347,6 +372,7 @@ async function submitComment(postId, commentsEl, sendBtn, postAuthorUid, getMent
   // first means that even if that race happens, the draft it restores is
   // already empty.
   input.value = "";
+  input.dispatchEvent(new Event("input")); // refresh the char counter now that the field's been cleared
   sendBtn.disabled = true;
   sendBtn.classList.add("is-loading");
   try {
@@ -373,7 +399,7 @@ async function submitComment(postId, commentsEl, sendBtn, postAuthorUid, getMent
   } catch (err) {
     // Put the text back so it isn't lost if the write failed.
     const liveInput = commentsEl.querySelector(".comment-input-row input");
-    if (liveInput) liveInput.value = text;
+    if (liveInput) { liveInput.value = text; liveInput.dispatchEvent(new Event("input")); }
     showToast("Couldn't send your comment: " + err.message);
   } finally {
     sendBtn.disabled = false;
@@ -394,12 +420,13 @@ function openEditCommentModal(postId, commentId, currentText, currentMentions = 
           <small>Editing your comment</small>
         </div>
       </div>
-      <textarea id="comment-edit-input" class="composer-modal-textarea" rows="3">${escapeHtml(currentText)}</textarea>
+      <textarea id="comment-edit-input" class="composer-modal-textarea" rows="3" maxlength="${COMMENT_TEXT_LIMIT}">${escapeHtml(currentText)}</textarea>
       <p id="comment-edit-error" class="form-error"></p>
       <button type="button" class="btn-primary full raised composer-post-btn" id="comment-edit-save-btn">Save Changes</button>
     </div>
   `);
   const { getMentions } = wireMentions(document.getElementById("comment-edit-input"), currentMentions);
+  wireCharCounter(document.getElementById("comment-edit-input"), COMMENT_TEXT_LIMIT);
   document.getElementById("comment-edit-save-btn").addEventListener("click", async (e) => {
     const text = document.getElementById("comment-edit-input").value.trim();
     const errorEl = document.getElementById("comment-edit-error");

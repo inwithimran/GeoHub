@@ -28,7 +28,7 @@ import {
 import {
   escapeHtml, timeAgo, fullDate, showToast, setBtnLoading, openModal, closeModal,
   avatarInner, nameWithBadge, getCachedProfile, kebabMenuHtml, wireKebabMenus, confirmDialog,
-  resetScrollForTabs, skeletonRowsHtml
+  resetScrollForTabs, skeletonRowsHtml, wireCharCounter
 } from "./ui-utils.js";
 import { currentProfile } from "./auth.js";
 import { triggerPush } from "./push-trigger.js";
@@ -154,6 +154,10 @@ let noticesLoaded = false;         // true once the notices listener's first sna
 let activityPublicLoaded = false;  // true once the public-activity listener's first snapshot has arrived
 let activityPrivateLoaded = false; // true once the private-activity listener's first snapshot has arrived
 let noticesPageWired = false;
+
+// A notice is a short board announcement, not a long post — kept tighter
+// than POST_TEXT_LIMIT (wall.js) to fit the notice board's compact cards.
+const NOTICE_TEXT_LIMIT = 1000;
 
 // app.js hands us its router (goToRoute) so clicking a notification can
 // jump to another page (Wall / Notes hub / Notice tab), the same pattern
@@ -394,7 +398,7 @@ function renderNoticeTabBody() {
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
             Admin · Post to Notice Board
           </span>
-          <textarea id="notice-input" placeholder="Post an urgent notice to the class…" rows="2"></textarea>
+          <textarea id="notice-input" placeholder="Post an urgent notice to the class…" rows="2" maxlength="${NOTICE_TEXT_LIMIT}"></textarea>
           <label class="checkbox-row">
             <input type="checkbox" id="notice-urgent" /> Mark as urgent
           </label>
@@ -407,6 +411,7 @@ function renderNoticeTabBody() {
       <div id="notice-list"><p class="empty-state">Loading notices…</p></div>
     `;
     if (isAdmin) {
+      wireCharCounter(document.getElementById("notice-input"), NOTICE_TEXT_LIMIT);
       document.getElementById("notice-submit").addEventListener("click", postNotice);
       document.getElementById("view-reports-btn").addEventListener("click", openReportsModal);
       // The listener itself is already running (started in initRoutine as
@@ -588,13 +593,14 @@ function openEditNoticeModal(noticeId) {
   if (!n) return;
   openModal(`
     <h3>Edit Notice</h3>
-    <textarea id="notice-edit-input" class="composer-modal-textarea" rows="4">${escapeHtml(n.text)}</textarea>
+    <textarea id="notice-edit-input" class="composer-modal-textarea" rows="4" maxlength="${NOTICE_TEXT_LIMIT}">${escapeHtml(n.text)}</textarea>
     <label class="checkbox-row">
       <input type="checkbox" id="notice-edit-urgent" ${n.urgent ? "checked" : ""} /> Mark as urgent
     </label>
     <p id="notice-edit-error" class="form-error"></p>
     <button type="button" class="btn-primary full" id="notice-edit-save-btn">Save Changes</button>
   `);
+  wireCharCounter(document.getElementById("notice-edit-input"), NOTICE_TEXT_LIMIT);
   document.getElementById("notice-edit-save-btn").addEventListener("click", async (e) => {
     const text = document.getElementById("notice-edit-input").value.trim();
     if (!text) { document.getElementById("notice-edit-error").textContent = "Notice text can't be empty."; return; }
@@ -631,6 +637,7 @@ async function postNotice() {
     });
     input.value = "";
     urgent.checked = false;
+    input.dispatchEvent(new Event("input")); // refresh the char counter now that the field's been cleared
     showToast("Notice posted.");
     logActivity({ type: "notice", text, noticeId: noticeRef.id });
     triggerPush({ type: "notice", text, urgent: wasUrgent, noticeId: noticeRef.id });

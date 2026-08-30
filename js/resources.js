@@ -5,7 +5,7 @@
 // ============================================================
 import { db, auth, RESOURCE_CATEGORIES } from "./firebase-config.js";
 import {
-  collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, where, orderBy, getDocs, serverTimestamp
+  collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, where, orderBy, limit, getDocs, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { currentProfile } from "./auth.js";
 import {
@@ -23,12 +23,27 @@ let allResources = [];
 let activeCategory = "All";
 let unsubscribeResources = null;
 
+// ============================================================
+// PAGINATION — same trade-off as the Wall (see wall.js): loading
+// the whole Hub in one shot got expensive as more notes/sheets
+// piled up, so the realtime listener is capped to a page size and
+// "Load more resources" just asks for a bigger page.
+// ============================================================
+const RESOURCE_PAGE_SIZE = 30;
+let resourcePageLimit = RESOURCE_PAGE_SIZE;
+let lastLoadedCount = 0;
+
 export function initResources() {
   buildChips();
   addBtn.addEventListener("click", openAddResourceModal);
+  subscribeResources();
+}
 
-  const q = query(collection(db, "resources"), orderBy("createdAt", "desc"));
+function subscribeResources() {
+  if (unsubscribeResources) unsubscribeResources();
+  const q = query(collection(db, "resources"), orderBy("createdAt", "desc"), limit(resourcePageLimit));
   unsubscribeResources = onSnapshot(q, (snap) => {
+    lastLoadedCount = snap.size;
     allResources = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderResources();
   }, (err) => showToast("Couldn't load resources: " + err.message));
@@ -54,6 +69,24 @@ function renderResources() {
     ? allResources
     : allResources.filter(r => r.category === activeCategory);
   renderResourceRows(filtered, resourceList, "No resources shared yet in this category.");
+
+  // A full page came back — there may be more resources beyond it.
+  // (Switching category chips only ever filters what's already loaded,
+  // so the button reflects the loaded set being capped, not the
+  // filtered count.) Only the main Hub list paginates this way — a
+  // profile's "Notes" tab uses loadUserResources() below instead.
+  if (lastLoadedCount === resourcePageLimit) {
+    const loadMoreBtn = document.createElement("button");
+    loadMoreBtn.type = "button";
+    loadMoreBtn.className = "btn-outline full resource-load-more";
+    loadMoreBtn.textContent = "Load more resources";
+    loadMoreBtn.addEventListener("click", () => {
+      setBtnLoading(loadMoreBtn, true, "Loading…");
+      resourcePageLimit += RESOURCE_PAGE_SIZE;
+      subscribeResources();
+    });
+    resourceList.appendChild(loadMoreBtn);
+  }
 }
 
 /** Shared row renderer — used by the main Notes & Sheet Hub list and by a profile's "Notes" tab. */

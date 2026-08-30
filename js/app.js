@@ -26,12 +26,37 @@ import { uploadImage } from "./cloudinary.js";
 import { isAcceptableImageFile } from "./media-picker.js";
 import { openImageCropper } from "./image-cropper.js";
 import { initPush, unregisterPushToken } from "./push.js";
+import { getThemePreference, setThemePreference, initTheme } from "./theme.js";
+
+// The inline script at the top of index.html's <head> already painted
+// the right theme before first paint (avoiding a flash) — this just
+// starts the "System" preference following the OS live from here on.
+initTheme();
 
 // ---------- Element references ----------
 const loadingScreen = document.getElementById("loading-screen");
 const loadingLabel = document.getElementById("loading-label");
 const authScreen = document.getElementById("auth-screen");
 const appShell = document.getElementById("app-shell");
+
+// ============================================================
+// OFFLINE BANNER — a dropped connection used to only show up as
+// scattered "Couldn't load…" toasts from whichever listener happened
+// to fail first, which didn't make the actual cause obvious. This
+// listens for the browser's own online/offline signal and shows one
+// clear top banner instead, independent of login state (it also
+// applies while the auth screen is up). Firestore's realtime
+// listeners reconnect and re-sync on their own once the connection
+// returns, so there's nothing to re-fetch manually here — the banner
+// is purely a status indicator.
+// ============================================================
+const offlineBanner = document.getElementById("offline-banner");
+function updateOfflineBanner() {
+  offlineBanner.classList.toggle("show", !navigator.onLine);
+}
+window.addEventListener("online", updateOfflineBanner);
+window.addEventListener("offline", updateOfflineBanner);
+updateOfflineBanner(); // reflect the real state immediately on load, not just on the next change
 
 /** Swap the loading-screen's message ("Loading GeoHub" / "Logging out"). */
 function setLoadingLabel(text) {
@@ -485,6 +510,27 @@ function renderSettingsPage() {
   const resetPwBtn = document.getElementById("settings-reset-password-btn");
 
   document.getElementById("settings-edit-profile-btn").onclick = () => openProfileDetailsModal(false);
+
+  // Appearance — System / Light / Dark. Reflects whatever's actually
+  // stored (defaulting to "system" the first time someone opens this).
+  const themeToggle = document.getElementById("settings-theme-toggle");
+  const themeStatus = document.getElementById("settings-theme-status");
+  const themeStatusText = {
+    system: "Matches your device",
+    light: "Always light",
+    dark: "Always dark"
+  };
+  const paintThemeToggle = (pref) => {
+    themeToggle.querySelectorAll("button").forEach(b => b.classList.toggle("active", b.dataset.themeChoice === pref));
+    themeStatus.textContent = themeStatusText[pref];
+  };
+  paintThemeToggle(getThemePreference());
+  themeToggle.querySelectorAll("button").forEach(btn => {
+    btn.onclick = () => {
+      setThemePreference(btn.dataset.themeChoice);
+      paintThemeToggle(btn.dataset.themeChoice);
+    };
+  });
 
   // Password reset only makes sense for an email/password account — a
   // Google-only sign-in has no GeoHub password to reset.

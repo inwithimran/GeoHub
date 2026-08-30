@@ -14,7 +14,7 @@ import {
   showToast, escapeHtml, timeAgo, openModal, closeModal,
   setBtnLoading, cacheUserProfile, getCachedProfile, clampableRichHtml, attachClampToggle,
   avatarInner, nameWithBadge, kebabMenuHtml, wireKebabMenus, confirmDialog, isAdminEmail,
-  extractHashtags, wireRichTextClicks, wireMentionAutocomplete, skeletonRowsHtml
+  extractHashtags, wireRichTextClicks, wireMentionAutocomplete, skeletonRowsHtml, wireCharCounter
 } from "./ui-utils.js";
 import { openUserProfilePage } from "./profile-view.js";
 import { uploadImages } from "./cloudinary.js";
@@ -83,6 +83,11 @@ const WALL_PAGE_SIZE = 20;
 let wallPageLimit = WALL_PAGE_SIZE;
 let lastPostCount = 0;
 
+// Reasonable ceiling on a single post's text — long enough for a real
+// question or update, short enough that one runaway post can't blow up
+// the feed's layout for everyone scrolling past it.
+const POST_TEXT_LIMIT = 3000;
+
 /** Resolve a full-enough profile object (for the avatar/badge) from the shared cache, uid, and stored name. */
 export function authorProfile(uid, fallbackName) {
   const cached = getCachedProfile(uid);
@@ -142,7 +147,7 @@ function openComposerModal() {
           <small>Posting to the Student Wall</small>
         </div>
       </div>
-      <textarea id="post-input" class="composer-modal-textarea" placeholder="Ask a question or share something with the department… (@mention a classmate, #tag a topic)" rows="6" autofocus></textarea>
+      <textarea id="post-input" class="composer-modal-textarea" placeholder="Ask a question or share something with the department… (@mention a classmate, #tag a topic)" rows="6" maxlength="${POST_TEXT_LIMIT}" autofocus></textarea>
       ${imagePickerHtml("post-image-input")}
       <button type="button" class="composer-poll-toggle" id="poll-toggle-btn">
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
@@ -165,6 +170,7 @@ function openComposerModal() {
   `);
   const textarea = document.getElementById("post-input");
   textarea.focus();
+  wireCharCounter(textarea, POST_TEXT_LIMIT);
   const { getFiles } = wireImagePicker(document.getElementById("modal-body"), "post-image-input");
   const { getMentions } = wireMentions(textarea);
   const { getPoll, pollEnabled } = wirePollBuilder();
@@ -213,6 +219,7 @@ function wirePollBuilder() {
 async function handleCreatePost(getImageFiles, getMentions, getPoll) {
   const textarea = document.getElementById("post-input");
   const btn = document.getElementById("post-submit");
+  if (btn.disabled) return; // guards against a double-post race (button click + Ctrl/Cmd+Enter)
   const errorEl = document.getElementById("post-error");
   const text = textarea.value.trim();
   errorEl.textContent = "";
@@ -280,7 +287,7 @@ export function openEditPostModal(postId, currentText, onSaved, currentImages = 
           <small>Editing your post</small>
         </div>
       </div>
-      <textarea id="post-edit-input" class="composer-modal-textarea" rows="6">${escapeHtml(currentText)}</textarea>
+      <textarea id="post-edit-input" class="composer-modal-textarea" rows="6" maxlength="${POST_TEXT_LIMIT}">${escapeHtml(currentText)}</textarea>
       ${imagePickerHtml("post-edit-image-input")}
       <p id="post-edit-error" class="form-error"></p>
       <button type="button" class="btn-primary full raised composer-post-btn" id="post-edit-save-btn">Save Changes</button>
@@ -289,6 +296,7 @@ export function openEditPostModal(postId, currentText, onSaved, currentImages = 
   const modalBody = document.getElementById("modal-body");
   const { getRemainingUrls, getFiles } = wireImagePicker(modalBody, "post-edit-image-input", { existingImages: currentImages });
   const { getMentions } = wireMentions(document.getElementById("post-edit-input"), currentMentions);
+  wireCharCounter(document.getElementById("post-edit-input"), POST_TEXT_LIMIT);
 
   document.getElementById("post-edit-save-btn").addEventListener("click", async (e) => {
     const text = document.getElementById("post-edit-input").value.trim();

@@ -5,8 +5,8 @@
 // Also doubles as the shared profile cache used across the app.
 // ============================================================
 import { db } from "./firebase-config.js";
-import { collection, onSnapshot } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
-import { escapeHtml, showToast, cacheUserProfile, avatarInner, nameWithBadge } from "./ui-utils.js";
+import { collection, onSnapshot, query, limit } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import { escapeHtml, showToast, setBtnLoading, cacheUserProfile, avatarInner, nameWithBadge } from "./ui-utils.js";
 import { openUserProfilePage } from "./profile-view.js";
 
 const directoryList = document.getElementById("directory-list");
@@ -21,6 +21,20 @@ let activeYear = "All";
 let allStudents = [];
 let unsubscribeDirectory = null;
 
+// ============================================================
+// PAGINATION — same trade-off as the Wall (see wall.js): reading
+// every classmate in one go got expensive as the department's
+// signups grew, so the realtime listener is capped to a page size
+// and "Load more classmates" just asks for a bigger page. No
+// orderBy() is needed here (the list is re-sorted by name client-
+// side for display anyway) — Firestore's default document-id order
+// keeps each bigger page a strict superset of the last, so nobody
+// already on screen jumps around when more load in underneath.
+// ============================================================
+const DIRECTORY_PAGE_SIZE = 60;
+let directoryPageLimit = DIRECTORY_PAGE_SIZE;
+let lastLoadedCount = 0;
+
 /** The current classmate list (for @mention autocomplete elsewhere — wall.js, post-detail.js). */
 export function getAllStudents() {
   return allStudents;
@@ -28,8 +42,14 @@ export function getAllStudents() {
 
 export function initDirectory() {
   searchInput.addEventListener("input", renderDirectory);
+  subscribeDirectory();
+}
 
-  unsubscribeDirectory = onSnapshot(collection(db, "users"), (snap) => {
+function subscribeDirectory() {
+  if (unsubscribeDirectory) unsubscribeDirectory();
+  const q = query(collection(db, "users"), limit(directoryPageLimit));
+  unsubscribeDirectory = onSnapshot(q, (snap) => {
+    lastLoadedCount = snap.size;
     allStudents = snap.docs.map(d => {
       const data = d.data();
       cacheUserProfile(d.id, data); // keep the shared cache warm for wall.js / profile-view.js
@@ -105,6 +125,22 @@ function renderDirectory() {
       openUserProfilePage(row.dataset.uid);
     });
   });
+
+  // A full page came back — there may be more classmates beyond it.
+  // (When search/year narrows the visible rows, this still reflects
+  // whether the underlying loaded set is capped, not the filtered count.)
+  if (lastLoadedCount === directoryPageLimit) {
+    const loadMoreBtn = document.createElement("button");
+    loadMoreBtn.type = "button";
+    loadMoreBtn.className = "btn-outline full directory-load-more";
+    loadMoreBtn.textContent = "Load more classmates";
+    loadMoreBtn.addEventListener("click", () => {
+      setBtnLoading(loadMoreBtn, true, "Loading…");
+      directoryPageLimit += DIRECTORY_PAGE_SIZE;
+      subscribeDirectory();
+    });
+    directoryList.appendChild(loadMoreBtn);
+  }
 }
 
 export function teardownDirectory() {

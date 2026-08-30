@@ -267,6 +267,33 @@ export function setBtnLoading(btn, loading, label) {
 }
 
 // ============================================================
+// CHAR COUNTER — a small "n/limit" readout under a composer field,
+// used on the post/comment/notice text boxes so someone can see a
+// runaway wall of text coming before they hit submit, instead of
+// discovering it only once it's rendered (and breaks the feed's
+// layout) for everyone else. `field.maxLength` is set as the actual
+// enforcement (native, covers typing AND paste) — the counter here is
+// just the visible feedback layered on top of that.
+// ============================================================
+export function wireCharCounter(field, limit) {
+  if (!field) return;
+  field.maxLength = limit;
+  let counter = field.nextElementSibling;
+  if (!counter || !counter.classList.contains("char-counter")) {
+    counter = document.createElement("div");
+    counter.className = "char-counter";
+    field.insertAdjacentElement("afterend", counter);
+  }
+  const update = () => {
+    const len = field.value.length;
+    counter.textContent = `${len}/${limit}`;
+    counter.classList.toggle("char-counter-warn", len >= limit * 0.9);
+  };
+  field.addEventListener("input", update);
+  update();
+}
+
+// ============================================================
 // SHARED USER CACHE — populated by the directory listener (which
 // already streams every student's profile) so other screens can
 // show a name/avatar/details for a uid without a fresh fetch.
