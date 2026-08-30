@@ -152,7 +152,7 @@
 
   --color-forest-950: #0b2015;
   --color-forest-900: #0f2e1d;
-  --color-forest-800: #77c99a;
+  --color-forest-800: #163a26;
   --color-forest-700: #63bd8b;
   --color-forest-600: #3fa06c;
   --color-forest-500: #4db47c;
@@ -195,6 +195,14 @@
 :root[data-theme="dark"] .media-thumb-remove:active { background: rgba(0,0,0,.75); }
 :root[data-theme="dark"] .modal-close-btn { background: rgba(0,0,0,.5); }
 :root[data-theme="dark"] .modal-close-btn:active { background: rgba(0,0,0,.7); }
+
+/* forest-700 is kept light in dark mode for text/icon legibility, but a
+   couple of spots use it as a solid background fill (not a text color) —
+   those need their own dark-mode override so they stay a deep, saturated
+   green instead of turning pale like the token itself. */
+:root[data-theme="dark"] .pd-photo-camera-btn { background: var(--color-forest-600); }
+:root[data-theme="dark"] .pd-photo-camera-btn:active { background: var(--color-forest-800); }
+:root[data-theme="dark"] .call-btn { background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800)); }
 
 @keyframes fade-up   { from{ opacity:0; transform:translateY(5px);} to{ opacity:1; transform:translateY(0);} }
 @keyframes sheet-up   { from{ opacity:0; transform:translateY(42px);} to{ opacity:1; transform:translateY(0);} }
@@ -437,7 +445,7 @@
   .auth-gate-divider::before, .auth-gate-divider::after { content:""; @apply flex-1 h-px; background: var(--color-line); }
   .btn-email-gate {
     @apply flex items-center gap-3 text-left px-4 py-3 rounded-full font-bold text-[.92rem] transition-transform;
-    background: var(--color-forest-50); color: var(--color-forest-800); border:1.5px solid var(--color-forest-200);
+    background: var(--color-forest-50); color: var(--color-forest-700); border:1.5px solid var(--color-forest-200);
   }
   .btn-email-gate:active { background: var(--color-forest-100); transform:scale(.98); }
   .btn-email-gate.full { @apply w-full; }
@@ -913,7 +921,7 @@
     @apply flex-1 max-w-[130px] flex flex-col items-center justify-center gap-0.5 rounded-2xl bg-surface;
     padding:10px 6px; box-shadow: var(--shadow-card); border:1px solid var(--color-line);
   }
-  .profile-stat-chip strong { @apply text-[.86rem] font-extrabold; color: var(--color-forest-800); font-family: var(--font-mono); }
+  .profile-stat-chip strong { @apply text-[.86rem] font-extrabold; color: var(--color-forest-700); font-family: var(--font-mono); }
   .profile-stat-chip span { @apply text-[.62rem] font-bold uppercase tracking-wide; color: var(--color-ink-faint); }
 
   .profile-flow-details {
@@ -1137,7 +1145,7 @@
   .activity-row.unread { background: var(--color-forest-50); border-color: var(--color-forest-200); }
   .activity-row.unread::before { background: linear-gradient(180deg, var(--color-forest-500), var(--color-forest-700)); }
   .activity-row.unread .notice-row-text { font-weight:700; color: var(--color-ink); }
-  .activity-row.unread .notice-row-name { color: var(--color-forest-800); }
+  .activity-row.unread .notice-row-name { color: var(--color-forest-700); }
   .activity-row.read { opacity:.6; }
   .activity-row.read .notice-row-text { font-weight:400; }
   .activity-unread-dot {
