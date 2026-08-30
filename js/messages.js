@@ -109,8 +109,11 @@ function isNearBottom(el, slack = 80) {
   return el.scrollHeight - el.scrollTop - el.clientHeight < slack;
 }
 
-/** Renders a list of {id,...} chat docs (classChat OR one DM thread's messages) into `listEl` as grouped bubbles. */
-function renderChatBubbles(listEl, docs, { emptyText }) {
+/** Renders a list of {id,...} chat docs (classChat OR one DM thread's messages) into `listEl` as grouped bubbles.
+ *  `showNames`: Class Chat is a shared room (many voices), so each new sender needs a name label above their
+ *  bubbles. A DM thread is always exactly the two of you — repeating "the other person's name" over and over
+ *  is just noise there, so DM rendering passes this false and skips it. */
+function renderChatBubbles(listEl, docs, { emptyText, showNames = true }) {
   if (!docs.length) {
     listEl.innerHTML = `<div class="chat-empty">${escapeHtml(emptyText)}</div>`;
     return;
@@ -146,7 +149,7 @@ function renderChatBubbles(listEl, docs, { emptyText }) {
       <div class="chat-bubble-row ${mine ? "mine" : ""}" data-msg-id="${escapeHtml(m.id)}">
         ${grouped ? `<span style="width:26px" aria-hidden="true"></span>` : `<span class="avatar" data-author="${escapeHtml(uid || "")}">${avatarInner(profile)}</span>`}
         <div class="chat-bubble-group">
-          ${!mine && !grouped ? `<span class="chat-bubble-name">${nameWithBadge(profile.name || "Classmate", profile.email)}</span>` : ""}
+          ${!mine && !grouped && showNames ? `<span class="chat-bubble-name">${nameWithBadge(profile.name || "Classmate", profile.email)}</span>` : ""}
           <div class="chat-bubble">${richTextHtml(m.text || "", [])}</div>
           <div class="chat-bubble-meta"><span>${timeLabel}</span></div>
         </div>
@@ -408,7 +411,7 @@ export async function openDmThread(uid, { fromPopstate = false, replace = false 
     const msgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     dmThreadListEl.dataset.conversationId = conversationId;
     dmThreadListEl.dataset.deleteHandler = "dm";
-    renderChatBubbles(dmThreadListEl, msgs, { emptyText: "No messages yet — say hello 👋" });
+    renderChatBubbles(dmThreadListEl, msgs, { emptyText: "No messages yet — say hello 👋", showNames: false });
     dmThreadListEl.dataset.everLoaded = "1";
     if (wasNearBottom) dmThreadListEl.scrollTop = dmThreadListEl.scrollHeight;
     // Any incoming message while this thread is open counts as read immediately.
