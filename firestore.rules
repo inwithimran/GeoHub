@@ -88,6 +88,18 @@ service cloud.firestore {
       match /fcmTokens/{token} {
         allow read, write: if isOwner(uid);
       }
+
+      // Per-item "read"/"deleted" notification state (js/routine.js) — one
+      // doc per kind ("notice", "activity", "activity_dismissed"), each
+      // holding the capped array of ids the owner has already seen/removed.
+      // This is the cloud copy of what's also cached in localStorage for
+      // instant painting; it's what makes read/deleted state survive
+      // clearing the browser's local data, reinstalling the app, or
+      // switching devices. Owner-only, same as everything else about a
+      // student's own account.
+      match /readState/{kind} {
+        allow read, write: if isOwner(uid);
+      }
     }
 
     // ---- Activity feed (Notices & Notifications -> "Notification" tab) ----
@@ -146,7 +158,12 @@ service cloud.firestore {
         allow read: if isSignedIn();
         allow create: if isSignedIn() && request.resource.data.authorUid == request.auth.uid;
         allow update: if isOwner(resource.data.authorUid);
-        allow delete: if isOwner(resource.data.authorUid) || isAdmin();
+        // A comment's own author, an admin, OR the author of the POST it's
+        // on may delete it — that last one lets a post's owner moderate
+        // their own comment thread (remove anyone's comment, not just
+        // their own), same spirit as being able to delete the whole post.
+        allow delete: if isOwner(resource.data.authorUid) || isAdmin() ||
+          isOwner(get(/databases/$(database)/documents/posts/$(postId)).data.authorUid);
       }
     }
 
