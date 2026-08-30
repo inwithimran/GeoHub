@@ -1,12 +1,60 @@
 // ============================================================
-// FIREBASE-MESSAGING-SW.JS — background push handler.
+// FIREBASE-MESSAGING-SW.JS — background push handler + PWA cache.
 // Must live at the SITE ROOT (same folder as index.html) with
 // exactly this filename — Firebase Cloud Messaging looks for it
 // there by default. Handles notifications that arrive while
-// GeoHub isn't open in any tab (app closed / phone locked).
+// GeoHub isn't open in any tab (app closed / phone locked), and
+// doubles as the app's one and only service worker: it also
+// caches the app shell so GeoHub installs as a PWA and opens
+// instantly (and mostly works offline) on repeat visits. Kept as
+// a single file (rather than a separate sw.js) so there's only
+// ever one service worker controlling the page.
 // ============================================================
 importScripts("https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/10.13.0/firebase-messaging-compat.js");
+
+// ---------- App-shell caching (installability + offline) ----------
+const CACHE_NAME = "geohub-shell-v1";
+const APP_SHELL = [
+  "/",
+  "/index.html",
+  "/manifest.json",
+  "/icons/geohub-192.png",
+  "/icons/geohub-512.png"
+];
+
+self.addEventListener("install", (event) => {
+  self.skipWaiting();
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)).catch(() => {})
+  );
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys().then((names) =>
+      Promise.all(names.filter((n) => n !== CACHE_NAME).map((n) => caches.delete(n)))
+    ).then(() => self.clients.claim())
+  );
+});
+
+// Network-first for same-origin navigation/asset requests, falling back to
+// cache when offline; everything cross-origin (Firebase, fonts, Tailwind
+// CDN, Cloudinary) is left to the network untouched.
+self.addEventListener("fetch", (event) => {
+  const { request } = event;
+  if (request.method !== "GET" || new URL(request.url).origin !== self.location.origin) return;
+
+  event.respondWith(
+    fetch(request)
+      .then((response) => {
+        const copy = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => {});
+        return response;
+      })
+      .catch(() => caches.match(request).then((cached) => cached || caches.match("/index.html")))
+  );
+});
 
 // Keep this in sync with js/firebase-config.js — service workers can't use
 // ES module imports, so the config is duplicated here.
@@ -25,8 +73,8 @@ messaging.onBackgroundMessage((payload) => {
   const title = payload.data?.title || "GeoHub";
   const options = {
     body: payload.data?.body || "",
-    icon: "/icons/geohub-192.png", // optional — add this file, or remove this line
-    badge: "/icons/geohub-badge.png", // optional — add this file, or remove this line
+    icon: "/icons/geohub-192.png",
+    badge: "/icons/geohub-badge.png",
     data: { url: payload.data?.url || "/" }
   };
   self.registration.showNotification(title, options);

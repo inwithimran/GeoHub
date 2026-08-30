@@ -5,6 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
 <title>GeoHub · Geography &amp; Environment Dept.</title>
 <meta name="theme-color" content="#173821" />
+<meta name="description" content="GeoHub — student wall, notes &amp; sheets, classmates directory and routine for the Geography &amp; Environment Dept." />
+
+<!-- ============================================================
+     PWA — manifest + icons + platform install meta tags
+============================================================= -->
+<link rel="manifest" href="/manifest.json" />
+<link rel="icon" type="image/x-icon" href="/favicon.ico" sizes="any" />
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/geohub-32.png" />
+<link rel="icon" type="image/png" sizes="16x16" href="/icons/geohub-16.png" />
+<link rel="apple-touch-icon" href="/icons/geohub-180.png" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="GeoHub" />
+<meta name="application-name" content="GeoHub" />
+<meta name="msapplication-TileColor" content="#173821" />
+<meta name="msapplication-TileImage" content="/icons/geohub-192.png" />
+
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sora:wght@600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
@@ -120,16 +138,9 @@
 
 @layer components {
 
-  /* ---------- Brand mark (globe + leaf) ---------- */
+  /* ---------- Brand mark (GeoHub logo image) ---------- */
   .brand-mark { @apply relative w-full h-full flex items-center justify-center; }
-  .brand-mark svg { @apply w-[60%] h-[60%]; }
-  .brand-leaf {
-    @apply absolute -right-[6%] -bottom-[6%] w-[36%] h-[36%] border-2 shadow-md;
-    background: var(--color-gold-500);
-    border-color: currentColor;
-    border-radius: 50% 0;
-    transform: rotate(-45deg);
-  }
+  .brand-mark img { @apply w-full h-full object-contain select-none pointer-events-none; }
 
   /* ---------- Loading screen — clean single-ring orb + sweeping bar ---------- */
   .loading-screen {
@@ -152,7 +163,7 @@
             mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
   }
   .loader-mark {
-    @apply w-14 h-14 rounded-2xl flex items-center justify-center relative z-[2] text-white;
+    @apply w-14 h-14 rounded-2xl flex items-center justify-center relative z-[2] text-white overflow-hidden;
     background: rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.28); box-shadow:0 10px 24px rgba(0,0,0,.25);
     animation: mark-breathe 2.2s ease-in-out infinite;
   }
@@ -187,7 +198,7 @@
   .auth-compass { @apply absolute pointer-events-none; width:250px; height:250px; right:-70px; bottom:-80px; opacity:.15; }
   .auth-compass svg { @apply w-full h-full; color:#fff; animation: compass-spin 70s linear infinite; }
 
-  .logo-mark-small { @apply w-[38px] h-[38px] rounded-xl bg-white flex items-center justify-center shrink-0; color: var(--color-forest-700); }
+  .logo-mark-small { @apply w-[38px] h-[38px] rounded-xl bg-white flex items-center justify-center shrink-0 overflow-hidden; color: var(--color-forest-700); }
   .auth-brand-top { @apply relative z-[1] flex items-center gap-2.5; }
   .auth-brand-top strong { @apply block text-[.95rem] font-extrabold tracking-wide; font-family: var(--font-display); }
   .auth-brand-top small { @apply block opacity-70 text-[.66rem] font-bold uppercase tracking-wider mt-0.5; }
@@ -1054,15 +1065,7 @@
       <div class="loader-ring"></div>
       <div class="loader-mark">
         <span class="brand-mark">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
-            <circle cx="12" cy="12" r="9"/>
-            <path d="M3 12h18"/>
-            <path d="M12 3c3 3.5 3 14.5 0 18"/>
-            <path d="M12 3c-3 3.5-3 14.5 0 18"/>
-            <path d="M4.3 7.6c4.7 1.9 10.7 1.9 15.4 0"/>
-            <path d="M4.3 16.4c4.7-1.9 10.7-1.9 15.4 0"/>
-          </svg>
-          <span class="brand-leaf" aria-hidden="true"></span>
+          <img src="/icons/geohub-192.png" alt="GeoHub" />
         </span>
       </div>
     </div>
@@ -1103,15 +1106,7 @@
         <div class="auth-brand-top">
           <div class="logo-mark-small">
             <span class="brand-mark">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
-                <circle cx="12" cy="12" r="9"/>
-                <path d="M3 12h18"/>
-                <path d="M12 3c3 3.5 3 14.5 0 18"/>
-                <path d="M12 3c-3 3.5-3 14.5 0 18"/>
-                <path d="M4.3 7.6c4.7 1.9 10.7 1.9 15.4 0"/>
-                <path d="M4.3 16.4c4.7-1.9 10.7-1.9 15.4 0"/>
-              </svg>
-              <span class="brand-leaf" aria-hidden="true"></span>
+              <img src="/icons/geohub-192.png" alt="GeoHub" />
             </span>
           </div>
           <div>
@@ -1298,15 +1293,7 @@
       <div class="sidebar-brand">
         <div class="logo-mark-small">
           <span class="brand-mark">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="9"/>
-              <path d="M3 12h18"/>
-              <path d="M12 3c3 3.5 3 14.5 0 18"/>
-              <path d="M12 3c-3 3.5-3 14.5 0 18"/>
-              <path d="M4.3 7.6c4.7 1.9 10.7 1.9 15.4 0"/>
-              <path d="M4.3 16.4c4.7-1.9 10.7-1.9 15.4 0"/>
-            </svg>
-            <span class="brand-leaf" aria-hidden="true"></span>
+            <img src="/icons/geohub-192.png" alt="GeoHub" />
           </span>
         </div>
         <div>
@@ -1343,15 +1330,7 @@
       <div class="topbar-left">
         <div class="logo-mark-small topbar-logo">
           <span class="brand-mark">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="9"/>
-              <path d="M3 12h18"/>
-              <path d="M12 3c3 3.5 3 14.5 0 18"/>
-              <path d="M12 3c-3 3.5-3 14.5 0 18"/>
-              <path d="M4.3 7.6c4.7 1.9 10.7 1.9 15.4 0"/>
-              <path d="M4.3 16.4c4.7-1.9 10.7-1.9 15.4 0"/>
-            </svg>
-            <span class="brand-leaf" aria-hidden="true"></span>
+            <img src="/icons/geohub-192.png" alt="GeoHub" />
           </span>
         </div>
         <div class="topbar-titles">
