@@ -314,6 +314,13 @@ function goToRoute(route, { fromPopstate = false, replace = false, state = {} } 
     btn.classList.toggle("active", active);
     if (active) btn.setAttribute("aria-current", "page"); else btn.removeAttribute("aria-current");
   });
+  // An open DM thread has its own composer AND its own Back button, so
+  // hiding the floating pill bottom-nav there loses nothing (unlike the
+  // main Messages tab, which IS a bottom-nav destination and needs the
+  // nav to navigate away) — it just gives the composer the full width of
+  // the screen to breathe instead of squeezing in above the nav. See
+  // .app-shell.chat-mode in the CSS.
+  document.getElementById("app-shell")?.classList.toggle("chat-mode", route === "dm-thread");
   document.getElementById("topbar-title").textContent = routeTitles[route] || "GeoHub";
   document.getElementById("topbar-subtitle").textContent = route === "user-profile" ? "Classmate Profile" : route === "dm-thread" ? "Direct Message" : route === "settings" ? "App preferences & account" : "Geography & Environment";
 

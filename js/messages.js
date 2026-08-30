@@ -345,7 +345,7 @@ function renderDmThreadHeader(uid) {
     <span class="avatar" data-author="${escapeHtml(uid)}">${avatarInner(profile)}</span>
     <div>
       <span class="dm-thread-header-name">${nameWithBadge(profile.name || "Classmate", profile.email)}</span>
-      ${presenceTextHtml(uid)}
+      ${presenceTextHtml(uid, "dm-thread-presence-chip")}
     </div>`;
   paintPresenceUI();
 }
