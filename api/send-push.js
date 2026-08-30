@@ -122,6 +122,8 @@ function buildNotification(type, { text, actorName, urgent }) {
       return { title: `${actorName || "Someone"} commented on your post`, body: truncate(text) };
     case "like":
       return { title: `${actorName || "Someone"} liked your post`, body: "Tap to view." };
+    case "mention":
+      return { title: `${actorName || "Someone"} mentioned you`, body: truncate(text) || "Tap to view." };
     default:
       return { title: "GeoHub", body: truncate(text) };
   }
@@ -210,6 +212,29 @@ async function verifyClaim(db, callerUid, callerEmail, payload) {
     return;
   }
 
+  if (type === "mention") {
+    if (!postId || !targetUid) throw { status: 400, message: "Missing postId or targetUid." };
+    const postSnap = await db.collection("posts").doc(postId).get();
+    if (!postSnap.exists) throw { status: 400, message: "That post doesn't exist." };
+
+    // The mention can be in the post itself...
+    const postMentions = postSnap.get("mentions") || [];
+    const isPostMention = postSnap.get("authorUid") === callerUid &&
+      isRecent(postSnap.get("createdAt")) &&
+      postMentions.some((m) => m && m.uid === targetUid);
+    if (isPostMention) return;
+
+    // ...or in a recent comment by the caller on that post. Same
+    // no-orderBy, scan-a-few-recent-ones approach as the "comment" case
+    // above, for the same composite-index reason.
+    const commentsSnap = await db.collection("posts").doc(postId).collection("comments")
+      .where("authorUid", "==", callerUid).limit(20).get();
+    const isCommentMention = commentsSnap.docs.some((d) =>
+      isRecent(d.get("createdAt")) && (d.get("mentions") || []).some((m) => m && m.uid === targetUid));
+    if (!isCommentMention) throw { status: 400, message: "No recent mention of that person found." };
+    return;
+  }
+
   throw { status: 400, message: `Unknown type '${type}'.` };
 }
 
@@ -264,8 +289,9 @@ export default async function handler(req, res) {
     const messaging = getMessaging(app);
     const { title, body } = buildNotification(type, { text, actorName, urgent });
 
-    // A new comment or like only notifies the post's author, not the whole department.
-    const pairs = (type === "comment" || type === "like")
+    // A new comment, like, or mention only notifies one specific student
+    // (the post's author, or whoever got @mentioned) — never the whole department.
+    const pairs = (type === "comment" || type === "like" || type === "mention")
       ? await collectTokensFor(db, targetUid, callerUid)
       : await collectAllTokens(db, callerUid);
 
