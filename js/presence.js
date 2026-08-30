@@ -55,6 +55,8 @@ const BACKGROUND_GRACE_MS = 45_000;
 
 let heartbeatTimer = null;
 let backgroundGraceTimer = null;
+let presenceObserver = null;
+let paintScheduled = false;
 
 function toMillis(ts) {
   if (!ts) return 0;
@@ -108,12 +110,14 @@ export function initPresence() {
   // usually flips fresh again well before the timer below ever needs to).
   subscribeToProfileUpdates(paintPresenceUI);
   setInterval(paintPresenceUI, REPAINT_TICK_MS);
+  observeForFreshPresenceNodes();
 }
 
 /** Call once on logout, so a stale heartbeat doesn't keep firing for a signed-out session. */
 export function teardownPresence() {
   if (backgroundGraceTimer) { clearTimeout(backgroundGraceTimer); backgroundGraceTimer = null; }
   stopHeartbeat();
+  if (presenceObserver) { presenceObserver.disconnect(); presenceObserver = null; }
 }
 
 /** Whether `profile` (as currently cached) counts as online right now. */
@@ -173,4 +177,41 @@ export function paintPresenceUI() {
     el.textContent = presenceLabel(profile);
     el.classList.toggle("online-now", isUserOnline(profile));
   });
+}
+
+/**
+ * The real source of the "flickers on/off every few seconds" bug: Wall,
+ * Directory, and Messages each re-render their *entire* list from
+ * scratch (`el.innerHTML = ...`) on every single Firestore snapshot —
+ * and since Directory listens to the whole `users` collection, every
+ * classmate's own 25s heartbeat write is itself one of those snapshots.
+ * With a handful of classmates online, that's a full rebuild every
+ * couple of seconds. Each rebuild creates brand-new dot/badge elements
+ * that start un-painted (CSS default: invisible/"offline") — and used
+ * to stay that way until the next profile-cache update or the 12s
+ * repaint tick got around to them, which reads as the dot going dark
+ * and then flashing back green a moment later, over and over.
+ *
+ * Fix: watch the DOM itself. The instant any node is added anywhere,
+ * schedule a repaint on the very next animation frame (before the
+ * browser actually paints that frame), so a freshly-rebuilt badge gets
+ * its correct online/offline state applied before it's ever shown —
+ * no blank flash, no waiting on a timer. Debounced to one paint per
+ * frame no matter how many nodes changed, so this stays cheap even
+ * during a busy re-render.
+ */
+function schedulePaint() {
+  if (paintScheduled) return;
+  paintScheduled = true;
+  requestAnimationFrame(() => { paintScheduled = false; paintPresenceUI(); });
+}
+
+function observeForFreshPresenceNodes() {
+  if (presenceObserver) return;
+  presenceObserver = new MutationObserver((mutations) => {
+    for (const m of mutations) {
+      if (m.addedNodes.length) { schedulePaint(); return; }
+    }
+  });
+  presenceObserver.observe(document.body, { childList: true, subtree: true });
 }
