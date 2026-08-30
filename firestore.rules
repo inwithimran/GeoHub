@@ -55,6 +55,17 @@ service cloud.firestore {
         );
     }
 
+    // Server-side backstop for the client's char-limit UI (js/wall.js,
+    // post-detail.js, routine.js) — a client-side maxlength can't stop
+    // someone writing to Firestore directly, so the real cap has to live
+    // here too, same reasoning as nameChangeAllowed() above. Missing
+    // field passes through (some other rule already requires it where it
+    // matters); present-but-wrong-type or over-length is rejected.
+    function textWithinLimit(field, maxLen) {
+      return !(field in request.resource.data) ||
+        (request.resource.data[field] is string && request.resource.data[field].size() <= maxLen);
+    }
+
     // ---- Student profiles (also powers the Classmate Directory) ----
     // NOTE: real phone/email now live in the users/{uid}/private/contact
     // subdocument (owner + admin read only, see below). The `phone` and
@@ -138,7 +149,7 @@ service cloud.firestore {
     // ---- Student Wall posts ----
     match /posts/{postId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.authorUid == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.authorUid == request.auth.uid && textWithinLimit("text", 3000);
       // The author can edit anything on their own post. Anyone else who's
       // signed in may ONLY flip the "likes" array + "reactions" map (tapping
       // Like/React) or cast their own poll vote (pollVoteOnly, above) —
@@ -146,7 +157,7 @@ service cloud.firestore {
       // admin-only lane that touches nothing else on the post, so a
       // moderator can pin any post to the top of the Wall without gaining
       // any other edit power over it.
-      allow update: if isOwner(resource.data.authorUid) ||
+      allow update: if (isOwner(resource.data.authorUid) && textWithinLimit("text", 3000)) ||
         (isSignedIn() && onlyChangedFields(["likes", "reactions"])) ||
         (isSignedIn() && pollVoteOnly()) ||
         (isAdmin() && onlyChangedFields(["pinned", "pinnedAt"]));
@@ -156,8 +167,8 @@ service cloud.firestore {
 
       match /comments/{commentId} {
         allow read: if isSignedIn();
-        allow create: if isSignedIn() && request.resource.data.authorUid == request.auth.uid;
-        allow update: if isOwner(resource.data.authorUid);
+        allow create: if isSignedIn() && request.resource.data.authorUid == request.auth.uid && textWithinLimit("text", 500);
+        allow update: if isOwner(resource.data.authorUid) && textWithinLimit("text", 500);
         // A comment's own author, an admin, OR the author of the POST it's
         // on may delete it — that last one lets a post's owner moderate
         // their own comment thread (remove anyone's comment, not just
@@ -178,8 +189,9 @@ service cloud.firestore {
     // ---- Notice board: only CR/admin can write, everyone can read ----
     match /notices/{noticeId} {
       allow read: if isSignedIn();
-      allow create: if isAdmin();
-      allow update, delete: if isAdmin();
+      allow create: if isAdmin() && textWithinLimit("text", 1000);
+      allow update: if isAdmin() && textWithinLimit("text", 1000);
+      allow delete: if isAdmin();
     }
 
     // ---- Weekly class routine: only CR/admin can write, everyone can read ----

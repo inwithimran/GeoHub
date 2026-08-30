@@ -8,6 +8,26 @@
 <meta name="description" content="GeoHub — student wall, notes &amp; sheets, classmates directory and routine for the Geography &amp; Environment Dept." />
 
 <!-- ============================================================
+     THEME — resolves the stored System/Light/Dark preference and
+     sets data-theme on <html> synchronously, before anything is
+     painted. Doing this here (rather than waiting for js/app.js,
+     which is a deferred module) is what avoids a flash of the
+     wrong theme on load. The full theme API (get/set preference,
+     react to OS changes) lives in js/theme.js.
+============================================================= -->
+<script>
+  (function () {
+    try {
+      var stored = localStorage.getItem("geohub-theme") || "system";
+      var resolved = stored === "system"
+        ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+        : stored;
+      document.documentElement.setAttribute("data-theme", resolved);
+    } catch (e) { /* localStorage unavailable — falls back to the light default look */ }
+  })();
+</script>
+
+<!-- ============================================================
      PWA — manifest + icons + platform install meta tags
 ============================================================= -->
 <link rel="manifest" href="/manifest.json" />
@@ -102,6 +122,79 @@
   --animate-modal-pop: modal-pop .2s cubic-bezier(.2,.8,.3,1) both;
   --animate-shimmer:   shimmer 1.4s ease-in-out infinite;
 }
+
+/* ============================================================
+   DARK MODE — same semantic token names, re-pointed to a dark
+   palette. Everything in the app is built on top of these
+   variables (bg-surface, bg-paper, text inheriting --color-ink,
+   border-color: var(--color-line), etc.), so re-declaring them
+   here is enough to re-theme the whole app without touching
+   individual component rules. The forest/clay/gold/danger scales
+   keep the same "light tint (50/100/200) + readable text
+   (600/700/800)" pairing used throughout the app — just with the
+   lightness flipped, so every existing pill/chip/badge stays
+   legible instead of going dark-text-on-dark-tint.
+
+   Applied via [data-theme="dark"] on <html>, set by js/theme.js
+   (System/Light/Dark, chosen in Settings → Appearance). A tiny
+   inline script at the top of <head> sets this attribute before
+   first paint so there's no flash of the wrong theme.
+============================================================= */
+:root[data-theme="dark"] {
+  --color-ink:        #eef2ec;
+  --color-ink-soft:   #b7c2b8;
+  --color-ink-faint:  #7f8c80;
+
+  --color-paper:      #0f1512;
+  --color-paper-deep: #0a0e0b;
+  --color-surface:    #182019;
+  --color-line:       #2a332b;
+
+  --color-forest-950: #0b2015;
+  --color-forest-900: #0f2e1d;
+  --color-forest-800: #77c99a;
+  --color-forest-700: #63bd8b;
+  --color-forest-600: #3fa06c;
+  --color-forest-500: #4db47c;
+  --color-forest-200: #1f3a2b;
+  --color-forest-100: #17281d;
+  --color-forest-50:  #12211a;
+
+  --color-clay-600:   #e08a54;
+  --color-clay-500:   #c96f3e;
+  --color-clay-100:   #3a2416;
+  --color-clay-50:    #2c1c11;
+
+  --color-gold-600:   #d9ab52;
+  --color-gold-500:   #cf9f4c;
+  --color-gold-100:   #3a2f16;
+  --color-gold-50:    #241d0e;
+
+  --color-danger-600: #e17762;
+  --color-danger-500: #cf5f48;
+  --color-danger-100: #3a1d16;
+
+  --color-badge:      #9c85ea;
+
+  --shadow-card:  0 1px 2px rgba(0,0,0,.35), 0 6px 18px rgba(0,0,0,.35);
+  --shadow-cardhover: 0 10px 26px rgba(0,0,0,.55), 0 2px 8px rgba(0,0,0,.3);
+  --shadow-deep:  0 22px 55px rgba(0,0,0,.6);
+  --shadow-btn:   0 10px 22px rgba(0,0,0,.45);
+  --shadow-tile:  0 6px 16px rgba(0,0,0,.35);
+  --shadow-fab:   0 12px 24px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.08);
+}
+
+/* A couple of literal (non-token) colors that would otherwise stay
+   light-mode white in dark mode — composer/comment inputs resetting
+   to white on focus, and the small icon scrims on modals/media. */
+:root[data-theme="dark"] .composer-modal-textarea:focus,
+:root[data-theme="dark"] .comment-input-row input:focus {
+  background: var(--color-surface);
+}
+:root[data-theme="dark"] .media-thumb-remove { background: rgba(0,0,0,.55); }
+:root[data-theme="dark"] .media-thumb-remove:active { background: rgba(0,0,0,.75); }
+:root[data-theme="dark"] .modal-close-btn { background: rgba(0,0,0,.5); }
+:root[data-theme="dark"] .modal-close-btn:active { background: rgba(0,0,0,.7); }
 
 @keyframes fade-up   { from{ opacity:0; transform:translateY(5px);} to{ opacity:1; transform:translateY(0);} }
 @keyframes sheet-up   { from{ opacity:0; transform:translateY(42px);} to{ opacity:1; transform:translateY(0);} }
@@ -405,7 +498,7 @@
   .bottom-nav {
     @apply fixed flex z-30 bg-white;
     grid-row:3; bottom:10px; left:12px; right:12px; height:68px; border-radius:24px;
-    box-shadow: var(--shadow-deep); padding:6px 4px calc(6px + env(safe-area-inset-bottom)); border:1px solid rgba(26,76,48,.06);
+    box-shadow: var(--shadow-deep); padding:6px 4px calc(6px + env(safe-area-inset-bottom)); border:1px solid var(--color-line);
   }
   .bottom-nav .nav-item { @apply flex-1 flex flex-col items-center justify-center gap-0.5 text-[.65rem] font-bold py-1.5 rounded-2xl transition-colors; color: var(--color-ink-faint); }
   .bottom-nav .nav-item.active { color: var(--color-forest-700); background: var(--color-forest-100); }
@@ -668,13 +761,13 @@
   a.res-link:active { transform:scale(.94); }
 
   /* ---------- Classmate directory / User card ("contact index card") ---------- */
-  .search-bar { @apply flex items-center gap-2.5 rounded-full bg-surface shadow-[var(--shadow-card)]; padding:0 16px; color: var(--color-ink-faint); border:1px solid rgba(26,76,48,.05); }
+  .search-bar { @apply flex items-center gap-2.5 rounded-full bg-surface shadow-[var(--shadow-card)]; padding:0 16px; color: var(--color-ink-faint); border:1px solid var(--color-line); }
   .search-bar input { @apply flex-1 border-0 bg-transparent; padding:13px 0; }
   .search-bar input:focus { outline:none; }
 
   .directory-row {
     @apply flex items-center gap-3 w-full text-left bg-surface transition-colors rounded-[14px] shadow-[var(--shadow-card)];
-    padding:12px 14px; border:1px solid rgba(26,76,48,.06); cursor:pointer;
+    padding:12px 14px; border:1px solid var(--color-line); cursor:pointer;
   }
   @media (hover:hover) { .directory-row:hover { box-shadow: var(--shadow-cardhover); } }
   .directory-row:active { background: var(--color-paper-deep); }
@@ -779,7 +872,7 @@
   /* ---------- Directory — Year filter chips ---------- */
   .directory-year-chips { @apply mb-2.5; }
 
-  .routine-day { @apply relative bg-surface rounded-2xl shadow-[var(--shadow-card)] border overflow-hidden; padding:0 16px 8px; border-color:rgba(26,76,48,.06); }
+  .routine-day { @apply relative bg-surface rounded-2xl shadow-[var(--shadow-card)] border overflow-hidden; padding:0 16px 8px; border-color: var(--color-line); }
   .routine-day h4 {
     @apply text-[.74rem] font-extrabold uppercase text-white -mx-4 mb-1.5;
     background: linear-gradient(120deg, var(--color-forest-700), var(--color-forest-900)); padding:9px 20px; letter-spacing:.08em;
@@ -818,14 +911,14 @@
   .profile-stat-row { @apply relative z-[1] flex items-stretch justify-center gap-2 mt-4.5 mb-1; }
   .profile-stat-chip {
     @apply flex-1 max-w-[130px] flex flex-col items-center justify-center gap-0.5 rounded-2xl bg-surface;
-    padding:10px 6px; box-shadow: var(--shadow-card); border:1px solid rgba(26,76,48,.05);
+    padding:10px 6px; box-shadow: var(--shadow-card); border:1px solid var(--color-line);
   }
   .profile-stat-chip strong { @apply text-[.86rem] font-extrabold; color: var(--color-forest-800); font-family: var(--font-mono); }
   .profile-stat-chip span { @apply text-[.62rem] font-bold uppercase tracking-wide; color: var(--color-ink-faint); }
 
   .profile-flow-details {
     @apply text-left bg-surface rounded-[22px] shadow-[var(--shadow-card)];
-    padding:6px 16px; border:1px solid rgba(26,76,48,.05);
+    padding:6px 16px; border:1px solid var(--color-line);
   }
   .profile-flow-actions { @apply text-center; padding:18px 0 22px; }
   .profile-detail-row { @apply flex justify-between items-center gap-3 border-b text-[.87rem]; padding:13px 2px; border-color: var(--color-line); }
@@ -960,7 +1053,7 @@
 
   /* ---------- Wall skeleton loading (shown while the first page of posts
      is still being fetched) ---------- */
-  .skeleton-post { @apply bg-surface rounded-2xl overflow-hidden; padding:14px 16px 16px; box-shadow: var(--shadow-card); border:1px solid rgba(26,76,48,.06); }
+  .skeleton-post { @apply bg-surface rounded-2xl overflow-hidden; padding:14px 16px 16px; box-shadow: var(--shadow-card); border:1px solid var(--color-line); }
   .skeleton-post-head { @apply flex items-center gap-2.5 mb-3.5; }
   .skeleton-line, .skeleton-avatar, .skeleton-block { position:relative; overflow:hidden; background: var(--color-paper-deep); }
   .skeleton-line::after, .skeleton-avatar::after, .skeleton-block::after {
@@ -984,7 +1077,7 @@
      Notification tab, Classmate Directory) via skeletonRowsHtml() in
      ui-utils.js, so every such list gets the same shimmer instead of a
      plain "Loading…" line. */
-  .skeleton-row { @apply flex items-center gap-3 bg-surface rounded-2xl; padding:13px 16px; box-shadow: var(--shadow-card); border:1px solid rgba(26,76,48,.06); }
+  .skeleton-row { @apply flex items-center gap-3 bg-surface rounded-2xl; padding:13px 16px; box-shadow: var(--shadow-card); border:1px solid var(--color-line); }
   .skeleton-row + .skeleton-row { @apply mt-3; }
   .post-image-more {
     @apply absolute inset-0 flex items-center justify-center text-white font-extrabold text-lg;
@@ -1041,7 +1134,7 @@
     content:""; @apply absolute; left:0; top:10px; bottom:10px; width:3.5px; border-radius:3px;
     background: var(--color-line);
   }
-  .activity-row.unread { background: var(--color-forest-50); border-color: rgba(26,76,48,.18); }
+  .activity-row.unread { background: var(--color-forest-50); border-color: var(--color-forest-200); }
   .activity-row.unread::before { background: linear-gradient(180deg, var(--color-forest-500), var(--color-forest-700)); }
   .activity-row.unread .notice-row-text { font-weight:700; color: var(--color-ink); }
   .activity-row.unread .notice-row-name { color: var(--color-forest-800); }
@@ -1055,7 +1148,7 @@
 
   /* ---------- Settings page (opened via the header gear icon) ---------- */
   .settings-page { @apply flex flex-col; gap:18px; }
-  .settings-group { @apply bg-surface rounded-[20px] overflow-hidden; box-shadow: var(--shadow-card); border:1px solid rgba(26,76,48,.06); }
+  .settings-group { @apply bg-surface rounded-[20px] overflow-hidden; box-shadow: var(--shadow-card); border:1px solid var(--color-line); }
   .settings-group-title { @apply text-[.7rem] font-extrabold uppercase tracking-wide; color: var(--color-ink-faint); padding:14px 16px 4px; }
   .settings-row { @apply w-full flex items-center gap-3 text-left transition-colors border-b; padding:13px 16px; border-color: var(--color-line); }
   .settings-group .settings-row:last-child { @apply border-b-0; }
@@ -1076,6 +1169,18 @@
   .settings-toggle input:disabled + .switch-track { opacity:.45; }
   .settings-logout-row { @apply mt-1; }
   .settings-version { @apply text-center text-[.72rem] pb-2; color: var(--color-ink-faint); }
+
+  /* ---------- Appearance / theme segmented control ---------- */
+  .settings-row-theme { @apply border-b-0; padding-bottom:8px; }
+  .theme-toggle-wrap { @apply px-4 pb-3.5; }
+  .theme-toggle { @apply flex gap-1 p-1 rounded-2xl; background: var(--color-paper-deep); border:1px solid var(--color-line); }
+  .theme-toggle button {
+    @apply flex-1 flex flex-col items-center justify-center gap-1 rounded-xl text-[.72rem] font-bold transition-colors bg-transparent;
+    padding:9px 4px; color: var(--color-ink-soft);
+  }
+  .theme-toggle button svg { @apply shrink-0; }
+  .theme-toggle button.active { background: var(--color-forest-600); color:#fff; box-shadow: var(--shadow-tile); }
+  .theme-toggle button:not(.active):active { background: var(--color-line); }
 
   @media (min-width:900px) {
     .settings-page { max-width:520px; }
@@ -1137,10 +1242,44 @@
     @apply fixed left-1/2 -translate-x-1/2 text-white rounded-full text-sm font-semibold text-center z-[200];
     bottom:calc(68px + 26px); background:#1c2a1e; padding:11px 22px; box-shadow: var(--shadow-deep); max-width:88%;
   }
+
+  /* ---------- Live character counter, shown under post/comment/notice
+     text fields (see wireCharCounter in ui-utils.js). ---------- */
+  .char-counter { @apply text-right text-[.7rem] font-semibold; color: var(--color-ink-faint); margin:3px 2px 0; }
+  .char-counter-warn { color: var(--color-clay-600); }
+  /* Tucked directly under the comment row (a flex sibling in
+     .comments-block) instead of the default stacked gap, so it reads
+     as part of that one input instead of a separate block. */
+  .comment-char-counter { margin-top:-6px; padding-right:44px; }
+
+  /* ---------- Offline banner — fixed strip pinned to the very top of
+     the viewport (outside the app-shell grid) so it shows over the
+     auth screen, the loading screen, and every section alike. Hidden
+     by sliding up out of view rather than display:none, so the
+     slide-down entrance is animated instead of an abrupt pop-in. ---------- */
+  .offline-banner {
+    @apply fixed top-0 left-0 right-0 z-[250] flex items-center justify-center gap-2 text-white text-[.8rem] font-semibold text-center;
+    padding:10px 16px; padding-top:calc(10px + env(safe-area-inset-top));
+    background: linear-gradient(120deg, var(--color-clay-600), #8a3d1a);
+    box-shadow: 0 4px 14px rgba(0,0,0,.18);
+    transform: translateY(-100%); transition: transform .3s ease;
+  }
+  .offline-banner svg { @apply shrink-0; }
+  .offline-banner.show { transform: translateY(0); }
 }
 </style>
 </head>
 <body>
+
+  <!-- ============================================================
+       OFFLINE BANNER — global network-status strip, independent of
+       auth/loading state, so a dropped connection is always visible
+       instead of surfacing only as scattered toast errors.
+  ============================================================= -->
+  <div id="offline-banner" class="offline-banner" role="status" aria-live="polite">
+    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.58 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+    <span>No internet connection — everything will update once you're back online.</span>
+  </div>
 
   <!-- ============================================================
        LOADING SCREEN — shown while Firebase checks auth state
@@ -1587,6 +1726,32 @@
               <span class="settings-row-text"><strong>Reset Password</strong><small>Send a password reset link to your email</small></span>
               <svg class="settings-row-chevron" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
             </button>
+          </div>
+
+          <div class="settings-group">
+            <div class="settings-group-title">Appearance</div>
+            <div class="settings-row settings-row-theme">
+              <span class="settings-row-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg>
+              </span>
+              <span class="settings-row-text"><strong>Theme</strong><small id="settings-theme-status">Matches your device</small></span>
+            </div>
+            <div class="theme-toggle-wrap">
+              <div class="theme-toggle" id="settings-theme-toggle" role="group" aria-label="Theme">
+                <button type="button" data-theme-choice="system">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                  <span>System</span>
+                </button>
+                <button type="button" data-theme-choice="light">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2.3M12 19.2v2.3M4.4 4.4l1.6 1.6M18 18l1.6 1.6M2.5 12h2.3M19.2 12h2.3M4.4 19.6 6 18M18 6l1.6-1.6"/></svg>
+                  <span>Light</span>
+                </button>
+                <button type="button" data-theme-choice="dark">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.5A8.5 8.5 0 1 1 9.5 3.5a7 7 0 0 0 11 11z"/></svg>
+                  <span>Dark</span>
+                </button>
+              </div>
+            </div>
           </div>
 
           <div class="settings-group">
