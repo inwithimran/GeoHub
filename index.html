@@ -464,6 +464,16 @@
 
   /* ---------- App shell ---------- */
   .app-shell { @apply grid min-h-screen w-full; grid-template-columns:1fr; grid-template-rows:58px 1fr 68px; }
+  /* Class Chat / DM list / an open DM thread (js/app.js toggles this on
+     route change) — the floating pill bottom-nav is hidden outright
+     instead of squeezing the composer in above it, and its reserved grid
+     row collapses to 0 so the chat panel gets that space back. Desktop
+     already hides .bottom-nav unconditionally and uses a 2-row grid, so
+     this is scoped to the mobile 3-row layout only. */
+  @media (max-width:899px) {
+    .app-shell.chat-mode { grid-template-rows:58px 1fr 0; }
+    .app-shell.chat-mode .bottom-nav { display:none; }
+  }
   .topbar {
     @apply sticky top-0 z-20 text-white flex items-center justify-between px-4;
     grid-row:1; background: linear-gradient(120deg, var(--color-forest-900) 0%, var(--color-forest-700) 55%, var(--color-forest-600) 100%);
@@ -605,18 +615,20 @@
      clearance needed there).
   ============================================================= */
   .msg-route, .dm-thread-route {
-    /* Mobile subtracts BOTH the topbar (58px) and the reserved bottom-nav
-       grid row (68px, see .app-shell's grid-template-rows) — missing the
-       second one used to make this box taller than the space the grid
-       track actually had, which forced the whole page (not just this
-       panel) to grow and scroll by the difference. */
-    margin:-16px -14px -96px; height:calc(100dvh - 58px - 68px);
+    margin:-16px -14px -96px;
     display:flex; flex-direction:column; min-width:0; gap:0 !important;
   }
   @media (min-width:900px) {
-    /* Desktop's grid has no third row (bottom-nav is hidden entirely), so
-       subtracting just the topbar here is already correct. */
     .msg-route, .dm-thread-route { margin:-26px -28px -40px; height:calc(100dvh - 64px); }
+  }
+  @media (max-width:899px) {
+    /* Class Chat / DM list (.msg-route) stays a bottom-nav destination, so
+       the nav stays visible and this still has to leave room for it:
+       topbar (58px) + the reserved bottom-nav grid row (68px). */
+    .msg-route { height:calc(100dvh - 58px - 68px); }
+    /* An open DM thread (.dm-thread-route) hides the nav via .chat-mode
+       above and reclaims its row, so it only needs to clear the topbar. */
+    .dm-thread-route { height:calc(100dvh - 58px); }
   }
 
   .msg-subtabs { @apply flex shrink-0 gap-1.5; padding:12px 14px 10px; background: var(--color-paper); border-bottom:1px solid var(--color-line); }
@@ -684,7 +696,12 @@
 
   /* ---- fixed-feeling composer at the very bottom of the panel ---- */
   .chat-input-bar {
-    @apply flex items-center gap-2 shrink-0; padding:10px 12px; margin:8px 12px 14px;
+    @apply flex items-center gap-2 shrink-0; padding:10px 12px; margin:8px 12px;
+    /* Class Chat's composer (.msg-route) still needs to clear the visible
+       floating bottom-nav; a DM thread's composer (.dm-thread-route,
+       nav hidden) doesn't strictly need this much but it's a harmless
+       amount of breathing room either way. */
+    margin-bottom: calc(16px + env(safe-area-inset-bottom));
     background: var(--color-surface); border-radius:26px; box-shadow: var(--shadow-card); border:1px solid var(--color-line);
   }
   @media (min-width:900px) { .chat-input-bar { margin:8px 2px 0; padding:10px 8px; } }
@@ -732,8 +749,26 @@
   /* ---- Direct Messages: thread header (avatar + name + presence, on the drill-down page) ---- */
   .dm-thread-header { @apply flex items-center gap-2.5 shrink-0; padding:2px 14px 12px; background: var(--color-paper); border-bottom:1px solid var(--color-line); }
   @media (min-width:900px) { .dm-thread-header { padding:0 0 12px; background:transparent; border-bottom:none; } }
-  .dm-thread-header .avatar { width:36px; height:36px; }
-  .dm-thread-header-name { @apply text-[.95rem] font-extrabold; }
+  .dm-thread-header .avatar { width:44px; height:44px; }
+  .dm-thread-header-name { @apply block text-[1.08rem] font-extrabold; margin-bottom:3px; }
+  /* A softer, more legible presence chip than a plain text line — grey
+     "pill" while away, tinted forest-green with a glowing dot once the
+     classmate comes online. Scoped to its own class (not the shared
+     .presence-text used on Profile pages) so it doesn't affect other
+     screens. */
+  .dm-thread-presence-chip {
+    @apply inline-flex items-center gap-1.5 text-[.7rem] font-bold rounded-full;
+    padding:3px 10px 3px 8px; color: var(--color-ink-faint); background: var(--color-paper-deep);
+  }
+  .dm-thread-presence-chip:empty { display:none; }
+  .dm-thread-presence-chip::before {
+    content:""; width:6px; height:6px; border-radius:50%; background: var(--color-ink-faint); flex-shrink:0;
+  }
+  .dm-thread-presence-chip.online-now { color: var(--color-forest-700); background: var(--color-forest-100); }
+  .dm-thread-presence-chip.online-now::before {
+    background: var(--color-forest-500);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-forest-500) 25%, transparent);
+  }
 
   /* ---- Message button (Directory row + a classmate's Profile) ---- */
   .msg-btn {
