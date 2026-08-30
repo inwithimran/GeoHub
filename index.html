@@ -546,6 +546,65 @@
   }
   .post-like-count:hover, .post-like-count:active { color: var(--color-forest-700); }
 
+  /* ---- Reactions (emoji, not just Like) ---- */
+  .reaction-control { @apply relative shrink-0; }
+  .reaction-btn .reaction-icon { @apply flex items-center justify-center transition-transform; width:16px; height:16px; font-size:14px; line-height:1; }
+  .reaction-btn.liked { @apply text-white; background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800)); }
+  .reaction-btn.like-pop .reaction-icon { @apply animate-leaf-pop; }
+  .reaction-picker {
+    @apply absolute bottom-full left-0 mb-2 flex items-center gap-1 rounded-full bg-surface z-20;
+    padding:6px 8px; box-shadow: var(--shadow-cardhover); border:1px solid var(--color-line);
+  }
+  .reaction-picker.hidden { @apply hidden; }
+  .reaction-option { @apply text-lg leading-none rounded-full transition-transform; padding:4px 5px; }
+  .reaction-option:hover, .reaction-option:active { @apply scale-125; background: var(--color-paper-deep); }
+  .reaction-summary-emojis { @apply text-[.85rem] tracking-tighter; }
+  .reaction-emoji-tag { @apply ml-auto text-lg shrink-0; }
+
+  /* ---- @mentions & #hashtags (inline in post/comment text) ---- */
+  .mention-chip, .hashtag-chip { @apply font-bold; color: var(--color-forest-700); }
+  .mention-chip:hover, .mention-chip:active, .hashtag-chip:hover, .hashtag-chip:active { @apply underline; }
+  .mention-dropdown {
+    @apply absolute left-0 right-0 z-20 flex flex-col rounded-2xl bg-surface overflow-hidden;
+    top: 100%; margin-top:4px; box-shadow: var(--shadow-cardhover); border:1px solid var(--color-line); max-height:220px; overflow-y:auto;
+  }
+  .mention-dropdown.hidden { @apply hidden; }
+  .mention-option { @apply flex items-center gap-2 text-left text-sm font-semibold w-full; padding:8px 12px; color: var(--color-ink); }
+  .mention-option:hover, .mention-option:active { background: var(--color-paper-deep); }
+
+  /* ---- Poll builder (composer) ---- */
+  .composer-poll-toggle {
+    @apply inline-flex items-center gap-1.5 text-[.82rem] font-bold rounded-full mt-2; color: var(--color-ink-soft);
+    background: var(--color-paper-deep); padding:7px 14px;
+  }
+  .composer-poll-toggle.active { @apply text-white; background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800)); }
+  .poll-builder { @apply flex flex-col gap-2 mt-2; }
+  .poll-builder.hidden { @apply hidden; }
+  .poll-option-input {
+    @apply w-full text-sm rounded-xl; padding:9px 12px; background: var(--color-paper-deep); border:1px solid var(--color-line); color: var(--color-ink);
+  }
+  .poll-add-option-btn { @apply self-start text-sm font-bold; color: var(--color-forest-700); }
+
+  /* ---- Poll (rendered on a post) ---- */
+  .poll-block { @apply flex flex-col gap-2 mt-1 mb-2.5; }
+  .poll-option {
+    @apply relative w-full flex items-center justify-between text-left text-[.87rem] font-semibold rounded-xl overflow-hidden;
+    padding:10px 12px; background: var(--color-paper-deep); border:1px solid var(--color-line); color: var(--color-ink);
+  }
+  .poll-option-fill { @apply absolute left-0 top-0 bottom-0 z-0; background: var(--color-forest-100); transition: width .3s ease; }
+  .poll-option.voted { border-color: var(--color-forest-500); }
+  .poll-option.voted .poll-option-fill { background: var(--color-forest-200); }
+  .poll-option-label { @apply relative z-10 pr-2; }
+  .poll-option-pct { @apply relative z-10 shrink-0 font-bold; color: var(--color-forest-700); }
+  .poll-total-votes { @apply text-[.72rem] font-bold uppercase tracking-wide; color: var(--color-ink-faint); font-family: var(--font-mono); }
+
+  /* ---- Pinned post ---- */
+  .feed-post-pinned { border:1px solid var(--color-gold-300); }
+
+  /* ---- Hashtag results modal ---- */
+  .hashtag-result-row { @apply items-center; }
+  .hashtag-result-snippet { @apply block truncate; color: var(--color-ink-faint); max-width:220px; }
+
   .comments-block { @apply mt-1 pt-3 border-t flex flex-col gap-3; border-color: var(--color-line); border-style:dashed; }
   .comments-loading { @apply flex items-center gap-2 justify-start text-left; background:none !important; border:none !important; padding:10px 0 !important; }
   .comment-item { @apply flex gap-2.5 items-start; }

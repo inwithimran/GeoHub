@@ -27,6 +27,18 @@ service cloud.firestore {
     function onlyChangedFields(fields) {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
     }
+    // A signed-in student may cast/change/retract only THEIR OWN vote inside
+    // a poll post's `poll.votes` map — the question and options stay frozen,
+    // and nobody can touch another student's vote entry. `onlyChangedFields`
+    // only sees the top-level key ("poll") since `poll.votes.<uid>` is a
+    // nested path, so the extra checks here are what actually keeps the
+    // question/options immutable and each voter's entry theirs alone.
+    function pollVoteOnly() {
+      return onlyChangedFields(["poll"]) &&
+        ("poll" in resource.data) &&
+        request.resource.data.poll.options == resource.data.poll.options &&
+        request.resource.data.poll.votes.diff(resource.data.poll.votes).affectedKeys().hasOnly([request.auth.uid]);
+    }
     // A student may change their own display name, but only once every 7
     // days — mirrors js/auth.js's nameChangeStatus()/updateProfileDetails(),
     // enforced here for real since a client-side check alone can't stop
@@ -90,7 +102,7 @@ service cloud.firestore {
     match /activity/{activityId} {
       allow read: if isSignedIn() && (
         isAdmin() ||
-        !(resource.data.type in ["comment", "like"]) ||
+        !(resource.data.type in ["comment", "like", "mention"]) ||
         resource.data.targetUid == request.auth.uid ||
         resource.data.actorUid == request.auth.uid
       );
@@ -116,13 +128,16 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.authorUid == request.auth.uid;
       // The author can edit anything on their own post. Anyone else who's
-      // signed in may ONLY flip the "likes" array (tapping Like/Unlike) —
-      // every other field is locked to the author. An admin may also
-      // delete-by-clearing... no: moderation is a separate delete rule below,
-      // not routed through update, so a moderator can never silently rewrite
-      // someone's post text.
+      // signed in may ONLY flip the "likes" array + "reactions" map (tapping
+      // Like/React) or cast their own poll vote (pollVoteOnly, above) —
+      // every other field is locked to the author. Pinning is a separate,
+      // admin-only lane that touches nothing else on the post, so a
+      // moderator can pin any post to the top of the Wall without gaining
+      // any other edit power over it.
       allow update: if isOwner(resource.data.authorUid) ||
-        (isSignedIn() && onlyChangedFields(["likes"]));
+        (isSignedIn() && onlyChangedFields(["likes", "reactions"])) ||
+        (isSignedIn() && pollVoteOnly()) ||
+        (isAdmin() && onlyChangedFields(["pinned", "pinnedAt"]));
       // The author can delete their own post; an admin can remove any post
       // as a moderation action (e.g. after a report).
       allow delete: if isOwner(resource.data.authorUid) || isAdmin();
