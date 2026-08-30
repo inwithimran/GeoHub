@@ -469,7 +469,22 @@
      instead of squeezing the composer in above it, and its reserved grid
      row collapses to 0 so the chat panel gets that space back. Desktop
      already hides .bottom-nav unconditionally and uses a 2-row grid, so
-     this is scoped to the mobile 3-row layout only. */
+     this is scoped to the mobile 3-row layout only.
+
+     chat-mode ALSO pins the shell to exactly 100dvh + overflow:hidden
+     (instead of the shell's normal min-h-screen, which grows with
+     content and is anchored to the *large* viewport that some mobile
+     browsers never shrink for an on-screen keyboard). Without this, a
+     tap into the composer's input made the shell taller than the
+     keyboard-shrunk visual viewport, so the browser fell back to
+     scrolling the whole document to keep the input visible — and since
+     .topbar is `position:sticky`, it stayed pinned at the top while the
+     chat-header scrolled up and disappeared behind it. Matching the
+     shell's own height to the same 100dvh unit the routes below already
+     use (see .msg-route/.dm-thread-route) removes the document-level
+     scroll entirely, so the sticky topbar has nothing left to cover. */
+  .app-shell.chat-mode { min-height:0; height:100dvh; overflow:hidden; }
+  body:has(.app-shell.chat-mode) { overflow:hidden; }
   @media (max-width:899px) {
     .app-shell.chat-mode { grid-template-rows:58px 1fr 0; }
     .app-shell.chat-mode .bottom-nav { display:none; }
