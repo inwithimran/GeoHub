@@ -813,8 +813,8 @@
   /* Back icon + avatar/name/presence all on one line — the back button is
      a plain sibling of #dm-thread-header (see the HTML comment above the
      section) so it survives every header re-render untouched. */
-  .dm-thread-header-row { @apply flex items-center gap-1 shrink-0; padding:2px 10px 12px; background: var(--color-paper); border-bottom:1px solid var(--color-line); }
-  @media (min-width:900px) { .dm-thread-header-row { padding:0 0 12px; background:transparent; border-bottom:none; } }
+  .dm-thread-header-row { @apply flex items-center gap-1 shrink-0; padding:10px 10px 12px; background: var(--color-paper); border-bottom:1px solid var(--color-line); }
+  @media (min-width:900px) { .dm-thread-header-row { padding:4px 0 12px; background:transparent; border-bottom:none; } }
   .dm-thread-back-btn {
     @apply flex items-center justify-center shrink-0 rounded-full transition-colors; width:34px; height:34px;
     color: var(--color-ink-soft); background: transparent;
@@ -823,14 +823,19 @@
   @media (hover:hover) { .dm-thread-back-btn:hover { background: var(--color-paper-deep); color: var(--color-ink); } }
   .dm-thread-header { @apply flex items-center gap-2.5 min-w-0 flex-1; }
   .dm-thread-header .avatar { width:44px; height:44px; }
-  .dm-thread-header-name { @apply block text-[1.08rem] font-extrabold; margin-top:4px; margin-bottom:2px; }
+  /* Name + presence chip sit in a plain sibling <div> (see js/messages.js
+     renderDmThreadHeader) — targeted here by direct-child selector so the
+     two lines stack with one small, exact gap instead of two separate
+     margins that could add up to a bigger-than-intended gap. */
+  .dm-thread-header > div { @apply flex flex-col justify-center; gap:3px; }
+  .dm-thread-header-name { @apply block text-[1.08rem] font-extrabold; margin:0; }
   /* A softer, more legible presence chip than a plain text line — grey
      "pill" while away, tinted forest-green with a glowing dot once the
      classmate comes online. Scoped to its own class (not the shared
      .presence-text used on Profile pages) so it doesn't affect other
      screens. */
   .dm-thread-presence-chip {
-    @apply inline-flex items-center gap-1.5 text-[.62rem] font-bold rounded-full;
+    @apply inline-flex items-center gap-1.5 text-[.62rem] font-bold rounded-full w-fit;
     padding:2px 8px 2px 6px; color: var(--color-ink-faint); background: var(--color-paper-deep);
   }
   .dm-thread-presence-chip:empty { display:none; }
