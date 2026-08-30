@@ -16,6 +16,7 @@ import { initWall, teardownWall } from "./wall.js";
 import { initResources, teardownResources, loadUserResources } from "./resources.js";
 import { initDirectory, teardownDirectory } from "./directory.js";
 import { initRoutine, teardownRoutine, registerNotificationsRouter } from "./routine.js";
+import { initPresence, teardownPresence } from "./presence.js";
 import { openUserProfilePage, loadUserPosts, registerProfilePageRouter, getOpenProfileUid, teardownProfilePage } from "./profile-view.js";
 import { openPostDetailPage, registerPostDetailRouter, teardownPostDetail, getOpenPostId } from "./post-detail.js";
 import {
@@ -32,6 +33,20 @@ import { getThemePreference, setThemePreference, initTheme } from "./theme.js";
 // the right theme before first paint (avoiding a flash) — this just
 // starts the "System" preference following the OS live from here on.
 initTheme();
+
+// This app is a single page (routes are just <section> toggles + our own
+// scrollPositions tracking below) but every route change still does a real
+// history.pushState/replaceState so the device back button works. That's
+// enough for the browser to think it should ALSO do its own native scroll
+// restoration on popstate — and it tries to restore whatever window.scrollY
+// was at the moment each history entry was first created (for the "wall"
+// entry, that's 0, since it's created at login before the user has scrolled
+// at all). The two systems fighting over scrollY — ours restoring the real
+// per-tab position, the browser's snapping back to that stale 0 — is why
+// returning from Post Detail could land back at the very top of the Wall
+// instead of where the user actually left off. Turning this off hands scroll
+// position entirely to goToRoute()'s own restoreY logic below.
+if ("scrollRestoration" in history) history.scrollRestoration = "manual";
 
 // ---------- Element references ----------
 const loadingScreen = document.getElementById("loading-screen");
@@ -248,6 +263,7 @@ signupForm.addEventListener("submit", async (e) => {
 const routeTitles = {
   wall: "Student Wall",
   resources: "Notes & Sheet Hub",
+  message: "Messages",
   directory: "Classmate Directory",
   routine: "Weekly Routine",
   profile: "My Profile",
@@ -419,7 +435,7 @@ function renderProfile() {
   const admin = isAdminEmail(p.email);
 
   const rows = [
-    ["Roll / Reg. No.", escapeHtml(p.roll || "Not set")],
+    ["Class Roll", escapeHtml(p.roll || "Not set")],
     ["Year", escapeHtml(p.year || "Not set")],
     ["Session / Batch", escapeHtml(p.session || "Not set")],
     ["Blood Group", escapeHtml(p.bloodGroup || "Not set")],
@@ -638,8 +654,8 @@ function openProfileDetailsModal(isFirstTime = false) {
         : `You've already changed your name recently — you can change it again in ${nameStatus.daysRemaining} day${nameStatus.daysRemaining === 1 ? "" : "s"}.`}</small>
     </label>
     <label class="field">
-      <span>Roll / Registration No.</span>
-      <input type="text" id="pd-roll" placeholder="e.g. 2024-GEO-014" value="${escapeHtml(currentProfile.roll || "")}" />
+      <span>Class Roll</span>
+      <input type="text" id="pd-roll" placeholder="e.g. 105" value="${escapeHtml(currentProfile.roll || "")}" />
     </label>
     <label class="field">
       <span>Blood Group</span>
@@ -807,6 +823,7 @@ watchAuthState(
       initResources();
       initDirectory();
       initRoutine();
+      initPresence();
       featuresInitialized = true;
     }
     goToRoute("wall", { replace: true });
@@ -834,6 +851,7 @@ watchAuthState(
       teardownDirectory();
       teardownRoutine();
       teardownPostDetail();
+      teardownPresence();
       featuresInitialized = false;
     }
     // Reset auth forms (and any stuck loading buttons) for the next login

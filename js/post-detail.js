@@ -30,6 +30,7 @@ import {
   pollHtml, wirePoll, togglePinPost
 } from "./wall.js";
 import { openUserProfilePage } from "./profile-view.js";
+import { presenceDotHtml } from "./presence.js";
 import { postImagesHtml, wirePostImageViewer, applyPostImageRatios } from "./media-picker.js";
 import { triggerPush } from "./push-trigger.js";
 import { logActivity } from "./routine.js";
@@ -211,7 +212,7 @@ function renderPostDetail(postId, post, comments, container, { focusComment, com
       <div class="post-head">
         <button type="button" class="avatar avatar-btn" data-author="${post.authorUid}" aria-label="View ${escapeHtml(author.name || post.authorName || "classmate")}’s profile">${avatarInner(author)}</button>
         <div class="post-meta">
-          <button type="button" class="post-author-name" data-author="${post.authorUid}">${nameWithBadge(post.authorName, post.authorEmail)}</button>
+          <button type="button" class="post-author-name" data-author="${post.authorUid}">${nameWithBadge(post.authorName, post.authorEmail)}${presenceDotHtml(post.authorUid)}</button>
           <small>${post.pinned ? "📌 Pinned · " : ""}${timeAgo(post.createdAt)}${post.editedAt ? " · edited" : ""}</small>
         </div>
         ${kebabActions.length ? kebabMenuHtml(postId, kebabActions) : ""}
@@ -342,7 +343,7 @@ function commentItemHtml(c, uid, isPostOwner) {
     <div class="comment-item">
       <button type="button" class="avatar avatar-sm avatar-btn" data-author="${c.authorUid}" aria-label="View ${escapeHtml(author.name || c.authorName || "classmate")}’s profile">${avatarInner(author)}</button>
       <div class="comment-body">
-        <button type="button" class="comment-author" data-author="${c.authorUid}">${nameWithBadge(c.authorName, c.authorEmail)}</button>
+        <button type="button" class="comment-author" data-author="${c.authorUid}">${nameWithBadge(c.authorName, c.authorEmail)}${presenceDotHtml(c.authorUid)}</button>
         <p>${richTextHtml(c.text, c.mentions)}</p>
         <small>${timeAgo(c.createdAt)}${c.editedAt ? " · edited" : ""}</small>
       </div>

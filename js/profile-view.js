@@ -18,6 +18,7 @@ import {
 } from "./ui-utils.js";
 import { loadUserResources } from "./resources.js";
 import { renderPost } from "./wall.js";
+import { presenceTextHtml } from "./presence.js";
 
 const cardEl = document.getElementById("user-profile-card");
 const backBtn = document.getElementById("user-profile-back-btn");
@@ -126,6 +127,7 @@ function renderProfilePage(profile, uid) {
           <span class="avatar avatar-lg profile-flow-avatar">${avatarInner(profile)}</span>
         </div>
         <h3>${nameWithBadge(profile.name || "Classmate", profile.email)}</h3>
+        ${presenceTextHtml(uid, "presence-text profile-flow-presence")}
         ${profile.session ? `<div class="profile-role">${escapeHtml(profile.session)}</div>` : ""}
         ${admin ? `<div class="profile-admin-note">Admin</div>` : ""}
       </div>

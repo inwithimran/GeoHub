@@ -18,6 +18,7 @@ import {
   ensureProfileLoaded, subscribeToProfileUpdates, friendlyError
 } from "./ui-utils.js";
 import { openUserProfilePage } from "./profile-view.js";
+import { presenceDotHtml } from "./presence.js";
 import { uploadImages } from "./cloudinary.js";
 import { logActivity, deleteActivityForPost } from "./routine.js";
 import { triggerPush } from "./push-trigger.js";
@@ -103,9 +104,22 @@ let unsubscribePosts = null;
 // ============================================================
 const WALL_PAGE_SIZE = 20;
 let liveDocs = [];      // newest page — kept live by onSnapshot
-let olderDocs = [];     // everything loaded via "Load earlier posts" — static snapshots
+let olderDocs = [];     // everything loaded via auto-pagination — static snapshots
 let hasMoreOlder = true; // false once a getDocs() page comes back short (reached the very end)
-let loadingOlder = false; // guards against a double-click firing two overlapping fetches
+let loadingOlder = false; // guards against two overlapping fetches firing at once
+
+// ============================================================
+// AUTO-PAGINATION — replaces the old tap-to-load-more button with a
+// sentinel <div> pinned to the bottom of the rendered posts. An
+// IntersectionObserver watches it and calls loadOlderPosts() itself
+// the moment it scrolls near the viewport — a 600px rootMargin means
+// the next page starts fetching *before* the user actually hits the
+// bottom, so the spinner (usually) resolves before they'd even see an
+// empty gap. Re-created on every renderWallList() since that rebuilds
+// the whole #wall-list DOM (see the "Load earlier" pagination comment
+// above) and the old sentinel node goes with it.
+// ============================================================
+let wallScrollObserver = null;
 
 // Reasonable ceiling on a single post's text — long enough for a real
 // question or update, short enough that one runaway post can't blow up
@@ -166,23 +180,30 @@ function renderWallList() {
   const docs = [...liveDocs, ...olderDocs].sort((a, b) => (b.data().pinned ? 1 : 0) - (a.data().pinned ? 1 : 0));
   docs.forEach((docSnap) => renderPost(docSnap.id, docSnap.data(), listEl, { onChanged: () => refreshStaticPost(docSnap.id) }));
 
+  if (wallScrollObserver) wallScrollObserver.disconnect();
   if (hasMoreOlder) {
-    const loadMoreBtn = document.createElement("button");
-    loadMoreBtn.type = "button";
-    loadMoreBtn.className = "btn-outline full wall-load-more";
-    loadMoreBtn.textContent = "Load earlier posts";
-    loadMoreBtn.addEventListener("click", () => loadOlderPosts(loadMoreBtn));
-    wallList.appendChild(loadMoreBtn);
+    const sentinel = document.createElement("div");
+    sentinel.className = "wall-load-sentinel";
+    sentinel.innerHTML = `<span class="btn-spinner dark" aria-hidden="true"></span>`;
+    wallList.appendChild(sentinel);
+    wallScrollObserver = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) loadOlderPosts();
+    }, { rootMargin: "600px 0px" });
+    wallScrollObserver.observe(sentinel);
+  } else if (docs.length) {
+    // Reached the actual end of the Wall (not just "nothing loaded yet") —
+    // a short, calm sign-off so scrolling further doesn't feel like it's
+    // just stuck/broken.
+    wallList.insertAdjacentHTML("beforeend", `<p class="wall-feed-end">You're all caught up 🌿</p>`);
   }
 }
 
-/** One-shot fetch of the next page of older posts, cursored right after the last post currently loaded. */
-async function loadOlderPosts(btn) {
-  if (loadingOlder) return;
+/** Auto-triggered fetch of the next page of older posts, cursored right after the last post currently loaded — see the sentinel/IntersectionObserver setup in renderWallList(). */
+async function loadOlderPosts() {
+  if (loadingOlder || !hasMoreOlder) return;
   const cursor = olderDocs.length ? olderDocs[olderDocs.length - 1] : liveDocs[liveDocs.length - 1];
   if (!cursor) return;
   loadingOlder = true;
-  setBtnLoading(btn, true, "Loading…");
   try {
     const q = query(collection(db, "posts"), orderBy("createdAt", "desc"), startAfter(cursor), limit(WALL_PAGE_SIZE));
     const snap = await getDocs(q);
@@ -192,7 +213,6 @@ async function loadOlderPosts(btn) {
   } catch (err) {
     const { message, technical } = friendlyError(err, "Couldn't load earlier posts.");
     showToast(message, { details: technical });
-    setBtnLoading(btn, false);
   } finally {
     loadingOlder = false;
   }
@@ -499,7 +519,7 @@ export function renderPost(postId, post, listEl, { onChanged } = {}) {
     <div class="post-head">
       <button type="button" class="avatar avatar-btn" data-author="${post.authorUid}" aria-label="View ${escapeHtml(author.name || post.authorName || "classmate")}’s profile">${avatarInner(author)}</button>
       <div class="post-meta">
-        <button type="button" class="post-author-name" data-author="${post.authorUid}">${nameWithBadge(post.authorName, post.authorEmail)}</button>
+        <button type="button" class="post-author-name" data-author="${post.authorUid}">${nameWithBadge(post.authorName, post.authorEmail)}${presenceDotHtml(post.authorUid)}</button>
         <small>${post.pinned ? "📌 Pinned · " : ""}${timeAgo(post.createdAt)}${post.editedAt ? " · edited" : ""}</small>
       </div>
       ${kebabMenuHtml(postId, kebabActions)}
@@ -852,6 +872,8 @@ export async function openHashtagResults(tag) {
 export function teardownWall() {
   if (unsubscribePosts) unsubscribePosts();
   unsubscribePosts = null;
+  if (wallScrollObserver) wallScrollObserver.disconnect();
+  wallScrollObserver = null;
   liveDocs = [];
   olderDocs = [];
   hasMoreOlder = true; // fresh pagination state on next login
