@@ -35,9 +35,9 @@ export function openImageCropper(file) {
         </div>
       </div>
       <div class="cropper-controls">
-        <svg class="cropper-zoom-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10" cy="10" r="6.5"/><line x1="19" y1="19" x2="14.8" y2="14.8"/></svg>
-        <input type="range" class="cropper-zoom-slider" min="0" max="1" step="0.001" value="0" disabled />
-        <svg class="cropper-zoom-icon" viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10" cy="10" r="6.5"/><line x1="19" y1="19" x2="14.8" y2="14.8"/></svg>
+        <svg class="cropper-zoom-icon" aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10" cy="10" r="6.5"/><line x1="19" y1="19" x2="14.8" y2="14.8"/></svg>
+        <input type="range" class="cropper-zoom-slider" aria-label="Zoom" min="0" max="1" step="0.001" value="0" disabled />
+        <svg class="cropper-zoom-icon" aria-hidden="true" viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10" cy="10" r="6.5"/><line x1="19" y1="19" x2="14.8" y2="14.8"/></svg>
       </div>
       <p class="cropper-hint">Drag to reposition · pinch or slide to zoom</p>`;
     document.body.appendChild(overlay);

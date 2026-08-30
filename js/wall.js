@@ -6,8 +6,8 @@
 // ============================================================
 import { db, auth } from "./firebase-config.js";
 import {
-  collection, addDoc, doc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit, where,
-  serverTimestamp, arrayUnion, arrayRemove, getDocs, deleteField
+  collection, addDoc, doc, getDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit, where,
+  serverTimestamp, arrayUnion, arrayRemove, getDocs, deleteField, startAfter
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { currentProfile, fetchProfile } from "./auth.js";
 import {
@@ -15,7 +15,7 @@ import {
   setBtnLoading, cacheUserProfile, getCachedProfile, clampableRichHtml, attachClampToggle,
   avatarInner, nameWithBadge, kebabMenuHtml, wireKebabMenus, confirmDialog, isAdminEmail,
   extractHashtags, wireRichTextClicks, wireMentionAutocomplete, skeletonRowsHtml, wireCharCounter,
-  ensureProfileLoaded, subscribeToProfileUpdates
+  ensureProfileLoaded, subscribeToProfileUpdates, friendlyError
 } from "./ui-utils.js";
 import { openUserProfilePage } from "./profile-view.js";
 import { uploadImages } from "./cloudinary.js";
@@ -73,16 +73,39 @@ const composerTrigger = document.getElementById("composer-trigger");
 let unsubscribePosts = null;
 
 // ============================================================
-// PAGINATION — loading every single post at once got expensive (in
-// both money and load time) as the Wall grew, so the realtime
-// listener is capped to a page size and "Load earlier posts" just
-// asks for a bigger page (re-subscribing is simpler and still fully
-// realtime, unlike a one-shot cursor query, at the cost of re-reading
-// the earlier posts too — an acceptable trade-off at this scale).
+// PAGINATION — true cursor-based (startAfter), not "grow the live
+// query's limit and resubscribe". That older approach re-fetched every
+// already-seen post on each "Load earlier posts" click (even if served
+// from Firestore's local cache, it still re-ran the whole listener),
+// which got wasteful as both the Wall and its scroll depth grew.
+//
+// Now only the newest WALL_PAGE_SIZE posts are ever live (onSnapshot) —
+// that's the part people are actually looking at, where new posts/likes/
+// edits/deletes need to show up in real time. "Load earlier posts" is a
+// separate one-shot getDocs() per click, cursored with startAfter() off
+// the oldest post loaded so far, and those older posts are appended as
+// static data — they won't move if edited/deleted by someone else while
+// still on screen (a manual refresh picks that up), which is the
+// deliberate trade-off for not re-reading/re-listening to the entire
+// scroll depth on every click. Your OWN actions on an older post (like,
+// comment, edit, delete) still work and update in place immediately —
+// see the optimistic updates throughout this file — this only affects
+// picking up someone ELSE'S concurrent change to a post you've already
+// scrolled past.
+//
+// KNOWN EDGE CASE: because the live page and the older pages are two
+// separate queries, if enough new posts arrive to push the exact post
+// that was the live/older boundary at cursor-time out of the live
+// window, that one post can briefly go unrendered until the Wall is
+// next reloaded (subscribeWall() recomputes everything fresh). Rare in
+// practice, self-heals on reload, and not a data-loss issue — the post
+// is still safely in Firestore the whole time.
 // ============================================================
 const WALL_PAGE_SIZE = 20;
-let wallPageLimit = WALL_PAGE_SIZE;
-let lastPostCount = 0;
+let liveDocs = [];      // newest page — kept live by onSnapshot
+let olderDocs = [];     // everything loaded via "Load earlier posts" — static snapshots
+let hasMoreOlder = true; // false once a getDocs() page comes back short (reached the very end)
+let loadingOlder = false; // guards against a double-click firing two overlapping fetches
 
 // Reasonable ceiling on a single post's text — long enough for a real
 // question or update, short enough that one runaway post can't blow up
@@ -117,35 +140,83 @@ export function initWall() {
 
 function subscribeWall() {
   if (unsubscribePosts) unsubscribePosts();
-  const q = query(collection(db, "posts"), orderBy("createdAt", "desc"), limit(wallPageLimit));
+  const q = query(collection(db, "posts"), orderBy("createdAt", "desc"), limit(WALL_PAGE_SIZE));
   unsubscribePosts = onSnapshot(q, (snap) => {
-    lastPostCount = snap.size;
-    if (snap.empty) {
-      wallList.innerHTML = `<p class="empty-state">No posts yet. Be the first to write on the wall.</p>`;
-      return;
-    }
-    wallList.innerHTML = `<div class="flat-list feed-list"></div>`;
-    const listEl = wallList.querySelector(".feed-list");
-    // Pinned posts (admin-set) float to the top of whatever page we loaded;
-    // everything else keeps the query's normal newest-first order.
-    const docs = snap.docs.slice().sort((a, b) => (b.data().pinned ? 1 : 0) - (a.data().pinned ? 1 : 0));
-    docs.forEach((docSnap) => renderPost(docSnap.id, docSnap.data(), listEl));
+    liveDocs = snap.docs;
+    renderWallList();
+  }, (err) => {
+    const { message, technical } = friendlyError(err, "Couldn't load the wall.");
+    showToast(message, { details: technical });
+  });
+}
 
-    // If we got back a full page, there may be more — offer to load them.
-    // (If fewer came back than we asked for, we've reached the very end.)
-    if (snap.size === wallPageLimit) {
-      const loadMoreBtn = document.createElement("button");
-      loadMoreBtn.type = "button";
-      loadMoreBtn.className = "btn-outline full wall-load-more";
-      loadMoreBtn.textContent = "Load earlier posts";
-      loadMoreBtn.addEventListener("click", () => {
-        setBtnLoading(loadMoreBtn, true, "Loading…");
-        wallPageLimit += WALL_PAGE_SIZE;
-        subscribeWall();
-      });
-      wallList.appendChild(loadMoreBtn);
-    }
-  }, (err) => showToast("Couldn't load the wall: " + err.message));
+/** Merge the live page + every "Load earlier" page fetched so far, and (re)draw the feed. */
+function renderWallList() {
+  if (!liveDocs.length && !olderDocs.length) {
+    wallList.innerHTML = `<p class="empty-state">No posts yet. Be the first to write on the wall.</p>`;
+    return;
+  }
+  wallList.innerHTML = `<div class="flat-list feed-list"></div>`;
+  const listEl = wallList.querySelector(".feed-list");
+  // Pinned posts (admin-set) float to the top of everything loaded so far;
+  // everything else keeps newest-first order. Array.prototype.sort is a
+  // stable sort, so within "pinned" and within "not pinned" the existing
+  // newest-first order (live page, then each older page in fetch order)
+  // is preserved exactly.
+  const docs = [...liveDocs, ...olderDocs].sort((a, b) => (b.data().pinned ? 1 : 0) - (a.data().pinned ? 1 : 0));
+  docs.forEach((docSnap) => renderPost(docSnap.id, docSnap.data(), listEl, { onChanged: () => refreshStaticPost(docSnap.id) }));
+
+  if (hasMoreOlder) {
+    const loadMoreBtn = document.createElement("button");
+    loadMoreBtn.type = "button";
+    loadMoreBtn.className = "btn-outline full wall-load-more";
+    loadMoreBtn.textContent = "Load earlier posts";
+    loadMoreBtn.addEventListener("click", () => loadOlderPosts(loadMoreBtn));
+    wallList.appendChild(loadMoreBtn);
+  }
+}
+
+/** One-shot fetch of the next page of older posts, cursored right after the last post currently loaded. */
+async function loadOlderPosts(btn) {
+  if (loadingOlder) return;
+  const cursor = olderDocs.length ? olderDocs[olderDocs.length - 1] : liveDocs[liveDocs.length - 1];
+  if (!cursor) return;
+  loadingOlder = true;
+  setBtnLoading(btn, true, "Loading…");
+  try {
+    const q = query(collection(db, "posts"), orderBy("createdAt", "desc"), startAfter(cursor), limit(WALL_PAGE_SIZE));
+    const snap = await getDocs(q);
+    olderDocs = olderDocs.concat(snap.docs);
+    hasMoreOlder = snap.size === WALL_PAGE_SIZE;
+    renderWallList();
+  } catch (err) {
+    const { message, technical } = friendlyError(err, "Couldn't load earlier posts.");
+    showToast(message, { details: technical });
+    setBtnLoading(btn, false);
+  } finally {
+    loadingOlder = false;
+  }
+}
+
+// A post among the "static" older pages has no live listener of its own,
+// so an edit/delete on it (by whoever's viewing it, if they're the owner
+// or an admin — see renderPost's kebab menu) wouldn't otherwise show up
+// until the whole Wall is reloaded. renderWallList() passes this in as
+// every post's `onChanged` so that still happens right away: re-fetch that
+// one doc and either swap in its fresh data (edited) or drop it (deleted).
+// If the post is actually on the live page, the onSnapshot listener above
+// already handles it (usually before this even runs) — that early-return
+// just avoids doing redundant work in that case, never a correctness issue
+// either way.
+async function refreshStaticPost(postId) {
+  if (liveDocs.some((d) => d.id === postId)) return; // the live listener already has this one covered
+  try {
+    const snap = await getDoc(doc(db, "posts", postId));
+    olderDocs = snap.exists()
+      ? olderDocs.map((d) => (d.id === postId ? snap : d))
+      : olderDocs.filter((d) => d.id !== postId);
+    renderWallList();
+  } catch { /* best-effort — a manual reload still picks up the change */ }
 }
 
 // ============================================================
@@ -426,7 +497,7 @@ export function renderPost(postId, post, listEl, { onChanged } = {}) {
 
   el.innerHTML = `
     <div class="post-head">
-      <button type="button" class="avatar avatar-btn" data-author="${post.authorUid}">${avatarInner(author)}</button>
+      <button type="button" class="avatar avatar-btn" data-author="${post.authorUid}" aria-label="View ${escapeHtml(author.name || post.authorName || "classmate")}’s profile">${avatarInner(author)}</button>
       <div class="post-meta">
         <button type="button" class="post-author-name" data-author="${post.authorUid}">${nameWithBadge(post.authorName, post.authorEmail)}</button>
         <small>${post.pinned ? "📌 Pinned · " : ""}${timeAgo(post.createdAt)}${post.editedAt ? " · edited" : ""}</small>
@@ -610,7 +681,8 @@ export async function reactToPost(postId, post, emoji, btnEl, countEl) {
     if (current) post.reactions[uid] = current; else delete post.reactions[uid];
     post.likes = Object.keys(post.reactions);
     paintReactionButton(btnEl, countEl, post);
-    showToast("Couldn't update your reaction: " + err.message);
+    const { message, technical } = friendlyError(err, "Couldn't update your reaction.");
+    showToast(message, { details: technical });
   } finally {
     btnEl.disabled = false;
     setTimeout(() => btnEl.classList.remove("like-pop"), 260);
@@ -670,7 +742,8 @@ export async function togglePinPost(postId, wasPinned) {
     });
     showToast(wasPinned ? "Post unpinned." : "Post pinned to the top of the Wall.");
   } catch (err) {
-    showToast("Couldn't update pin: " + err.message);
+    const { message, technical } = friendlyError(err, "Couldn't update pin.");
+    showToast(message, { details: technical });
   }
 }
 
@@ -726,7 +799,8 @@ export async function votePoll(postId, post, optionId) {
       [`poll.votes.${uid}`]: next ? next : deleteField()
     });
   } catch (err) {
-    showToast("Couldn't record your vote: " + err.message);
+    const { message, technical } = friendlyError(err, "Couldn't record your vote.");
+    showToast(message, { details: technical });
   }
 }
 
@@ -777,5 +851,9 @@ export async function openHashtagResults(tag) {
 /** Detach the realtime listener (call on logout to avoid leaks). */
 export function teardownWall() {
   if (unsubscribePosts) unsubscribePosts();
-  wallPageLimit = WALL_PAGE_SIZE; // fresh page size on next login
+  unsubscribePosts = null;
+  liveDocs = [];
+  olderDocs = [];
+  hasMoreOlder = true; // fresh pagination state on next login
+  loadingOlder = false;
 }

@@ -10,7 +10,7 @@ import {
 import { currentProfile } from "./auth.js";
 import {
   showToast, escapeHtml, openModal, closeModal, timeAgo, setBtnLoading,
-  kebabMenuHtml, wireKebabMenus, confirmDialog
+  kebabMenuHtml, wireKebabMenus, confirmDialog, friendlyError
 } from "./ui-utils.js";
 import { logActivity, deleteActivityForResource } from "./routine.js";
 import { triggerPush } from "./push-trigger.js";
@@ -46,7 +46,10 @@ function subscribeResources() {
     lastLoadedCount = snap.size;
     allResources = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderResources();
-  }, (err) => showToast("Couldn't load resources: " + err.message));
+  }, (err) => {
+    const { message, technical } = friendlyError(err, "Couldn't load resources.");
+    showToast(message, { details: technical });
+  });
 }
 
 function buildChips() {
@@ -144,7 +147,8 @@ export async function loadUserResources(uid, listEl) {
     renderResourceRows(resources, listEl, "No notes shared yet.");
   } catch (err) {
     listEl.innerHTML = `<p class="empty-state">Couldn't load notes.</p>`;
-    showToast("Couldn't load notes: " + err.message);
+    const { message, technical } = friendlyError(err, "Couldn't load notes.");
+    showToast(message, { details: technical });
   }
 }
 
@@ -195,7 +199,8 @@ async function submitResource() {
     logActivity({ type: "resource", text: title, resourceId: resRef.id });
     triggerPush({ type: "resource", text: title, actorName: currentProfile.name, resourceId: resRef.id });
   } catch (err) {
-    showToast("Couldn't share resource: " + err.message);
+    const { message, technical } = friendlyError(err, "Couldn't share resource.");
+    showToast(message, { details: technical });
     setBtnLoading(btn, false);
   }
 }
@@ -231,7 +236,8 @@ function openEditResourceModal(resId) {
       closeModal();
       showToast("Resource updated.");
     } catch (err) {
-      showToast("Couldn't update resource: " + err.message);
+      const { message, technical } = friendlyError(err, "Couldn't update resource.");
+      showToast(message, { details: technical });
       setBtnLoading(e.currentTarget, false);
     }
   });

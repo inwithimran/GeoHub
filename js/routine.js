@@ -28,7 +28,7 @@ import {
 import {
   escapeHtml, timeAgo, fullDate, showToast, setBtnLoading, openModal, closeModal,
   avatarInner, nameWithBadge, getCachedProfile, kebabMenuHtml, wireKebabMenus, confirmDialog,
-  resetScrollForTabs, skeletonRowsHtml, wireCharCounter, ensureProfileLoaded, subscribeToProfileUpdates
+  resetScrollForTabs, skeletonRowsHtml, wireCharCounter, ensureProfileLoaded, subscribeToProfileUpdates, friendlyError
 } from "./ui-utils.js";
 import { currentProfile } from "./auth.js";
 import { triggerPush } from "./push-trigger.js";
@@ -212,35 +212,27 @@ function visibleToMe(a) {
   return true;
 }
 
-export function initRoutine() {
-  // Paint instantly from whatever's cached locally...
-  noticeReadIds = loadReadIdsLocal("notice");
-  activityReadIds = loadReadIdsLocal("activity");
-  dismissedActivityIds = loadReadIdsLocal("activity_dismissed");
-  // ...then merge in Firestore's copy (see the big comment on this block
-  // above), which is what makes read/deleted state survive a cleared
-  // localStorage. Each merge re-saves locally too, so next launch is
-  // instant again without needing another round-trip.
-  mergeReadIdsFromCloud("notice", noticeReadIds).then(merged => {
-    noticeReadIds = merged;
-    saveReadIds("notice", noticeReadIds);
-    updateNoticeBadge();
-    renderNoticeTabBody();
-  });
-  mergeReadIdsFromCloud("activity", activityReadIds).then(merged => {
-    activityReadIds = merged;
-    saveReadIds("activity", activityReadIds);
-    updateNoticeBadge();
-    renderActivityList();
-  });
-  mergeReadIdsFromCloud("activity_dismissed", dismissedActivityIds).then(merged => {
-    dismissedActivityIds = merged;
-    saveReadIds("activity_dismissed", dismissedActivityIds);
-    updateNoticeBadge();
-    renderActivityList();
-  });
+// ----------------------------------------------------------------
+// LIVE-LISTENER LIFECYCLE — notices + the two activity slices below
+// used to stay subscribed for a whole logged-in session regardless of
+// whether the Notice/Notification tab was ever opened, since the
+// topbar bell badge needs to update live even while browsing the Wall.
+// That's fine at this app's current size, but it's needless Firestore
+// read cost + battery drain once the department's usage grows AND the
+// tab/app is sitting backgrounded (phone locked, browser tab switched
+// away) — reads keep streaming in for a badge nobody's looking at.
+// So: stay subscribed (for the live badge) while GeoHub is actually
+// in the foreground, but detach after a short grace period once the
+// page is hidden, and reattach the moment it's visible again. A quick
+// tab-switch-and-back doesn't cost a detach/reattach cycle; genuinely
+// backgrounding the app for a while does.
+// ----------------------------------------------------------------
+const BACKGROUND_DETACH_DELAY_MS = 60 * 1000;
+let backgroundDetachTimer = null;
+let visibilityHandlerAttached = false;
 
-  if (ADMIN_EMAILS.includes(auth.currentUser?.email || "")) watchOpenReportCount();
+function subscribeNotifications() {
+  if (unsubscribeNotices || unsubscribeActivityPublic || unsubscribeActivityPrivate) return; // already live
 
   const q = query(collection(db, "notices"), orderBy("createdAt", "desc"));
   unsubscribeNotices = onSnapshot(q, (snap) => {
@@ -248,7 +240,10 @@ export function initRoutine() {
     noticesLoaded = true;
     updateNoticeBadge();
     renderNoticeTabBody();
-  }, (err) => showToast("Couldn't load notices: " + err.message));
+  }, (err) => {
+    const { message, technical } = friendlyError(err, "Couldn't load notices.");
+    showToast(message, { details: technical });
+  });
 
   // ----------------------------------------------------------------
   // IMPORTANT: this used to be ONE onSnapshot over the whole "activity"
@@ -297,7 +292,8 @@ export function initRoutine() {
     // link to create it, visible by tapping "Copy error" in most browsers'
     // address bar / share sheet, or by reading it over someone's desktop).
     activityFeedError = err.code || err.message;
-    showToast("Notification feed error: " + activityFeedError);
+    const { message, technical } = friendlyError(err, "Couldn't load the notification feed.");
+    showToast(message, { details: technical });
     latestActivityPublic = [];
     activityPublicLoaded = true;
     renderActivityList();
@@ -319,11 +315,71 @@ export function initRoutine() {
     }, (err) => {
       console.error("Couldn't load your personal activity feed:", err.code, err.message);
       activityFeedError = err.code || err.message;
-      showToast("Notification feed error: " + activityFeedError);
+      const { message, technical } = friendlyError(err, "Couldn't load the notification feed.");
+      showToast(message, { details: technical });
       latestActivityPrivate = [];
       activityPrivateLoaded = true;
       renderActivityList();
     });
+  }
+}
+
+/** Detach the three listeners above without touching anything else (routine doc, report-count, local read-state). Last-known data stays on screen — just stops streaming updates — until subscribeNotifications() runs again. */
+function unsubscribeNotifications() {
+  if (unsubscribeNotices) { unsubscribeNotices(); unsubscribeNotices = null; }
+  if (unsubscribeActivityPublic) { unsubscribeActivityPublic(); unsubscribeActivityPublic = null; }
+  if (unsubscribeActivityPrivate) { unsubscribeActivityPrivate(); unsubscribeActivityPrivate = null; }
+}
+
+function handleVisibilityChange() {
+  if (document.hidden) {
+    clearTimeout(backgroundDetachTimer);
+    // Grace period so a quick tab-switch-and-back (or the phone screen
+    // blinking off for a second) never costs a detach/reattach round trip
+    // — only a genuine "backgrounded for a while" does.
+    backgroundDetachTimer = setTimeout(() => {
+      if (document.hidden) unsubscribeNotifications();
+    }, BACKGROUND_DETACH_DELAY_MS);
+  } else {
+    clearTimeout(backgroundDetachTimer);
+    subscribeNotifications(); // no-op if already live
+  }
+}
+
+export function initRoutine() {
+  // Paint instantly from whatever's cached locally...
+  noticeReadIds = loadReadIdsLocal("notice");
+  activityReadIds = loadReadIdsLocal("activity");
+  dismissedActivityIds = loadReadIdsLocal("activity_dismissed");
+  // ...then merge in Firestore's copy (see the big comment on this block
+  // above), which is what makes read/deleted state survive a cleared
+  // localStorage. Each merge re-saves locally too, so next launch is
+  // instant again without needing another round-trip.
+  mergeReadIdsFromCloud("notice", noticeReadIds).then(merged => {
+    noticeReadIds = merged;
+    saveReadIds("notice", noticeReadIds);
+    updateNoticeBadge();
+    renderNoticeTabBody();
+  });
+  mergeReadIdsFromCloud("activity", activityReadIds).then(merged => {
+    activityReadIds = merged;
+    saveReadIds("activity", activityReadIds);
+    updateNoticeBadge();
+    renderActivityList();
+  });
+  mergeReadIdsFromCloud("activity_dismissed", dismissedActivityIds).then(merged => {
+    dismissedActivityIds = merged;
+    saveReadIds("activity_dismissed", dismissedActivityIds);
+    updateNoticeBadge();
+    renderActivityList();
+  });
+
+  if (ADMIN_EMAILS.includes(auth.currentUser?.email || "")) watchOpenReportCount();
+
+  subscribeNotifications();
+  if (!visibilityHandlerAttached) {
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    visibilityHandlerAttached = true;
   }
 
   loadRoutine();
@@ -388,7 +444,12 @@ function wireNoticesPageTabs() {
   const tabsEl = section.querySelector(".notices-page-tabs");
   tabBtns.forEach(btn => {
     btn.addEventListener("click", () => {
-      tabBtns.forEach(b => b.classList.toggle("active", b === btn));
+      tabBtns.forEach(b => {
+        const active = b === btn;
+        b.classList.toggle("active", active);
+        b.setAttribute("aria-selected", String(active));
+        b.tabIndex = active ? 0 : -1;
+      });
       section.querySelectorAll(".notices-page-panel").forEach(p =>
         p.classList.toggle("active", p.dataset.panel === btn.dataset.tab));
       resetScrollForTabs(tabsEl); // each tab starts at its own top, instead of inheriting the previous tab's scroll position
@@ -514,7 +575,11 @@ async function openReportsModal() {
         try {
           await updateDoc(doc(db, "reports", reportId), { resolved: true });
           row.remove();
-        } catch (err) { showToast("Couldn't dismiss: " + err.message); setBtnLoading(e.currentTarget, false); }
+        } catch (err) {
+          const { message, technical } = friendlyError(err, "Couldn't dismiss.");
+          showToast(message, { details: technical });
+          setBtnLoading(e.currentTarget, false);
+        }
       });
       row.querySelector('[data-report-action="remove"]').addEventListener("click", () => confirmDialog({
         title: "Remove this post?",
@@ -657,7 +722,8 @@ async function postNotice() {
     logActivity({ type: "notice", text, noticeId: noticeRef.id });
     triggerPush({ type: "notice", text, urgent: wasUrgent, noticeId: noticeRef.id });
   } catch (err) {
-    showToast("Couldn't post notice: " + err.message);
+    const { message, technical } = friendlyError(err, "Couldn't post notice.");
+    showToast(message, { details: technical });
   } finally {
     setBtnLoading(submit, false);
   }
@@ -876,13 +942,14 @@ async function loadRoutine() {
 }
 
 export function teardownRoutine() {
-  if (unsubscribeNotices) unsubscribeNotices();
-  if (unsubscribeActivityPublic) unsubscribeActivityPublic();
-  if (unsubscribeActivityPrivate) unsubscribeActivityPrivate();
+  unsubscribeNotifications(); // also nulls out unsubscribeNotices/ActivityPublic/ActivityPrivate
   if (unsubscribeReportCount) unsubscribeReportCount();
-  unsubscribeActivityPublic = null;
-  unsubscribeActivityPrivate = null;
   unsubscribeReportCount = null;
+  clearTimeout(backgroundDetachTimer);
+  if (visibilityHandlerAttached) {
+    document.removeEventListener("visibilitychange", handleVisibilityChange);
+    visibilityHandlerAttached = false;
+  }
   openReportCount = 0;
   latestNotices = [];
   latestActivityPublic = [];

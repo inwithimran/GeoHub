@@ -120,7 +120,7 @@ export function postImagesHtml(images = []) {
   return `
     <div class="post-image-grid ${countClass}">
       ${images.slice(0, 4).map((url, i) => `
-        <button type="button" class="post-image-item" data-view-image="${escapeHtml(url)}">
+        <button type="button" class="post-image-item" data-view-image="${escapeHtml(url)}" aria-label="View photo full size">
           <img src="${escapeHtml(url)}" alt="" loading="lazy" />
           ${i === 3 && images.length > 4 ? `<span class="post-image-more">+${images.length - 4}</span>` : ""}
         </button>`).join("")}

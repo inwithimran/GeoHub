@@ -7,13 +7,97 @@ import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.13.0/firebase
 
 const toastEl = document.getElementById("toast");
 let toastTimer = null;
+let toastDetailsId = 0;
 
-/** Show a brief bottom toast message (auto-hides after 2.5s). */
-export function showToast(message) {
-  toastEl.textContent = message;
-  toastEl.classList.remove("hidden");
+/**
+ * Show a brief bottom toast message (auto-hides after `duration`ms, default 2.5s).
+ * Pass `{ details }` to attach a collapsed "Details" line with the raw/technical
+ * text (an error code, a stack message, …) for anyone who wants it — the headline
+ * `message` itself should always be plain, non-technical language. Opening the
+ * details pauses the auto-hide timer until it's collapsed again.
+ */
+export function showToast(message, { details, duration = 2500 } = {}) {
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toastEl.classList.add("hidden"), 2500);
+  toastEl.innerHTML = "";
+  toastEl.classList.toggle("has-details", !!details);
+
+  const msgSpan = document.createElement("span");
+  msgSpan.className = "toast-msg";
+  msgSpan.textContent = message;
+  toastEl.appendChild(msgSpan);
+
+  if (details) {
+    const detailsId = `toast-details-${++toastDetailsId}`;
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "toast-details-toggle";
+    toggle.textContent = "Details";
+    toggle.setAttribute("aria-expanded", "false");
+    toggle.setAttribute("aria-controls", detailsId);
+
+    const detailsEl = document.createElement("div");
+    detailsEl.id = detailsId;
+    detailsEl.className = "toast-details hidden";
+    detailsEl.textContent = details;
+
+    toggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const nowHidden = detailsEl.classList.toggle("hidden");
+      toggle.setAttribute("aria-expanded", String(!nowHidden));
+      toggle.textContent = nowHidden ? "Details" : "Hide details";
+      clearTimeout(toastTimer);
+      if (nowHidden) toastTimer = setTimeout(() => toastEl.classList.add("hidden"), duration);
+    });
+
+    toastEl.appendChild(toggle);
+    toastEl.appendChild(detailsEl);
+  }
+
+  toastEl.classList.remove("hidden");
+  toastTimer = setTimeout(() => toastEl.classList.add("hidden"), duration);
+}
+
+// ============================================================
+// FRIENDLY ERROR MESSAGES — Firestore/Firebase errors surface as
+// short codes like "permission-denied" or "failed-precondition"
+// that mean nothing to a student. This maps the common ones to
+// plain language for the toast headline, while keeping the raw
+// code/message around (as `technical`) for anyone who taps
+// "Details" — same info that used to be dumped straight into the
+// toast text, just no longer the first thing everyone reads.
+// ============================================================
+const FRIENDLY_ERROR_MESSAGES = {
+  "permission-denied": "You don't have permission to do that.",
+  "unauthenticated": "You've been signed out — please log in again.",
+  "unavailable": "Can't reach the server right now. Check your connection and try again.",
+  "failed-precondition": "That couldn't be completed right now. Please try again in a moment.",
+  "not-found": "That couldn't be found — it may have been removed.",
+  "already-exists": "That already exists.",
+  "resource-exhausted": "Too many requests right now — please try again shortly.",
+  "cancelled": "That was interrupted before it finished. Please try again.",
+  "deadline-exceeded": "That took too long to respond. Please try again.",
+  "aborted": "That couldn't be completed — please try again.",
+  "internal": "Something went wrong on our end. Please try again.",
+  "invalid-argument": "Something about that request wasn't valid.",
+  "out-of-range": "Something about that request wasn't valid.",
+  "data-loss": "Something went wrong loading that data. Please try again.",
+};
+
+/**
+ * Turns a raw Firestore/Firebase error into { message, technical } —
+ * `message` is safe and friendly enough to show as a toast headline,
+ * `technical` is the original code/message for an optional "Details"
+ * expander (see showToast above). Falls back to `fallback` for any
+ * error code not in the map, and calls out being offline specifically
+ * since that's the single most common real-world cause.
+ */
+export function friendlyError(err, fallback = "Something went wrong. Please try again.") {
+  const code = err?.code ? String(err.code).replace(/^firestore\//, "") : "";
+  const technical = err ? [err.code, err.message].filter(Boolean).join(" — ") || String(err) : "";
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    return { message: "You're offline — this will work again once you're back online.", technical };
+  }
+  return { message: FRIENDLY_ERROR_MESSAGES[code] || fallback, technical };
 }
 
 const modalOverlay = document.getElementById("modal-overlay");
@@ -589,7 +673,8 @@ export function confirmDialog({ title, text, confirmLabel = "Delete", danger = t
       await onConfirm();
       closeModal();
     } catch (err) {
-      showToast("Something went wrong: " + err.message);
+      const { message, technical } = friendlyError(err);
+      showToast(message, { details: technical });
       setBtnLoading(okBtn, false);
     }
   });

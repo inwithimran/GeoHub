@@ -14,7 +14,7 @@ import { collection, query, where, getDocs } from "https://www.gstatic.com/fireb
 import { fetchProfile } from "./auth.js";
 import {
   escapeHtml, getCachedProfile, cacheUserProfile, avatarInner, nameWithBadge,
-  isAdminEmail, fullDate, showToast, resetScrollForTabs
+  isAdminEmail, fullDate, showToast, resetScrollForTabs, friendlyError
 } from "./ui-utils.js";
 import { loadUserResources } from "./resources.js";
 import { renderPost } from "./wall.js";
@@ -137,12 +137,12 @@ function renderProfilePage(profile, uid) {
       </div>
 
       <div class="profile-tabs" role="tablist">
-        <button type="button" class="profile-tab-btn active" data-tab="info">Info</button>
-        <button type="button" class="profile-tab-btn" data-tab="posts">Posts</button>
-        <button type="button" class="profile-tab-btn" data-tab="notes">Notes</button>
+        <button type="button" class="profile-tab-btn active" data-tab="info" role="tab" id="user-profile-tab-info" aria-selected="true" aria-controls="user-profile-panel-info">Info</button>
+        <button type="button" class="profile-tab-btn" data-tab="posts" role="tab" id="user-profile-tab-posts" aria-selected="false" aria-controls="user-profile-panel-posts" tabindex="-1">Posts</button>
+        <button type="button" class="profile-tab-btn" data-tab="notes" role="tab" id="user-profile-tab-notes" aria-selected="false" aria-controls="user-profile-panel-notes" tabindex="-1">Notes</button>
       </div>
 
-      <div class="profile-tab-panel active" data-tab-panel="info">
+      <div class="profile-tab-panel active" data-tab-panel="info" role="tabpanel" id="user-profile-panel-info" aria-labelledby="user-profile-tab-info">
         <div class="profile-flow-details">
           ${rows.map(([label, val]) => `<div class="profile-detail-row"><span>${label}</span><span>${val}</span></div>`).join("")}
         </div>
@@ -153,11 +153,11 @@ function renderProfilePage(profile, uid) {
         </div>
       </div>
 
-      <div class="profile-tab-panel" data-tab-panel="posts">
+      <div class="profile-tab-panel" data-tab-panel="posts" role="tabpanel" id="user-profile-panel-posts" aria-labelledby="user-profile-tab-posts">
         <div id="user-profile-posts-list"><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div></div>
       </div>
 
-      <div class="profile-tab-panel" data-tab-panel="notes">
+      <div class="profile-tab-panel" data-tab-panel="notes" role="tabpanel" id="user-profile-panel-notes" aria-labelledby="user-profile-tab-notes">
         <div id="user-profile-notes-list"><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div></div>
       </div>
     </div>
@@ -170,7 +170,12 @@ function renderProfilePage(profile, uid) {
   let notesLoaded = false;
   tabBtns.forEach(btn => {
     btn.addEventListener("click", () => {
-      tabBtns.forEach(b => b.classList.toggle("active", b === btn));
+      tabBtns.forEach(b => {
+        const active = b === btn;
+        b.classList.toggle("active", active);
+        b.setAttribute("aria-selected", String(active));
+        b.tabIndex = active ? 0 : -1;
+      });
       tabPanels.forEach(panel => panel.classList.toggle("active", panel.dataset.tabPanel === btn.dataset.tab));
       resetScrollForTabs(tabsEl); // each tab starts at its own top, instead of inheriting the previous tab's scroll position
       if (btn.dataset.tab === "posts" && !postsLoaded) {
@@ -214,6 +219,7 @@ export async function loadUserPosts(uid, listEl) {
     posts.forEach(post => renderPost(post.id, post, innerListEl, { onChanged: () => loadUserPosts(uid, listEl) }));
   } catch (err) {
     listEl.innerHTML = `<p class="empty-state">Couldn't load posts.</p>`;
-    showToast("Couldn't load posts: " + err.message);
+    const { message, technical } = friendlyError(err, "Couldn't load posts.");
+    showToast(message, { details: technical });
   }
 }

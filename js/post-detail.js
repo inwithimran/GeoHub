@@ -22,7 +22,7 @@ import {
   showToast, escapeHtml, timeAgo, openModal, closeModal, setBtnLoading,
   clampableRichHtml, richTextHtml, wireRichTextClicks, attachClampToggle, avatarInner, nameWithBadge,
   kebabMenuHtml, wireKebabMenus, confirmDialog, isAdminEmail, wireCharCounter,
-  getCachedProfile, subscribeToProfileUpdates
+  getCachedProfile, subscribeToProfileUpdates, friendlyError
 } from "./ui-utils.js";
 import {
   authorProfile, openEditPostModal, deletePost, wireMentions,
@@ -113,7 +113,10 @@ export function openPostDetailPage(postId, { fromPopstate = false, replace = fal
       topbarTitle.textContent = `${post.authorName || "Classmate"}’s Post`;
     }
     render();
-  }, (err) => showToast("Couldn't load this post: " + err.message));
+  }, (err) => {
+    const { message, technical } = friendlyError(err, "Couldn't load this post.");
+    showToast(message, { details: technical });
+  });
 
   const commentsQuery = query(collection(db, "posts", postId, "comments"), orderBy("createdAt", "asc"));
   unsubscribeComments = onSnapshot(commentsQuery, (snap) => {
@@ -121,7 +124,10 @@ export function openPostDetailPage(postId, { fromPopstate = false, replace = fal
     comments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     commentsLoaded = true;
     render();
-  }, (err) => showToast("Couldn't load comments: " + err.message));
+  }, (err) => {
+    const { message, technical } = friendlyError(err, "Couldn't load comments.");
+    showToast(message, { details: technical });
+  });
 }
 
 /** Skeleton placeholder for the whole page on first open — a post card
@@ -203,7 +209,7 @@ function renderPostDetail(postId, post, comments, container, { focusComment, com
   container.innerHTML = `
     <article class="feed-post">
       <div class="post-head">
-        <button type="button" class="avatar avatar-btn" data-author="${post.authorUid}">${avatarInner(author)}</button>
+        <button type="button" class="avatar avatar-btn" data-author="${post.authorUid}" aria-label="View ${escapeHtml(author.name || post.authorName || "classmate")}’s profile">${avatarInner(author)}</button>
         <div class="post-meta">
           <button type="button" class="post-author-name" data-author="${post.authorUid}">${nameWithBadge(post.authorName, post.authorEmail)}</button>
           <small>${post.pinned ? "📌 Pinned · " : ""}${timeAgo(post.createdAt)}${post.editedAt ? " · edited" : ""}</small>
@@ -235,7 +241,7 @@ function renderPostDetail(postId, post, comments, container, { focusComment, com
       <div class="comment-input-row">
         <div class="avatar avatar-sm">${avatarInner(currentProfile || {})}</div>
         <input type="text" placeholder="Write a comment… (@mention a classmate)" maxlength="${COMMENT_TEXT_LIMIT}" />
-        <button type="button" class="comment-send-btn">
+        <button type="button" class="comment-send-btn" aria-label="Send comment">
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         </button>
       </div>
@@ -334,7 +340,7 @@ function commentItemHtml(c, uid, isPostOwner) {
   if (canDelete) kebabActions.push({ action: "delete", label: isOwnComment ? "Delete Comment" : "Remove Comment", danger: true });
   return `
     <div class="comment-item">
-      <button type="button" class="avatar avatar-sm avatar-btn" data-author="${c.authorUid}">${avatarInner(author)}</button>
+      <button type="button" class="avatar avatar-sm avatar-btn" data-author="${c.authorUid}" aria-label="View ${escapeHtml(author.name || c.authorName || "classmate")}’s profile">${avatarInner(author)}</button>
       <div class="comment-body">
         <button type="button" class="comment-author" data-author="${c.authorUid}">${nameWithBadge(c.authorName, c.authorEmail)}</button>
         <p>${richTextHtml(c.text, c.mentions)}</p>
@@ -414,7 +420,8 @@ async function submitComment(postId, commentsEl, sendBtn, postAuthorUid, getMent
     // Put the text back so it isn't lost if the write failed.
     const liveInput = commentsEl.querySelector(".comment-input-row input");
     if (liveInput) { liveInput.value = text; liveInput.dispatchEvent(new Event("input")); }
-    showToast("Couldn't send your comment: " + err.message);
+    const { message, technical } = friendlyError(err, "Couldn't send your comment.");
+    showToast(message, { details: technical });
   } finally {
     sendBtn.disabled = false;
     sendBtn.classList.remove("is-loading");

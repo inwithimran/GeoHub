@@ -105,7 +105,12 @@ let featuresInitialized = false; // guards against re-subscribing on hot reload 
 // ============================================================
 function switchAuthTab(target) {
   const isLogin = target === "login";
-  authTabButtons.forEach(t => t.classList.toggle("active", t.dataset.tab === target));
+  authTabButtons.forEach(t => {
+    const active = t.dataset.tab === target;
+    t.classList.toggle("active", active);
+    t.setAttribute("aria-selected", String(active));
+    t.tabIndex = active ? 0 : -1;
+  });
   authTabsWrap.classList.toggle("signup-active", !isLogin);
   loginForm.classList.toggle("hidden", !isLogin);
   signupForm.classList.toggle("hidden", isLogin);
@@ -287,7 +292,9 @@ function goToRoute(route, { fromPopstate = false, replace = false, state = {} } 
     sec.classList.toggle("hidden", sec.id !== `section-${route}`);
   });
   document.querySelectorAll(".nav-item[data-route]").forEach(btn => {
-    btn.classList.toggle("active", btn.dataset.route === route);
+    const active = btn.dataset.route === route;
+    btn.classList.toggle("active", active);
+    if (active) btn.setAttribute("aria-current", "page"); else btn.removeAttribute("aria-current");
   });
   document.getElementById("topbar-title").textContent = routeTitles[route] || "GeoHub";
   document.getElementById("topbar-subtitle").textContent = route === "user-profile" ? "Classmate Profile" : route === "settings" ? "App preferences & account" : "Geography & Environment";
@@ -448,22 +455,22 @@ function renderProfile() {
       </div>
 
       <div class="profile-tabs" role="tablist">
-        <button type="button" class="profile-tab-btn active" data-tab="info">Info</button>
-        <button type="button" class="profile-tab-btn" data-tab="posts">Posts</button>
-        <button type="button" class="profile-tab-btn" data-tab="notes">Notes</button>
+        <button type="button" class="profile-tab-btn active" data-tab="info" role="tab" id="own-profile-tab-info" aria-selected="true" aria-controls="own-profile-panel-info">Info</button>
+        <button type="button" class="profile-tab-btn" data-tab="posts" role="tab" id="own-profile-tab-posts" aria-selected="false" aria-controls="own-profile-panel-posts" tabindex="-1">Posts</button>
+        <button type="button" class="profile-tab-btn" data-tab="notes" role="tab" id="own-profile-tab-notes" aria-selected="false" aria-controls="own-profile-panel-notes" tabindex="-1">Notes</button>
       </div>
 
-      <div class="profile-tab-panel active" data-tab-panel="info">
+      <div class="profile-tab-panel active" data-tab-panel="info" role="tabpanel" id="own-profile-panel-info" aria-labelledby="own-profile-tab-info">
         <div class="profile-flow-details">
           ${rows.map(([label, val]) => `<div class="profile-detail-row"><span>${label}</span><span>${val}</span></div>`).join("")}
         </div>
       </div>
 
-      <div class="profile-tab-panel" data-tab-panel="posts">
+      <div class="profile-tab-panel" data-tab-panel="posts" role="tabpanel" id="own-profile-panel-posts" aria-labelledby="own-profile-tab-posts">
         <div id="own-profile-posts-list"><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div></div>
       </div>
 
-      <div class="profile-tab-panel" data-tab-panel="notes">
+      <div class="profile-tab-panel" data-tab-panel="notes" role="tabpanel" id="own-profile-panel-notes" aria-labelledby="own-profile-tab-notes">
         <div id="own-profile-notes-list"><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div></div>
       </div>
     </div>
@@ -482,7 +489,12 @@ function renderProfile() {
   let ownNotesLoaded = false;
   tabBtns.forEach(btn => {
     btn.addEventListener("click", () => {
-      tabBtns.forEach(b => b.classList.toggle("active", b === btn));
+      tabBtns.forEach(b => {
+        const active = b === btn;
+        b.classList.toggle("active", active);
+        b.setAttribute("aria-selected", String(active));
+        b.tabIndex = active ? 0 : -1;
+      });
       tabPanels.forEach(panel => panel.classList.toggle("active", panel.dataset.tabPanel === btn.dataset.tab));
       resetScrollForTabs(tabsEl); // each tab starts at its own top, instead of inheriting the previous tab's scroll position
       if (btn.dataset.tab === "posts" && !ownPostsLoaded) {
@@ -521,7 +533,11 @@ function renderSettingsPage() {
     dark: "Always dark"
   };
   const paintThemeToggle = (pref) => {
-    themeToggle.querySelectorAll("button").forEach(b => b.classList.toggle("active", b.dataset.themeChoice === pref));
+    themeToggle.querySelectorAll("button").forEach(b => {
+      const active = b.dataset.themeChoice === pref;
+      b.classList.toggle("active", active);
+      b.setAttribute("aria-pressed", String(active));
+    });
     themeStatus.textContent = themeStatusText[pref];
   };
   paintThemeToggle(getThemePreference());
@@ -544,7 +560,7 @@ function renderSettingsPage() {
       await sendPasswordResetEmail(auth, email);
       showToast(`Password reset link sent to ${email}.`);
     } catch (err) {
-      showToast("Couldn't send reset email: " + err.message);
+      showToast(friendlyAuthError(err), { details: [err.code, err.message].filter(Boolean).join(" — ") });
     } finally {
       setBtnLoading(resetPwBtn, false);
     }

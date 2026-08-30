@@ -6,7 +6,7 @@
 // ============================================================
 import { db } from "./firebase-config.js";
 import { collection, onSnapshot, query, limit } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
-import { escapeHtml, showToast, setBtnLoading, cacheUserProfile, avatarInner, nameWithBadge } from "./ui-utils.js";
+import { escapeHtml, showToast, setBtnLoading, cacheUserProfile, avatarInner, nameWithBadge, friendlyError } from "./ui-utils.js";
 import { openUserProfilePage } from "./profile-view.js";
 
 const directoryList = document.getElementById("directory-list");
@@ -57,7 +57,10 @@ function subscribeDirectory() {
     }).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
     renderYearChips();
     renderDirectory();
-  }, (err) => showToast("Couldn't load classmates: " + err.message));
+  }, (err) => {
+    const { message, technical } = friendlyError(err, "Couldn't load classmates.");
+    showToast(message, { details: technical });
+  });
 }
 
 /** Build/refresh the Year filter chips from whichever years are actually in use. */
