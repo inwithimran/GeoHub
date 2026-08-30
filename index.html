@@ -823,19 +823,19 @@
   @media (hover:hover) { .dm-thread-back-btn:hover { background: var(--color-paper-deep); color: var(--color-ink); } }
   .dm-thread-header { @apply flex items-center gap-2.5 min-w-0 flex-1; }
   .dm-thread-header .avatar { width:44px; height:44px; }
-  .dm-thread-header-name { @apply block text-[1.08rem] font-extrabold; margin-bottom:3px; }
+  .dm-thread-header-name { @apply block text-[1.08rem] font-extrabold; margin-top:4px; margin-bottom:2px; }
   /* A softer, more legible presence chip than a plain text line — grey
      "pill" while away, tinted forest-green with a glowing dot once the
      classmate comes online. Scoped to its own class (not the shared
      .presence-text used on Profile pages) so it doesn't affect other
      screens. */
   .dm-thread-presence-chip {
-    @apply inline-flex items-center gap-1.5 text-[.7rem] font-bold rounded-full;
-    padding:3px 10px 3px 8px; color: var(--color-ink-faint); background: var(--color-paper-deep);
+    @apply inline-flex items-center gap-1.5 text-[.62rem] font-bold rounded-full;
+    padding:2px 8px 2px 6px; color: var(--color-ink-faint); background: var(--color-paper-deep);
   }
   .dm-thread-presence-chip:empty { display:none; }
   .dm-thread-presence-chip::before {
-    content:""; width:6px; height:6px; border-radius:50%; background: var(--color-ink-faint); flex-shrink:0;
+    content:""; width:5px; height:5px; border-radius:50%; background: var(--color-ink-faint); flex-shrink:0;
   }
   .dm-thread-presence-chip.online-now { color: var(--color-forest-700); background: var(--color-forest-100); }
   .dm-thread-presence-chip.online-now::before {
