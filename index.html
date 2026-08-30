@@ -1250,6 +1250,21 @@
     @apply fixed left-1/2 -translate-x-1/2 text-white rounded-full text-sm font-semibold text-center z-[200];
     bottom:calc(68px + 26px); background:#1c2a1e; padding:11px 22px; box-shadow: var(--shadow-deep); max-width:88%;
   }
+  /* A toast carrying a "Details" expander (see showToast's `details` option
+     in ui-utils.js) switches from a centered pill to a left-aligned card,
+     since it may grow to more than one line once expanded. */
+  .toast.has-details { @apply rounded-2xl text-left; padding:12px 16px; max-width:92%; }
+  .toast-msg { @apply block; }
+  .toast-details-toggle {
+    @apply block mt-1.5 text-[.72rem] font-bold underline bg-transparent border-0 cursor-pointer p-0;
+    color: rgba(255,255,255,.72); text-underline-offset:2px;
+  }
+  .toast-details-toggle:hover { color: rgba(255,255,255,.92); }
+  .toast-details {
+    @apply mt-2 text-[.7rem] leading-snug rounded-lg;
+    background: rgba(255,255,255,.09); padding:7px 10px; color: rgba(255,255,255,.82); word-break: break-word;
+  }
+  .toast-details.hidden { display:none; }
 
   /* ---------- Live character counter, shown under post/comment/notice
      text fields (see wireCharCounter in ui-utils.js). ---------- */
@@ -1404,15 +1419,15 @@
               Back
             </button>
 
-            <div class="auth-toggle" id="auth-tabs">
+            <div class="auth-toggle" id="auth-tabs" role="tablist">
               <span class="auth-toggle-thumb"></span>
-              <button class="auth-tab active" data-tab="login">Log In</button>
-              <button class="auth-tab" data-tab="signup">Sign Up</button>
+              <button class="auth-tab active" data-tab="login" role="tab" id="auth-tab-login" aria-selected="true" aria-controls="login-form">Log In</button>
+              <button class="auth-tab" data-tab="signup" role="tab" id="auth-tab-signup" aria-selected="false" aria-controls="signup-form" tabindex="-1">Sign Up</button>
             </div>
 
             <div class="auth-body">
             <!-- LOGIN FORM -->
-            <form id="login-form" class="auth-form">
+            <form id="login-form" class="auth-form" role="tabpanel" aria-labelledby="auth-tab-login">
           <label class="field-line">
             <span>Email</span>
             <div class="field-line-input-wrap">
@@ -1438,7 +1453,7 @@
         </form>
 
         <!-- SIGN UP FORM -->
-        <form id="signup-form" class="auth-form hidden">
+        <form id="signup-form" class="auth-form hidden" role="tabpanel" aria-labelledby="auth-tab-signup">
           <label class="field-line">
             <span>Full Name</span>
             <div class="field-line-input-wrap">
@@ -1536,7 +1551,7 @@
       </div>
 
       <nav class="sidebar-nav">
-        <button class="nav-item active" data-route="wall">
+        <button class="nav-item active" data-route="wall" aria-current="page">
           <span class="icon" data-icon="wall"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v10H8l-4 4V4z"/><line x1="8" y1="8.5" x2="16" y2="8.5"/><line x1="8" y1="11.5" x2="13" y2="11.5"/></svg></span> Student Wall
         </button>
         <button class="nav-item" data-route="resources">
@@ -1694,17 +1709,17 @@
       <!-- ===== SECTION 8: NOTICES & NOTIFICATIONS (own page, not a modal) ===== -->
       <section id="section-notices" class="route-section">
         <div class="notices-page-tabs" role="tablist">
-          <button type="button" class="notices-page-tab-btn active" data-tab="notice">
+          <button type="button" class="notices-page-tab-btn active" data-tab="notice" role="tab" id="notices-tab-notice" aria-selected="true" aria-controls="notices-panel-notice">
             Notice<span class="tab-badge hidden" id="notice-tab-badge">0</span>
           </button>
-          <button type="button" class="notices-page-tab-btn" data-tab="notification">
+          <button type="button" class="notices-page-tab-btn" data-tab="notification" role="tab" id="notices-tab-notification" aria-selected="false" aria-controls="notices-panel-notification" tabindex="-1">
             Notification<span class="tab-badge hidden" id="notification-tab-badge">0</span>
           </button>
         </div>
-        <div class="notices-page-panel active" data-panel="notice">
+        <div class="notices-page-panel active" data-panel="notice" role="tabpanel" id="notices-panel-notice" aria-labelledby="notices-tab-notice">
           <div id="notice-tab-body"><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div></div>
         </div>
-        <div class="notices-page-panel" data-panel="notification">
+        <div class="notices-page-panel" data-panel="notification" role="tabpanel" id="notices-panel-notification" aria-labelledby="notices-tab-notification">
           <div class="notif-panel-head">
             <span class="notif-panel-head-title">Notifications</span>
             <button type="button" class="notif-mark-all-btn" id="notif-mark-all-btn" title="Mark all as read" aria-label="Mark all as read">
@@ -1794,7 +1809,7 @@
 
     <!-- ---------- MOBILE BOTTOM NAVIGATION ---------- -->
     <nav class="bottom-nav">
-      <button class="nav-item active" data-route="wall">
+      <button class="nav-item active" data-route="wall" aria-current="page">
         <span class="icon" data-icon="wall"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v10H8l-4 4V4z"/><line x1="8" y1="8.5" x2="16" y2="8.5"/><line x1="8" y1="11.5" x2="13" y2="11.5"/></svg></span><small>Wall</small>
       </button>
       <button class="nav-item" data-route="resources">
@@ -1828,7 +1843,7 @@
   </div>
 
   <!-- Toast for quick feedback messages -->
-  <div id="toast" class="toast hidden"></div>
+  <div id="toast" class="toast hidden" role="status" aria-live="polite" aria-atomic="true"></div>
 
   <!-- ============================================================
        SCRIPTS (ES Modules — order doesn't matter, app.js is entry)
