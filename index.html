@@ -637,15 +637,27 @@
   .msg-route, .dm-thread-route {
     margin:-16px -14px -96px;
     display:flex; flex-direction:column; min-width:0; gap:0 !important;
+    /* These two routes manage their own internal scrolling (chat-scroll /
+       dm-list-wrap below) and are meant to stay perfectly viewport-locked —
+       overflow:hidden here is a safety net so nothing inside can ever push
+       the whole PAGE into scrolling. Window-level scroll here is exactly
+       what let the header peek under the sticky topbar and the composer
+       drift on mobile; this keeps both pinned in place. */
+    overflow:hidden;
   }
   @media (min-width:900px) {
     .msg-route, .dm-thread-route { margin:-26px -28px -40px; height:calc(100dvh - 64px); }
   }
   @media (max-width:899px) {
-    /* Class Chat / DM list (.msg-route) stays a bottom-nav destination, so
-       the nav stays visible and this still has to leave room for it:
-       topbar (58px) + the reserved bottom-nav grid row (68px). */
+    /* Class Chat / DM list (.msg-route) is normally a bottom-nav
+       destination, so it leaves room for it: topbar (58px) + the reserved
+       bottom-nav grid row (68px). Class Chat specifically hides the nav
+       too (see app.js's chat-mode toggle) since it's a full live room +
+       composer just like a DM thread — when that's the case, the section
+       reclaims the nav's row instead of leaving a dead gap under the
+       composer, same as .dm-thread-route below. */
     .msg-route { height:calc(100dvh - 58px - 68px); }
+    .app-shell.chat-mode .msg-route { height:calc(100dvh - 58px); }
     /* An open DM thread (.dm-thread-route) hides the nav via .chat-mode
        above and reclaims its row, so it only needs to clear the topbar. */
     .dm-thread-route { height:calc(100dvh - 58px); }
@@ -691,6 +703,7 @@
 
   .chat-scroll {
     @apply flex-1 min-h-0 flex flex-col gap-2.5; overflow-y:auto; -webkit-overflow-scrolling:touch;
+    overscroll-behavior:contain;
     padding:14px 14px 14px;
     /* Faint "field survey" dot-grid wallpaper instead of a flat panel —
        same paper/forest palette as the rest of the app, just enough
@@ -753,7 +766,7 @@
   .chat-send-btn:not(:disabled):active { transform:scale(.92); }
 
   /* ---- Direct Messages: conversation list ---- */
-  .dm-list-wrap { @apply flex-1 min-h-0 flex flex-col gap-2.5; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:12px 14px 24px; }
+  .dm-list-wrap { @apply flex-1 min-h-0 flex flex-col gap-2.5; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding:12px 14px 24px; }
   @media (min-width:900px) { .dm-list-wrap { padding:12px 0 24px; } }
   .dm-list-wrap .empty-state { @apply flex-1 flex flex-col items-center justify-center gap-3; box-shadow:none; background:transparent; padding:40px 20px; }
   .dm-list-wrap .empty-state::before {
