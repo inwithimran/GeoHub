@@ -16,8 +16,8 @@ import { initWall, teardownWall } from "./wall.js";
 import { initResources, teardownResources, loadUserResources } from "./resources.js";
 import { initDirectory, teardownDirectory } from "./directory.js";
 import { initRoutine, teardownRoutine, registerNotificationsRouter } from "./routine.js";
-import { openUserProfilePage, loadUserPosts, registerProfilePageRouter } from "./profile-view.js";
-import { openPostDetailPage, registerPostDetailRouter, teardownPostDetail } from "./post-detail.js";
+import { openUserProfilePage, loadUserPosts, registerProfilePageRouter, getOpenProfileUid, teardownProfilePage } from "./profile-view.js";
+import { openPostDetailPage, registerPostDetailRouter, teardownPostDetail, getOpenPostId } from "./post-detail.js";
 import {
   escapeHtml, openModal, closeModal, showToast, setBtnLoading, fullDate,
   avatarInner, nameWithBadge, isAdminEmail, resetScrollForTabs
@@ -266,6 +266,7 @@ function goToRoute(route, { fromPopstate = false, replace = false, state = {} } 
   // Leaving the Post Detail page — drop its live post/comments listeners
   // rather than leaving them subscribed in the background.
   if (currentRoute === "post-detail" && route !== "post-detail") teardownPostDetail();
+  if (currentRoute === "user-profile" && route !== "user-profile") teardownProfilePage();
 
   currentRoute = route;
   const historyState = { geohubRoute: route, ...state };
@@ -294,14 +295,26 @@ document.getElementById("topbar-settings-btn").addEventListener("click", () => {
 // Device/browser back button: step back to whichever section is recorded
 // in that history entry (a modal's own popstate handling, in ui-utils.js,
 // runs independently and takes care of closing an open modal first).
+//
+// A closed modal pops its own history entry, which fires this same
+// popstate — even though nothing about the page underneath actually
+// changed. Re-running openPostDetailPage()/openUserProfilePage()/goToRoute()
+// for that case used to reset scroll position and re-fetch/re-render the
+// whole page from scratch (e.g. every time a comment's delete-confirm modal
+// closed), which is jarring. So: if the state we're landing on is the exact
+// route+entity already on screen, this popstate is just a modal closing —
+// leave the page alone.
 window.addEventListener("popstate", (e) => {
   if (appShell.classList.contains("hidden")) return; // not logged in — nothing to route
   if (e.state && e.state.geohubRoute) {
     if (e.state.geohubRoute === "user-profile" && e.state.profileUid) {
+      if (e.state.geohubRoute === currentRoute && e.state.profileUid === getOpenProfileUid()) return;
       openUserProfilePage(e.state.profileUid, { fromPopstate: true });
     } else if (e.state.geohubRoute === "post-detail" && e.state.postId) {
+      if (e.state.geohubRoute === currentRoute && e.state.postId === getOpenPostId()) return;
       openPostDetailPage(e.state.postId, { fromPopstate: true });
     } else {
+      if (e.state.geohubRoute === currentRoute) return;
       goToRoute(e.state.geohubRoute, { fromPopstate: true });
     }
   }
@@ -406,11 +419,11 @@ function renderProfile() {
       </div>
 
       <div class="profile-tab-panel" data-tab-panel="posts">
-        <div id="own-profile-posts-list"><p class="empty-state">Loading posts…</p></div>
+        <div id="own-profile-posts-list"><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div></div>
       </div>
 
       <div class="profile-tab-panel" data-tab-panel="notes">
-        <div id="own-profile-notes-list"><p class="empty-state">Loading notes…</p></div>
+        <div id="own-profile-notes-list"><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div></div>
       </div>
     </div>
   `;

@@ -14,7 +14,7 @@ import {
   showToast, escapeHtml, timeAgo, openModal, closeModal,
   setBtnLoading, cacheUserProfile, getCachedProfile, clampableRichHtml, attachClampToggle,
   avatarInner, nameWithBadge, kebabMenuHtml, wireKebabMenus, confirmDialog, isAdminEmail,
-  extractHashtags, wireRichTextClicks, wireMentionAutocomplete
+  extractHashtags, wireRichTextClicks, wireMentionAutocomplete, skeletonRowsHtml
 } from "./ui-utils.js";
 import { openUserProfilePage } from "./profile-view.js";
 import { uploadImages } from "./cloudinary.js";
@@ -601,7 +601,7 @@ export async function reactToPost(postId, post, emoji, btnEl, countEl) {
 export async function openReactionsModal(reactions) {
   const uids = Object.keys(reactions || {});
   if (!uids.length) return;
-  openModal(`<div class="profile-modal-loading"><span class="btn-spinner dark"></span> Loading…</div>`);
+  openModal(`<h3>Reactions</h3>${skeletonRowsHtml(Math.min(uids.length, 4))}`);
 
   const people = await Promise.all(uids.map(async (uid) => {
     let p = getCachedProfile(uid);
@@ -714,7 +714,7 @@ export async function votePoll(postId, post, optionId) {
 // why that matters — a missing index otherwise fails silently).
 // ============================================================
 export async function openHashtagResults(tag) {
-  openModal(`<div class="profile-modal-loading"><span class="btn-spinner dark"></span> Loading…</div>`);
+  openModal(`<h3>#${escapeHtml(tag)}</h3>${skeletonRowsHtml(3)}`);
   let posts;
   try {
     const snap = await getDocs(query(collection(db, "posts"), where("hashtags", "array-contains", tag)));

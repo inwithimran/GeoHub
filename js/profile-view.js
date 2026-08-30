@@ -29,6 +29,37 @@ export function registerProfilePageRouter(goToRoute) { goToRouteRef = goToRoute;
 
 backBtn?.addEventListener("click", () => history.back());
 
+let currentUid = null;
+/** The uid currently open on this page (null if the page isn't open). Lets app.js's
+ *  popstate handler tell "closing a modal that was sitting on top of this page" apart
+ *  from "actually navigating to a different classmate's profile", so it only reloads
+ *  for the latter. */
+export function getOpenProfileUid() {
+  return currentUid;
+}
+/** Call whenever navigating away from this page (mirrors teardownPostDetail()). */
+export function teardownProfilePage() {
+  currentUid = null;
+}
+
+/** Skeleton placeholder shown while a profile page's data is being fetched
+ *  (first open, or a cache miss) — mirrors the shape of the real card below
+ *  so nothing "jumps" once the content swaps in. */
+function profileSkeletonHtml() {
+  const row = () => `<div class="skeleton-line sk-90" style="height:13px"></div>`;
+  return `
+    <div class="profile-flow" aria-hidden="true">
+      <div class="skeleton-post" style="text-align:center">
+        <div class="skeleton-avatar" style="width:74px;height:74px;margin:0 auto 14px"></div>
+        <div class="skeleton-line sk-40" style="height:14px;margin:0 auto 8px"></div>
+        <div class="skeleton-line sk-25" style="height:10px;margin:0 auto"></div>
+      </div>
+      <div class="skeleton-post" style="display:flex;flex-direction:column;gap:12px;margin-top:14px">
+        ${row()}${row()}${row()}${row()}
+      </div>
+    </div>`;
+}
+
 /**
  * Open the full-page profile view for the given uid. Own profile routes to
  * "My Profile" instead of duplicating it here. Pass { replace: true } when
@@ -44,8 +75,9 @@ export async function openUserProfilePage(uid, { fromPopstate = false, replace =
     return;
   }
 
+  currentUid = uid;
   if (goToRouteRef) goToRouteRef("user-profile", { fromPopstate, replace, state: { profileUid: uid } });
-  cardEl.innerHTML = `<div class="profile-modal-loading"><span class="btn-spinner dark"></span> Loading profile…</div>`;
+  cardEl.innerHTML = profileSkeletonHtml();
 
   let profile = getCachedProfile(uid);
   if (!profile) {
@@ -122,11 +154,11 @@ function renderProfilePage(profile, uid) {
       </div>
 
       <div class="profile-tab-panel" data-tab-panel="posts">
-        <div id="user-profile-posts-list"><p class="empty-state">Loading posts…</p></div>
+        <div id="user-profile-posts-list"><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div></div>
       </div>
 
       <div class="profile-tab-panel" data-tab-panel="notes">
-        <div id="user-profile-notes-list"><p class="empty-state">Loading notes…</p></div>
+        <div id="user-profile-notes-list"><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div></div>
       </div>
     </div>
   `;

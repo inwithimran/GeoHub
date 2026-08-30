@@ -28,7 +28,7 @@ import {
 import {
   escapeHtml, timeAgo, fullDate, showToast, setBtnLoading, openModal, closeModal,
   avatarInner, nameWithBadge, getCachedProfile, kebabMenuHtml, wireKebabMenus, confirmDialog,
-  resetScrollForTabs
+  resetScrollForTabs, skeletonRowsHtml
 } from "./ui-utils.js";
 import { currentProfile } from "./auth.js";
 import { triggerPush } from "./push-trigger.js";
@@ -150,6 +150,9 @@ let latestNotices = [];
 let latestActivityPublic = [];   // type in [post, resource, notice] — visible to everyone
 let latestActivityPrivate = [];  // type in [comment, like] targeted at ME specifically
 let activityFeedError = null;    // last onSnapshot error message, if either half of the feed is currently down
+let noticesLoaded = false;         // true once the notices listener's first snapshot has arrived
+let activityPublicLoaded = false;  // true once the public-activity listener's first snapshot has arrived
+let activityPrivateLoaded = false; // true once the private-activity listener's first snapshot has arrived
 let noticesPageWired = false;
 
 // app.js hands us its router (goToRoute) so clicking a notification can
@@ -181,7 +184,13 @@ function visibleToMe(a) {
   // Public activity (post/resource/notice) exists to tell OTHER classmates
   // something new happened — you don't need a "notification" telling you
   // about your own post/resource/notice, so hide your own entries here.
-  return a.actorUid !== auth.currentUser?.uid;
+  if (a.actorUid === auth.currentUser?.uid) return false;
+  // A newly-joined student shouldn't see a backlog of public notifications
+  // from before they signed up — only what's happened since they joined.
+  const joinedAt = currentProfile?.createdAt?.toDate?.();
+  const postedAt = a.createdAt?.toDate?.();
+  if (joinedAt && postedAt && postedAt < joinedAt) return false;
+  return true;
 }
 
 export function initRoutine() {
@@ -217,6 +226,7 @@ export function initRoutine() {
   const q = query(collection(db, "notices"), orderBy("createdAt", "desc"));
   unsubscribeNotices = onSnapshot(q, (snap) => {
     latestNotices = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    noticesLoaded = true;
     updateNoticeBadge();
     renderNoticeTabBody();
   }, (err) => showToast("Couldn't load notices: " + err.message));
@@ -254,6 +264,7 @@ export function initRoutine() {
   );
   unsubscribeActivityPublic = onSnapshot(publicQ, (snap) => {
     latestActivityPublic = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    activityPublicLoaded = true;
     activityFeedError = null;
     updateNoticeBadge();
     renderActivityList();
@@ -269,6 +280,7 @@ export function initRoutine() {
     activityFeedError = err.code || err.message;
     showToast("Notification feed error: " + activityFeedError);
     latestActivityPublic = [];
+    activityPublicLoaded = true;
     renderActivityList();
   });
 
@@ -281,6 +293,7 @@ export function initRoutine() {
     );
     unsubscribeActivityPrivate = onSnapshot(privateQ, (snap) => {
       latestActivityPrivate = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      activityPrivateLoaded = true;
       activityFeedError = null;
       updateNoticeBadge();
       renderActivityList();
@@ -289,6 +302,7 @@ export function initRoutine() {
       activityFeedError = err.code || err.message;
       showToast("Notification feed error: " + activityFeedError);
       latestActivityPrivate = [];
+      activityPrivateLoaded = true;
       renderActivityList();
     });
   }
@@ -435,7 +449,7 @@ function watchOpenReportCount() {
 }
 
 async function openReportsModal() {
-  openModal(`<h3>Reported Posts</h3><div id="reports-modal-list"><p class="empty-state">Loading…</p></div>`);
+  openModal(`<h3>Reported Posts</h3><div id="reports-modal-list">${skeletonRowsHtml(3)}</div>`);
   const listEl = document.getElementById("reports-modal-list");
   try {
     // A where()+orderBy() combo on different fields needs a composite
@@ -504,7 +518,9 @@ function renderNoticesList() {
   if (!noticeList) return;
 
   if (!latestNotices.length) {
-    noticeList.innerHTML = `<p class="empty-state">No notices posted yet.</p>`;
+    noticeList.innerHTML = noticesLoaded
+      ? `<p class="empty-state">No notices posted yet.</p>`
+      : skeletonRowsHtml(3);
     return;
   }
 
@@ -717,6 +733,11 @@ function renderActivityList() {
     return;
   }
 
+  if (!activityPublicLoaded || !activityPrivateLoaded) {
+    host.innerHTML = skeletonRowsHtml(4);
+    return;
+  }
+
   if (!activity.length) {
     host.innerHTML = `<p class="empty-state">No recent activity yet.</p>`;
     return;
@@ -845,6 +866,9 @@ export function teardownRoutine() {
   latestActivityPublic = [];
   latestActivityPrivate = [];
   activityFeedError = null;
+  noticesLoaded = false;
+  activityPublicLoaded = false;
+  activityPrivateLoaded = false;
   noticeReadIds = new Set();
   activityReadIds = new Set();
   dismissedActivityIds = new Set();

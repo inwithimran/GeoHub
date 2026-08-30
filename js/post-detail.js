@@ -58,24 +58,28 @@ export function openPostDetailPage(postId, { fromPopstate = false, replace = fal
   currentPostId = postId;
 
   if (goToRouteRef) goToRouteRef("post-detail", { fromPopstate, replace, state: { postId } });
-  bodyEl.innerHTML = `<div class="profile-modal-loading"><span class="btn-spinner dark"></span> Loading post…</div>`;
+  bodyEl.innerHTML = postDetailSkeletonHtml();
 
   const topbarTitle = document.getElementById("topbar-title");
   if (topbarTitle) topbarTitle.textContent = "Post";
 
   let post = null;
   let comments = [];
+  let postLoaded = false;
+  let commentsLoaded = false; // stays false until the comments listener's first snapshot, so a skeleton (not "no comments yet") shows while they're in flight
   let titleSet = false;
   let shouldFocusComment = focusComment;
 
   const render = () => {
     if (postId !== currentPostId) return; // superseded by a newer navigation
+    if (!postLoaded) return; // still on the initial skeleton
     if (!post) {
       bodyEl.innerHTML = `<p class="empty-state">This post is no longer available — it may have been deleted.</p>`;
       return;
     }
     renderPostDetail(postId, post, comments, bodyEl, {
       focusComment: shouldFocusComment,
+      commentsLoaded,
       onDeleted: () => history.back()
     });
     shouldFocusComment = false; // only auto-focus right after opening, not on every live update
@@ -83,6 +87,7 @@ export function openPostDetailPage(postId, { fromPopstate = false, replace = fal
 
   unsubscribePost = onSnapshot(doc(db, "posts", postId), (snap) => {
     if (postId !== currentPostId) return;
+    postLoaded = true;
     if (!snap.exists()) { post = null; render(); return; }
     post = { id: snap.id, ...snap.data() };
     if (!titleSet && topbarTitle) {
@@ -96,8 +101,45 @@ export function openPostDetailPage(postId, { fromPopstate = false, replace = fal
   unsubscribeComments = onSnapshot(commentsQuery, (snap) => {
     if (postId !== currentPostId) return;
     comments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    commentsLoaded = true;
     render();
   }, (err) => showToast("Couldn't load comments: " + err.message));
+}
+
+/** Skeleton placeholder for the whole page on first open — a post card
+ *  shape followed by a couple of comment-row shapes — swapped for the
+ *  real content (see render() above) as soon as the post itself arrives. */
+function postDetailSkeletonHtml() {
+  return `
+    <div aria-hidden="true">
+      <div class="skeleton-post">
+        <div class="skeleton-post-head">
+          <div class="skeleton-avatar"></div>
+          <div class="skeleton-head-lines"><div class="skeleton-line sk-40"></div><div class="skeleton-line sk-25"></div></div>
+        </div>
+        <div class="skeleton-post-text"><div class="skeleton-line sk-90"></div><div class="skeleton-line sk-70"></div></div>
+        <div class="skeleton-block"></div>
+      </div>
+      ${commentSkeletonHtml()}
+    </div>`;
+}
+
+/** Skeleton for just the comment thread — reused for the initial page load
+ *  and for the "post arrived, comments still loading" gap. */
+function commentSkeletonHtml() {
+  const row = () => `
+    <div class="skeleton-post-head" style="margin:14px 0 0">
+      <div class="skeleton-avatar" style="width:30px;height:30px"></div>
+      <div class="skeleton-head-lines"><div class="skeleton-line sk-50"></div><div class="skeleton-line sk-90" style="height:8px"></div></div>
+    </div>`;
+  return `<div class="skeleton-post" style="margin-top:14px">${row()}${row()}</div>`;
+}
+
+/** The postId currently open on this page (null if the page isn't open). Lets app.js's
+ *  popstate handler tell "closing a modal that was sitting on top of this page" apart
+ *  from "actually navigating to a different post", so it only reloads for the latter. */
+export function getOpenPostId() {
+  return currentPostId;
 }
 
 /** Detach the post + comments listeners (call whenever navigating away from this page). */
@@ -112,7 +154,7 @@ export function teardownPostDetail() {
 // followed by the full, always-expanded comment thread, with the
 // "write a comment" box as the very last element on the page.
 // ============================================================
-function renderPostDetail(postId, post, comments, container, { focusComment, onDeleted }) {
+function renderPostDetail(postId, post, comments, container, { focusComment, commentsLoaded, onDeleted }) {
   const uid = auth.currentUser.uid;
   const author = authorProfile(post.authorUid, post.authorName);
   const isOwnPost = post.authorUid === uid;
@@ -128,9 +170,11 @@ function renderPostDetail(postId, post, comments, container, { focusComment, onD
   const selEnd = prevInput ? prevInput.selectionEnd : null;
   const prevScrollY = window.scrollY;
 
-  const commentsHtml = comments.length
-    ? comments.map(c => commentItemHtml(c, uid, isOwnPost)).join("")
-    : `<p class="empty-state" style="padding:10px 0;">No comments yet — be the first to reply.</p>`;
+  const commentsHtml = !commentsLoaded
+    ? commentSkeletonHtml()
+    : comments.length
+      ? comments.map(c => commentItemHtml(c, uid, isOwnPost)).join("")
+      : `<p class="empty-state" style="padding:10px 0;">No comments yet — be the first to reply.</p>`;
 
   let kebabActions = [];
   if (isOwnPost) kebabActions.push({ action: "edit", label: "Edit Post" });

@@ -17,6 +17,7 @@ export function showToast(message) {
 
 const modalOverlay = document.getElementById("modal-overlay");
 const modalBody = document.getElementById("modal-body");
+const modalScroll = document.getElementById("modal-scroll");
 const modalCloseBtn = document.getElementById("modal-close-btn");
 
 // ============================================================
@@ -42,6 +43,7 @@ let modalClosable = true;       // false while a mandatory, non-dismissable moda
 export function openModal(html, { closable = true } = {}) {
   const wasHidden = modalOverlay.classList.contains("hidden");
   modalBody.innerHTML = html;
+  if (modalScroll) modalScroll.scrollTop = 0; // fresh content (or a brand-new modal) always starts scrolled to top
   modalClosable = closable;
   modalOverlay.classList.toggle("no-close", !closable);
   modalOverlay.classList.remove("hidden");
@@ -85,6 +87,19 @@ window.addEventListener("popstate", () => {
   closeModal();
   closingFromPopstate = false;
 });
+
+/** Shared shimmer placeholder for any list that's still loading (Notice
+ *  board, Notification tab, Classmate Directory, a profile's Posts/Notes
+ *  tabs, …) — an avatar + a couple of lines per row, repeated `count` times,
+ *  so lists get the same skeleton feel as the Wall instead of plain text. */
+export function skeletonRowsHtml(count = 3) {
+  const row = `
+    <div class="skeleton-row" aria-hidden="true">
+      <div class="skeleton-avatar"></div>
+      <div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div>
+    </div>`;
+  return row.repeat(count);
+}
 
 /** Escape user-entered text before injecting into innerHTML (XSS guard). */
 export function escapeHtml(str = "") {
