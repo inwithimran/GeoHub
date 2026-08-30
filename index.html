@@ -978,6 +978,14 @@
   .skeleton-line.sk-50 { width:50%; }
   .skeleton-post-text { @apply flex flex-col gap-2 mb-3; }
   .skeleton-block { @apply rounded-xl; height:160px; }
+
+  /* Generic "row" skeleton — an avatar + a couple of lines in a card,
+     reused for anywhere a list of items is still loading (Notice board,
+     Notification tab, Classmate Directory) via skeletonRowsHtml() in
+     ui-utils.js, so every such list gets the same shimmer instead of a
+     plain "Loading…" line. */
+  .skeleton-row { @apply flex items-center gap-3 bg-surface rounded-2xl; padding:13px 16px; box-shadow: var(--shadow-card); border:1px solid rgba(26,76,48,.06); }
+  .skeleton-row + .skeleton-row { @apply mt-3; }
   .post-image-more {
     @apply absolute inset-0 flex items-center justify-center text-white font-extrabold text-lg;
     background: rgba(11,32,21,.55);
@@ -1073,11 +1081,21 @@
     .settings-page { max-width:520px; }
   }
 
-  /* ---------- Modal / toast ---------- */
+  /* ---------- Modal / toast ----------
+     .modal-sheet is a fixed-height flex column: the close button and the
+     drag handle sit outside the scrolling area so they never move, and
+     #modal-scroll is the only part that scrolls. If a modal's content
+     starts with an <h3> title, that title sticks to the top of the
+     scrolling area too (see "#modal-scroll > #modal-body > h3:first-child"
+     below) so long modals never scroll their own heading out of view. */
   .modal-overlay { @apply fixed inset-0 z-[100] flex items-end justify-center; background: rgba(8,14,9,.55); backdrop-filter:blur(2px); }
-  .modal-sheet { @apply relative bg-surface w-full rounded-t-[26px] overflow-y-auto animate-sheet-up; max-width:480px; padding:10px 22px 26px; max-height:88vh; }
+  .modal-sheet {
+    @apply relative bg-surface w-full rounded-t-[26px] animate-sheet-up flex flex-col;
+    max-width:480px; padding:10px 0 0; max-height:88vh; overflow:hidden;
+  }
+  .modal-scroll { @apply overflow-y-auto flex-1 min-h-0; padding:0 22px 26px; }
   .modal-close-btn {
-    @apply absolute z-[3] flex items-center justify-center rounded-full text-white transition-transform;
+    @apply absolute z-[3] flex items-center justify-center rounded-full text-white transition-transform shrink-0;
     top:14px; right:14px; width:34px; height:34px; background: rgba(23,36,28,.82);
   }
   .modal-close-btn:active { transform:scale(.92); background: rgba(23,36,28,.95); }
@@ -1091,13 +1109,23 @@
   @media (min-width:900px) {
     .modal-overlay { @apply items-center; padding:24px; }
     .modal-sheet {
-      @apply rounded-[22px] animate-modal-pop; max-width:520px; max-height:min(88vh, 720px); padding:22px 26px 28px;
+      @apply rounded-[22px] animate-modal-pop; max-width:520px; max-height:min(88vh, 720px); padding:22px 0 0;
       box-shadow:0 24px 60px -12px rgba(8,20,12,.35), 0 0 0 1px rgba(26,76,48,.06);
     }
+    .modal-scroll { padding:0 26px 28px; }
     .modal-handle { @apply hidden; }
   }
-  .modal-handle { @apply mx-auto rounded; width:38px; height:4px; background: var(--color-line); margin:8px auto 16px; }
+  .modal-handle { @apply mx-auto rounded shrink-0; width:38px; height:4px; background: var(--color-line); margin:8px auto 16px; }
   .modal-sheet h3 { @apply text-[1.08rem] font-extrabold mb-4; }
+  /* Pin a modal's own title to the top of #modal-scroll while the rest of
+     its content scrolls underneath it. */
+  #modal-body > h3:first-child {
+    @apply sticky top-0 z-[2] bg-surface;
+    margin:0 -22px 14px; padding:4px 22px 12px;
+  }
+  @media (min-width:900px) {
+    #modal-body > h3:first-child { margin:0 -26px 14px; padding:4px 26px 12px; }
+  }
   .modal-sheet .field { @apply mb-3.5; }
   .modal-hint { @apply text-[.8rem] leading-snug; color: var(--color-ink-faint); margin:-6px 0 14px; }
   .confirm-modal { @apply text-center; padding:6px 4px 4px; }
@@ -1473,7 +1501,7 @@
           <input type="text" id="directory-search" placeholder="Search by name, roll, or blood group (e.g. B+)" />
         </div>
         <div id="directory-list">
-          <p class="empty-state">Loading classmates…</p>
+          <div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div>
         </div>
       </section>
 
@@ -1527,7 +1555,7 @@
           </button>
         </div>
         <div class="notices-page-panel active" data-panel="notice">
-          <div id="notice-tab-body"><p class="empty-state">Loading notices…</p></div>
+          <div id="notice-tab-body"><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div></div>
         </div>
         <div class="notices-page-panel" data-panel="notification">
           <div class="notif-panel-head">
@@ -1536,7 +1564,7 @@
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
             </button>
           </div>
-          <div id="notification-list"><p class="empty-state">Loading…</p></div>
+          <div id="notification-list"><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div></div>
         </div>
       </section>
 
@@ -1620,7 +1648,9 @@
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
       </button>
       <div class="modal-handle"></div>
-      <div id="modal-body"></div>
+      <div id="modal-scroll" class="modal-scroll">
+        <div id="modal-body"></div>
+      </div>
     </div>
   </div>
 
