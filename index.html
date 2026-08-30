@@ -188,7 +188,8 @@
    light-mode white in dark mode — composer/comment inputs resetting
    to white on focus, and the small icon scrims on modals/media. */
 :root[data-theme="dark"] .composer-modal-textarea:focus,
-:root[data-theme="dark"] .comment-input-row input:focus {
+:root[data-theme="dark"] .comment-input-row input:focus,
+:root[data-theme="dark"] .chat-input-bar input:focus {
   background: var(--color-surface);
 }
 :root[data-theme="dark"] .media-thumb-remove { background: rgba(0,0,0,.55); }
@@ -589,6 +590,135 @@
     background: var(--color-forest-500); margin-right:5px; vertical-align:middle;
   }
   .section-heading { @apply text-xs font-extrabold uppercase tracking-wider pl-0.5; color: var(--color-ink-faint); margin:4px 0 -4px; }
+
+  /* ============================================================
+     MESSAGES (js/messages.js) — Class Chat + Direct Messages.
+     The whole page is height-locked to the viewport (topbar height
+     subtracted) instead of using the app's normal window-scroll
+     pattern, so the message list scrolls INSIDE its own box while
+     the composer stays pinned at the very bottom — a real chat
+     layout instead of a long page you scroll past. The negative
+     margins cancel out .content's own padding so this section can
+     claim the full viewport width/height; chat-input-bar's bottom
+     margin then clears the floating pill bottom-nav on mobile
+     (hidden entirely on desktop, so no clearance needed there).
+  ============================================================= */
+  .msg-route, .dm-thread-route {
+    margin:-16px -14px -96px; height:calc(100dvh - 58px);
+    display:flex; flex-direction:column; min-width:0; gap:0 !important;
+  }
+  @media (min-width:900px) {
+    .msg-route, .dm-thread-route { margin:-26px -28px -40px; height:calc(100dvh - 64px); }
+  }
+
+  .msg-subtabs { @apply flex shrink-0 gap-1.5; padding:12px 14px 8px; background: var(--color-paper); }
+  @media (min-width:900px) { .msg-subtabs { padding:0 0 14px; } }
+  .msg-subtab-btn {
+    @apply relative flex-1 flex items-center justify-center gap-1.5 text-sm font-extrabold rounded-full transition-colors;
+    padding:11px 10px; color: var(--color-ink-soft); background: var(--color-surface); border:1px solid var(--color-line);
+  }
+  .msg-subtab-btn.active { @apply text-white; background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800)); border-color:transparent; box-shadow: var(--shadow-btn); }
+  .msg-tab-badge {
+    @apply inline-flex items-center justify-center text-white font-extrabold rounded-full;
+    min-width:17px; height:17px; font-size:.62rem; padding:0 4px;
+    background: linear-gradient(135deg, var(--color-danger-500), var(--color-danger-600));
+  }
+  .msg-subtab-panel { @apply hidden flex-1 flex-col min-h-0; }
+  .msg-subtab-panel.active { @apply flex; }
+
+  .chat-header {
+    @apply flex items-center justify-between shrink-0; padding:2px 14px 10px;
+  }
+  @media (min-width:900px) { .chat-header { padding:0 0 12px; } }
+  .chat-header strong { @apply block text-[.95rem]; }
+  .chat-header-sub { @apply block text-[.72rem] font-semibold; color: var(--color-ink-faint); }
+  .chat-header-sub.online-now { color: var(--color-forest-600); }
+
+  .chat-scroll {
+    @apply flex-1 min-h-0 flex flex-col gap-2.5; overflow-y:auto; -webkit-overflow-scrolling:touch;
+    padding:2px 14px 14px;
+  }
+  @media (min-width:900px) { .chat-scroll { padding:0 2px 14px; } }
+
+  /* ---- chat bubbles (Class Chat + DM thread share this) ---- */
+  .chat-bubble-row { @apply flex items-end gap-2 max-w-[86%]; }
+  .chat-bubble-row.mine { @apply self-end flex-row-reverse; }
+  .chat-bubble-row .avatar { width:26px; height:26px; box-shadow:none; }
+  .chat-bubble-group { @apply flex flex-col gap-0.5 min-w-0; }
+  .chat-bubble-row.mine .chat-bubble-group { @apply items-end; }
+  .chat-bubble-name { @apply text-[.7rem] font-extrabold pl-1; color: var(--color-forest-700); }
+  .chat-bubble {
+    @apply relative text-[.87rem] leading-snug rounded-[18px] break-words; padding:9px 13px;
+    background: var(--color-surface); color: var(--color-ink); border:1px solid var(--color-line); border-bottom-left-radius:5px;
+  }
+  .chat-bubble-row.mine .chat-bubble {
+    @apply text-white; background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800));
+    border-color:transparent; border-bottom-left-radius:18px; border-bottom-right-radius:5px;
+  }
+  .chat-bubble-meta { @apply flex items-center gap-1.5 px-1 text-[.65rem] font-semibold; color: var(--color-ink-faint); }
+  .chat-bubble-row.mine .chat-bubble-meta { @apply flex-row-reverse; }
+  .chat-bubble-row .kebab-menu { align-self:center; }
+  .chat-bubble-row .kebab-btn { width:24px; height:24px; }
+  .chat-day-divider { @apply self-center text-[.68rem] font-extrabold uppercase tracking-wide rounded-full; padding:4px 12px; color: var(--color-ink-faint); background: var(--color-paper-deep); margin:6px 0; }
+  .chat-empty { @apply flex-1 flex items-center justify-center text-center; color: var(--color-ink-faint); font-size:.88rem; padding:30px; }
+
+  /* ---- fixed-feeling composer at the very bottom of the panel ---- */
+  .chat-input-bar {
+    @apply flex items-center gap-2 shrink-0; padding:10px 14px; margin-bottom:88px;
+    background: var(--color-surface); border-top:1px solid var(--color-line);
+  }
+  @media (min-width:900px) { .chat-input-bar { margin-bottom:0; padding:12px 2px 4px; } }
+  .chat-input-bar input {
+    @apply flex-1 border-[1.5px] rounded-full text-sm; border-color: var(--color-line); background: var(--color-paper-deep); padding:11px 16px;
+  }
+  .chat-input-bar input:focus { outline:none; border-color: var(--color-forest-600); background:#fff; }
+  .chat-send-btn {
+    @apply flex items-center justify-center shrink-0 rounded-full text-white transition-transform; width:42px; height:42px;
+    background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800)); box-shadow: var(--shadow-btn);
+  }
+  .chat-send-btn:disabled { opacity:.45; box-shadow:none; }
+  .chat-send-btn:not(:disabled):active { transform:scale(.92); }
+
+  /* ---- Direct Messages: conversation list ---- */
+  .dm-list-wrap { @apply flex-1 min-h-0 flex flex-col gap-3; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:12px 14px 24px; }
+  @media (min-width:900px) { .dm-list-wrap { padding:0 0 24px; } }
+  .dm-conv-row { @apply w-full flex items-center gap-3 text-left rounded-2xl bg-surface transition-transform; padding:11px 12px; box-shadow: var(--shadow-card); border:1px solid var(--color-line); }
+  .dm-conv-row:active { transform:scale(.985); }
+  .dm-conv-info { @apply flex-1 min-w-0; }
+  .dm-conv-info strong { @apply block text-[.9rem]; }
+  .dm-conv-preview { @apply flex items-center gap-1 text-[.78rem] font-medium whitespace-nowrap overflow-hidden text-ellipsis; color: var(--color-ink-faint); max-width:100%; }
+  .dm-conv-preview.unread { @apply font-bold; color: var(--color-ink); }
+  .dm-conv-meta { @apply flex flex-col items-end gap-1.5 shrink-0; }
+  .dm-conv-time { @apply text-[.68rem] font-semibold; color: var(--color-ink-faint); }
+  .dm-unread-dot {
+    @apply flex items-center justify-center text-white font-extrabold rounded-full; min-width:19px; height:19px; font-size:.65rem; padding:0 5px;
+    background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800));
+  }
+
+  /* ---- Direct Messages: thread header (avatar + name + presence, on the drill-down page) ---- */
+  .dm-thread-header { @apply flex items-center gap-2.5 shrink-0; padding:2px 14px 10px; }
+  @media (min-width:900px) { .dm-thread-header { padding:0 0 12px; } }
+  .dm-thread-header .avatar { width:36px; height:36px; }
+  .dm-thread-header-name { @apply text-[.95rem] font-extrabold; }
+
+  /* ---- Message button (Directory row + a classmate's Profile) ---- */
+  .msg-btn {
+    @apply flex items-center justify-center shrink-0 rounded-full transition-transform; width:32px; height:32px;
+    background: var(--color-forest-100); color: var(--color-forest-700);
+  }
+  .msg-btn:active { transform:scale(.9); background: var(--color-forest-200); }
+  .profile-flow-actions .msg-btn { @apply w-auto rounded-full flex-1 gap-2 text-[.9rem] font-bold; height:50px; background: var(--color-forest-100); }
+
+  /* ---- unread badge on the Message nav item (bottom-nav pill + sidebar) ---- */
+  .nav-icon-wrap { @apply relative inline-flex; }
+  .nav-icon-badge {
+    @apply absolute flex items-center justify-center text-white font-extrabold rounded-full;
+    top:-5px; right:-7px; min-width:16px; height:16px; font-size:.58rem; padding:0 3px;
+    background: linear-gradient(135deg, var(--color-danger-500), var(--color-danger-600));
+    border:2px solid var(--color-surface);
+  }
+  .bottom-nav .nav-item[data-route="message"] .nav-icon-badge { border-color: var(--color-forest-800); }
+  .sidebar-nav .nav-item .nav-icon-badge { border-color: var(--color-forest-900); }
 
   /* ---------- Add Post — same "gradient promo button" family as Add Note
      (below), but in the forest palette with the student's own avatar
@@ -1618,6 +1748,9 @@
         <button class="nav-item" data-route="resources">
           <span class="icon" data-icon="resources"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v5h5"/><path d="M6 3h8l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><line x1="8.5" y1="13" x2="15.5" y2="13"/><line x1="8.5" y1="16.5" x2="13" y2="16.5"/></svg></span> Notes &amp; Sheets
         </button>
+        <button class="nav-item" data-route="message">
+          <span class="icon nav-icon-wrap" data-icon="message"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h16a1 1 0 0 1 1 1V16a1 1 0 0 1-1 1H8l-4.5 4V6.5a1 1 0 0 1 1-1z"/></svg><span id="msg-nav-badge-sidebar" class="nav-icon-badge hidden">0</span></span> Messages
+        </button>
         <button class="nav-item" data-route="directory">
           <span class="icon" data-icon="directory"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.4"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M16 8.2a3.2 3.2 0 1 1 3.4 5.4"/><path d="M18 14.3c2.4.4 3.5 2.1 3.5 5.2"/></svg></span> Classmates
         </button>
@@ -1728,9 +1861,60 @@
         </div>
       </section>
 
-      <!-- ===== SECTION 3B: MESSAGE (placeholder — realistic chat system built later) ===== -->
-      <section id="section-message" class="route-section">
-        <p class="empty-state">Messages are coming soon.</p>
+      <!-- ===== SECTION 3B: MESSAGES — Class Chat (open room) + Direct Messages (conversation list) ===== -->
+      <section id="section-message" class="route-section msg-route">
+        <div class="msg-subtabs" role="tablist">
+          <button type="button" class="msg-subtab-btn active" data-msgtab="class" role="tab" aria-selected="true" id="msg-subtab-class">Class Chat</button>
+          <button type="button" class="msg-subtab-btn" data-msgtab="dm" role="tab" aria-selected="false" id="msg-subtab-dm">
+            Direct Messages <span id="dm-total-unread-badge" class="msg-tab-badge hidden">0</span>
+          </button>
+        </div>
+
+        <!-- ---- Class Chat: one open live chat, everyone can read + post ---- -->
+        <div class="msg-subtab-panel active" data-msgtab-panel="class">
+          <div class="chat-header">
+            <div>
+              <strong>Class Chat</strong>
+              <span id="class-chat-online-count" class="chat-header-sub"></span>
+            </div>
+          </div>
+          <div id="class-chat-list" class="chat-scroll">
+            <p class="empty-state">Loading class chat…</p>
+          </div>
+          <form id="class-chat-form" class="chat-input-bar" autocomplete="off">
+            <input type="text" id="class-chat-input" placeholder="Message the class…" maxlength="1000" />
+            <button type="submit" id="class-chat-send-btn" class="chat-send-btn" aria-label="Send" disabled>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+          </form>
+        </div>
+
+        <!-- ---- Direct Messages: 1:1 conversation list -> tap into its own thread page ---- -->
+        <div class="msg-subtab-panel" data-msgtab-panel="dm">
+          <div id="dm-conversation-list" class="dm-list-wrap">
+            <p class="empty-state">No conversations yet — message a classmate from the Directory.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== SECTION 3C: A DIRECT-MESSAGE THREAD (drill-down page, not a modal) ===== -->
+      <section id="section-dm-thread" class="route-section dm-thread-route">
+        <div class="profile-page-topbar">
+          <button type="button" id="dm-thread-back-btn" class="profile-back-btn">
+            <span class="profile-back-btn-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+            </span>
+            Back
+          </button>
+        </div>
+        <div id="dm-thread-header" class="dm-thread-header"></div>
+        <div id="dm-thread-list" class="chat-scroll"></div>
+        <form id="dm-thread-form" class="chat-input-bar" autocomplete="off">
+          <input type="text" id="dm-thread-input" placeholder="Type a message…" maxlength="2000" />
+          <button type="submit" id="dm-thread-send-btn" class="chat-send-btn" aria-label="Send" disabled>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
+        </form>
       </section>
 
       <!-- ===== SECTION 4: ROUTINE & NOTICE BOARD ===== -->
@@ -1893,7 +2077,7 @@
         <span class="icon" data-icon="resources"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v5h5"/><path d="M6 3h8l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><line x1="8.5" y1="13" x2="15.5" y2="13"/><line x1="8.5" y1="16.5" x2="13" y2="16.5"/></svg></span><small>Notes</small>
       </button>
       <button class="nav-item" data-route="message">
-        <span class="icon" data-icon="message"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h16a1 1 0 0 1 1 1V16a1 1 0 0 1-1 1H8l-4.5 4V6.5a1 1 0 0 1 1-1z"/></svg></span><small>Message</small>
+        <span class="icon nav-icon-wrap" data-icon="message"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h16a1 1 0 0 1 1 1V16a1 1 0 0 1-1 1H8l-4.5 4V6.5a1 1 0 0 1 1-1z"/></svg><span id="msg-nav-badge-bottom" class="nav-icon-badge hidden">0</span></span><small>Message</small>
       </button>
       <button class="nav-item" data-route="directory">
         <span class="icon" data-icon="directory"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.4"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M16 8.2a3.2 3.2 0 1 1 3.4 5.4"/><path d="M18 14.3c2.4.4 3.5 2.1 3.5 5.2"/></svg></span><small>Classmates</small>

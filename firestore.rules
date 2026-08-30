@@ -178,6 +178,55 @@ service cloud.firestore {
       }
     }
 
+    // ---- Messages: "Class Chat" (one open room, everyone in the
+    // department) ----
+    match /classChat/{messageId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.authorUid == request.auth.uid && textWithinLimit("text", 1000);
+      allow update: if isOwner(resource.data.authorUid) && textWithinLimit("text", 1000);
+      allow delete: if isOwner(resource.data.authorUid) || isAdmin();
+    }
+
+    // ---- Messages: Direct Messages (1:1 inbox) ----
+    // Conversation id is the two participant uids, sorted and joined with
+    // "_" (see js/messages.js's dmConversationId()) — deterministic, so
+    // both sides always land on the exact same document instead of
+    // racing to create duplicate threads for the same pair of students.
+    match /conversations/{conversationId} {
+      // Only the two people IN the conversation may ever read/write it —
+      // nobody can browse or tamper with someone else's DMs, even another
+      // signed-in classmate.
+      allow read: if isSignedIn() && request.auth.uid in resource.data.participants;
+      allow create: if isSignedIn() &&
+        request.auth.uid in request.resource.data.participants &&
+        request.resource.data.participants.size() == 2;
+      // The participant pair itself is frozen after creation. Beyond
+      // that, either participant may only touch the "preview" fields
+      // (last message text/sender/time) and the shared unread-counts map —
+      // e.g. opening the thread zeroes only *your own* entry in `unread`,
+      // sending a message updates the preview + bumps the other person's
+      // entry. Nothing else on the conversation doc is ever editable.
+      allow update: if isSignedIn() &&
+        request.auth.uid in resource.data.participants &&
+        request.resource.data.participants == resource.data.participants &&
+        onlyChangedFields(["unread", "lastMessageText", "lastMessageAt", "lastSenderUid"]);
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        // Every read/write here is gated on being one of the two people on
+        // the parent conversation doc — a get() lookup, same pattern this
+        // file already uses for the comment-delete rule below.
+        function isDmParticipant() {
+          return isSignedIn() &&
+            request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
+        }
+        allow read: if isDmParticipant();
+        allow create: if isDmParticipant() && request.resource.data.senderUid == request.auth.uid && textWithinLimit("text", 2000);
+        allow update: if false; // messages are never edited, only sent/deleted
+        allow delete: if isOwner(resource.data.senderUid);
+      }
+    }
+
     // ---- Notes & Sheet Hub resources ----
     match /resources/{resId} {
       allow read: if isSignedIn();
