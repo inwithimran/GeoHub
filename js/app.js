@@ -229,6 +229,18 @@ const routeTitles = {
 
 let currentRoute = "wall";
 
+// Each of the 5 bottom-nav tabs (plus Notices/Settings) shares one page-level
+// scroll container (see .content's CSS), so switching between them used to
+// always snap back to the top — annoying if you were scrolled deep into the
+// Wall and just wanted to check Notices for a second. This remembers each
+// route's own scrollY and restores it on the way back, so every tab keeps
+// its own independent scroll position, like it had its own scroll container.
+// Post Detail / a classmate's Profile are excluded — those are drill-down
+// pages opened fresh each time (from a tap), not persistent tabs, so they
+// intentionally always open at the top.
+const SCROLL_MEMORY_EXCLUDED_ROUTES = new Set(["post-detail", "user-profile"]);
+let scrollPositions = {}; // route -> last scrollY
+
 // ============================================================
 // ROUTE <-> BACK BUTTON — every section change pushes a history
 // entry (replaced, not pushed, for the very first section after
@@ -241,6 +253,11 @@ let currentRoute = "wall";
 // ============================================================
 function goToRoute(route, { fromPopstate = false, replace = false, state = {} } = {}) {
   if (!routeTitles[route]) return;
+  // Remember exactly where we're scrolled to on the tab we're leaving,
+  // before its section gets hidden, so coming back restores it.
+  if (currentRoute !== route && !SCROLL_MEMORY_EXCLUDED_ROUTES.has(currentRoute)) {
+    scrollPositions[currentRoute] = window.scrollY;
+  }
   document.querySelectorAll(".route-section").forEach(sec => {
     sec.classList.toggle("hidden", sec.id !== `section-${route}`);
   });
@@ -252,13 +269,12 @@ function goToRoute(route, { fromPopstate = false, replace = false, state = {} } 
 
   if (route === "profile") renderProfile();
   if (route === "settings") renderSettingsPage();
-  // Fix for every route sharing one page-level scroll container: navigating
-  // used to leave the window at whatever scrollTop the previous screen left
-  // behind, so e.g. Wall (scrolled halfway down) -> Profile could open
-  // already "scrolled" past its own top. Reset on every navigation — including
-  // classmate A's profile -> classmate B's profile, which keeps the same
-  // "user-profile" route but is a brand new page underneath it.
-  window.scrollTo({ top: 0, behavior: "auto" });
+  // Post Detail and a classmate's Profile are opened fresh each time (a new
+  // post or a different classmate is a brand-new page underneath the same
+  // route name), so they always start at the top. Every other route restores
+  // wherever it was last left — see the scrollPositions comment above.
+  const restoreY = SCROLL_MEMORY_EXCLUDED_ROUTES.has(route) ? 0 : (scrollPositions[route] || 0);
+  window.scrollTo({ top: restoreY, behavior: "auto" });
   // NOTE: opening the Notices & Notifications page (or either of its tabs)
   // deliberately does NOT clear the bell/tab badges anymore — only reading
   // (or deleting) the specific notice/notification behind the count does,
@@ -747,6 +763,8 @@ watchAuthState(
     // Clear the app's route history so a re-login starts a fresh back-stack
     // instead of carrying over section entries from the previous session.
     history.replaceState({ geohubAuthScreen: true }, "");
+    scrollPositions = {}; // next login's tabs each start fresh, not at this session's scroll spots
+    currentRoute = "wall";
 
     if (featuresInitialized) {
       teardownWall();
