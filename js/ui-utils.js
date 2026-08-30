@@ -2,7 +2,8 @@
 // UI-UTILS.JS — small shared helpers (toast, modal, formatting)
 // used by wall.js / resources.js / directory.js / routine.js
 // ============================================================
-import { ADMIN_EMAILS, ADMIN_NAME } from "./firebase-config.js";
+import { ADMIN_EMAILS, ADMIN_NAME, db } from "./firebase-config.js";
+import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const toastEl = document.getElementById("toast");
 let toastTimer = null;
@@ -297,13 +298,49 @@ export function wireCharCounter(field, limit) {
 // SHARED USER CACHE — populated by the directory listener (which
 // already streams every student's profile) so other screens can
 // show a name/avatar/details for a uid without a fresh fetch.
+//
+// Two gaps this used to have, both of which showed up as "post
+// authors' photos don't appear on the Wall":
+//   1. Race: the Wall's own posts listener is a smaller query than
+//      the Directory's, so it very often resolves and renders
+//      *before* the Directory has warmed the cache — the avatar was
+//      drawn once, with nothing in the cache, and never revisited.
+//   2. Ceiling: the Directory only ever caches its first page
+//      (DIRECTORY_PAGE_SIZE students) unless someone opens Directory
+//      and clicks "Load more" — a post author outside that page
+//      never got cached at all.
+// `subscribeToProfileUpdates` lets any screen re-draw just the
+// avatars once a profile lands, and `ensureProfileLoaded` fills gap
+// #2 with a one-off fetch for any uid the cache doesn't have yet.
 // ============================================================
 const userCache = new Map();
+const profileListeners = new Set();
+const pendingProfileFetches = new Set();
+
 export function cacheUserProfile(uid, profile) {
-  if (uid && profile) userCache.set(uid, profile);
+  if (!uid || !profile) return;
+  userCache.set(uid, profile);
+  profileListeners.forEach(cb => cb(uid));
 }
+
 export function getCachedProfile(uid) {
   return userCache.get(uid) || null;
+}
+
+/** Call `callback(uid)` whenever a profile is added/updated in the shared cache. Returns an unsubscribe function. */
+export function subscribeToProfileUpdates(callback) {
+  profileListeners.add(callback);
+  return () => profileListeners.delete(callback);
+}
+
+/** If `uid` isn't cached yet, fetch it once directly (covers authors outside the Directory's loaded page). Safe to call repeatedly. */
+export function ensureProfileLoaded(uid) {
+  if (!uid || userCache.has(uid) || pendingProfileFetches.has(uid)) return;
+  pendingProfileFetches.add(uid);
+  getDoc(doc(db, "users", uid))
+    .then(snap => { if (snap.exists()) cacheUserProfile(uid, snap.data()); })
+    .catch(() => { /* best-effort — avatar just falls back to the generic icon */ })
+    .finally(() => pendingProfileFetches.delete(uid));
 }
 
 /** Long posts / notices collapse behind a "See more" toggle instead of stretching the feed. */

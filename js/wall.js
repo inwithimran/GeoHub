@@ -14,7 +14,8 @@ import {
   showToast, escapeHtml, timeAgo, openModal, closeModal,
   setBtnLoading, cacheUserProfile, getCachedProfile, clampableRichHtml, attachClampToggle,
   avatarInner, nameWithBadge, kebabMenuHtml, wireKebabMenus, confirmDialog, isAdminEmail,
-  extractHashtags, wireRichTextClicks, wireMentionAutocomplete, skeletonRowsHtml, wireCharCounter
+  extractHashtags, wireRichTextClicks, wireMentionAutocomplete, skeletonRowsHtml, wireCharCounter,
+  ensureProfileLoaded, subscribeToProfileUpdates
 } from "./ui-utils.js";
 import { openUserProfilePage } from "./profile-view.js";
 import { uploadImages } from "./cloudinary.js";
@@ -91,12 +92,26 @@ const POST_TEXT_LIMIT = 3000;
 /** Resolve a full-enough profile object (for the avatar/badge) from the shared cache, uid, and stored name. */
 export function authorProfile(uid, fallbackName) {
   const cached = getCachedProfile(uid);
+  if (!cached) ensureProfileLoaded(uid); // cache miss — kick off a one-off fetch, refreshAuthorAvatars() will pick it up
   return cached || { uid, name: fallbackName };
+}
+
+// Re-draws just the avatar(s) for one author, wherever they appear in the
+// currently-rendered Wall, once their profile lands in the shared cache
+// (whether that's the Directory listener warming up or the ensureProfileLoaded
+// fallback above) — so a photo never has to wait for the next full re-render.
+function refreshAuthorAvatars(uid) {
+  const profile = getCachedProfile(uid);
+  if (!profile) return;
+  document.querySelectorAll(`.avatar[data-author="${uid}"]`).forEach(el => {
+    el.innerHTML = avatarInner(profile);
+  });
 }
 
 /** Wire up the composer + start the realtime post listener. Call once on login. */
 export function initWall() {
   composerTrigger.addEventListener("click", openComposerModal);
+  subscribeToProfileUpdates(refreshAuthorAvatars);
   subscribeWall();
 }
 
@@ -741,7 +756,7 @@ export async function openHashtagResults(tag) {
     <div class="flat-list hashtag-results-list">
       ${posts.map(p => `
         <button type="button" class="directory-row hashtag-result-row" data-post-id="${p.id}">
-          <div class="avatar">${avatarInner(authorProfile(p.authorUid, p.authorName))}</div>
+          <div class="avatar" data-author="${p.authorUid}">${avatarInner(authorProfile(p.authorUid, p.authorName))}</div>
           <div class="directory-info">
             <strong>${nameWithBadge(p.authorName, p.authorEmail)}</strong>
             <small class="hashtag-result-snippet">${escapeHtml((p.text || "").slice(0, 90))}</small>

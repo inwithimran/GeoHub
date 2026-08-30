@@ -21,7 +21,8 @@ import { currentProfile } from "./auth.js";
 import {
   showToast, escapeHtml, timeAgo, openModal, closeModal, setBtnLoading,
   clampableRichHtml, richTextHtml, wireRichTextClicks, attachClampToggle, avatarInner, nameWithBadge,
-  kebabMenuHtml, wireKebabMenus, confirmDialog, isAdminEmail, wireCharCounter
+  kebabMenuHtml, wireKebabMenus, confirmDialog, isAdminEmail, wireCharCounter,
+  getCachedProfile, subscribeToProfileUpdates
 } from "./ui-utils.js";
 import {
   authorProfile, openEditPostModal, deletePost, wireMentions,
@@ -45,6 +46,19 @@ export function registerPostDetailRouter(goToRoute) { goToRouteRef = goToRoute; 
 let unsubscribePost = null;
 let unsubscribeComments = null;
 let currentPostId = null;
+
+// Same fix as the Wall (see wall.js's refreshAuthorAvatars): the post's own
+// author and every commenter's avatar are rendered from whatever's in the
+// shared profile cache at the moment; this re-draws them in place as their
+// profiles land (Directory listener warming up, or a fetched-on-demand miss)
+// instead of leaving a blank/default avatar until the page is reopened.
+const unsubscribeProfileUpdates = subscribeToProfileUpdates((uid) => {
+  const profile = getCachedProfile(uid);
+  if (!profile || !bodyEl) return;
+  bodyEl.querySelectorAll(`.avatar[data-author="${uid}"]`).forEach(el => {
+    el.innerHTML = avatarInner(profile);
+  });
+});
 
 // A comment is meant to be a quick reply, not a second post — capped
 // well below POST_TEXT_LIMIT in wall.js.

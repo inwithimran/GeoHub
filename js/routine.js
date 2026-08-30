@@ -28,15 +28,30 @@ import {
 import {
   escapeHtml, timeAgo, fullDate, showToast, setBtnLoading, openModal, closeModal,
   avatarInner, nameWithBadge, getCachedProfile, kebabMenuHtml, wireKebabMenus, confirmDialog,
-  resetScrollForTabs, skeletonRowsHtml, wireCharCounter
+  resetScrollForTabs, skeletonRowsHtml, wireCharCounter, ensureProfileLoaded, subscribeToProfileUpdates
 } from "./ui-utils.js";
 import { currentProfile } from "./auth.js";
 import { triggerPush } from "./push-trigger.js";
 
 /** Resolve a poster's full profile (gender, photo, etc.) from the shared cache when available. */
 function posterProfile(uid, fallbackName, fallbackEmail) {
-  return getCachedProfile(uid) || { uid, name: fallbackName, email: fallbackEmail };
+  const cached = getCachedProfile(uid);
+  if (!cached) ensureProfileLoaded(uid); // cache miss — fetch once, the subscription below repaints when it lands
+  return cached || { uid, name: fallbackName, email: fallbackEmail };
 }
+
+// Same fix as wall.js's refreshAuthorAvatars: the Notice board and
+// Notification feed both draw avatars from the shared profile cache at
+// render time, which can still be cold (Directory listener not warmed up
+// yet, or the poster isn't in the Directory's loaded page). Repaint any
+// matching avatar in place once that profile actually lands.
+subscribeToProfileUpdates((uid) => {
+  const profile = getCachedProfile(uid);
+  if (!profile) return;
+  document.querySelectorAll(`.avatar[data-author="${uid}"]`).forEach(el => {
+    el.innerHTML = avatarInner(profile);
+  });
+});
 
 const routineTable = document.getElementById("routine-table");
 const notifBadge = document.getElementById("topbar-notif-badge");
@@ -533,7 +548,7 @@ function renderNoticesList() {
   noticeList.innerHTML = `<div class="notice-flat-list">` + latestNotices.map(n => `
     <div class="notice-row ${n.urgent ? "urgent" : ""}" data-id="${n.id}">
       <div class="notice-row-top">
-        <span class="avatar avatar-sm notice-row-avatar">${avatarInner(posterProfile(n.postedByUid, n.postedByName, n.postedBy))}</span>
+        <span class="avatar avatar-sm notice-row-avatar" data-author="${n.postedByUid}">${avatarInner(posterProfile(n.postedByUid, n.postedByName, n.postedBy))}</span>
         <div class="notice-row-byline">
           <span class="notice-row-name">${nameWithBadge(n.postedByName || "Admin", n.postedBy)}</span>
           <small>${timeAgo(n.createdAt)}</small>
@@ -576,7 +591,7 @@ function openNoticeDetail(noticeId) {
   openModal(`
     <div class="notice-detail-modal">
       <div class="notice-detail-head">
-        <span class="avatar avatar-lg">${avatarInner(posterProfile(n.postedByUid, n.postedByName, n.postedBy))}</span>
+        <span class="avatar avatar-lg" data-author="${n.postedByUid}">${avatarInner(posterProfile(n.postedByUid, n.postedByName, n.postedBy))}</span>
         <div>
           <div class="notice-detail-name">${nameWithBadge(n.postedByName || "Admin", n.postedBy)}</div>
           <small>${fullDate(n.createdAt) || "Just now"}</small>
@@ -756,7 +771,7 @@ function renderActivityList() {
     <div class="activity-row ${unread ? "unread" : "read"}" data-index="${i}">
       ${unread ? `<span class="activity-unread-dot"></span>` : ""}
       <div class="notice-row-top">
-        <span class="avatar avatar-sm">${avatarInner(posterProfile(a.actorUid, a.actorName, a.actorEmail))}</span>
+        <span class="avatar avatar-sm" data-author="${a.actorUid}">${avatarInner(posterProfile(a.actorUid, a.actorName, a.actorEmail))}</span>
         <div class="notice-row-byline">
           <span class="notice-row-name">${nameWithBadge(a.actorName || "Someone", a.actorEmail)}</span>
           <small>${timeAgo(a.createdAt)}</small>
