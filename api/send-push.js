@@ -9,7 +9,7 @@
 // deploy at all. Moving the same logic here sidesteps that.
 //
 // Flow: after a student's browser successfully writes a new post/
-// resource/notice/comment to Firestore (see wall.js, resources.js,
+// resource/notice/comment/report to Firestore (see wall.js, resources.js,
 // routine.js), it calls this endpoint with a Firebase ID token +
 // a small payload describing what happened. This function verifies
 // that token (so only a signed-in student can trigger a send),
@@ -73,6 +73,21 @@ async function collectTokensFor(db, uid, excludeUid) {
   return tokensSnap.docs.filter((d) => !d.data().revoked).map((d) => ({ uid, token: d.id }));
 }
 
+/** Every admin's registered devices (used for "new report" — never the whole department). */
+async function collectAdminTokens(db, excludeUid) {
+  if (!ADMIN_EMAILS.length) return [];
+  const adminsSnap = await db.collection("users").where("email", "in", ADMIN_EMAILS).get();
+  const pairs = [];
+  await Promise.all(adminsSnap.docs.map(async (userDoc) => {
+    if (userDoc.id === excludeUid) return;
+    const tokensSnap = await db.collection("users").doc(userDoc.id).collection("fcmTokens").get();
+    tokensSnap.forEach((t) => {
+      if (!t.data().revoked) pairs.push({ uid: userDoc.id, token: t.id });
+    });
+  }));
+  return pairs;
+}
+
 /** Sends to every pair in chunks of 500 (FCM's multicast limit), pruning dead tokens as it goes. */
 async function sendToTokens(messaging, db, pairs, data = {}) {
   if (!pairs.length) return { sent: 0, pruned: 0 };
@@ -124,6 +139,8 @@ function buildNotification(type, { text, actorName, urgent }) {
       return { title: `${actorName || "Someone"} liked your post`, body: "Tap to view." };
     case "mention":
       return { title: `${actorName || "Someone"} mentioned you`, body: truncate(text) || "Tap to view." };
+    case "report":
+      return { title: `${actorName || "A classmate"} reported a post`, body: truncate(text) || "Tap to review it." };
     default:
       return { title: "GeoHub", body: truncate(text) };
   }
@@ -142,7 +159,7 @@ function isRecent(timestamp) {
  * the handler, which turns that into the HTTP response.
  */
 async function verifyClaim(db, callerUid, callerEmail, payload) {
-  const { type, targetUid, postId, resourceId, noticeId } = payload;
+  const { type, targetUid, postId, resourceId, noticeId, reportId } = payload;
 
   if (type === "notice") {
     // Only the admin/CR may ever trigger a department-wide "notice" push —
@@ -235,6 +252,18 @@ async function verifyClaim(db, callerUid, callerEmail, payload) {
     return;
   }
 
+  if (type === "report") {
+    // Only the admin(s) ever get this push, so the claim just has to prove
+    // the caller really filed the report they're claiming to have — same
+    // "reporting something that just happened" shape as every other type.
+    if (!reportId) throw { status: 400, message: "Missing reportId." };
+    const snap = await db.collection("reports").doc(reportId).get();
+    if (!snap.exists) throw { status: 400, message: "That report doesn't exist." };
+    if (snap.get("reportedByUid") !== callerUid) throw { status: 403, message: "You didn't file that report." };
+    if (!isRecent(snap.get("createdAt"))) throw { status: 400, message: "That report isn't recent." };
+    return;
+  }
+
   throw { status: 400, message: `Unknown type '${type}'.` };
 }
 
@@ -269,14 +298,14 @@ export default async function handler(req, res) {
     const callerUid = decoded.uid;
     const callerEmail = decoded.email || "";
 
-    const { type, text, actorName, urgent, targetUid, postId, resourceId, noticeId } = req.body || {};
+    const { type, text, actorName, urgent, targetUid, postId, resourceId, noticeId, reportId } = req.body || {};
     if (!type) return res.status(400).json({ error: "Missing 'type'." });
 
     const db = getFirestore(app);
 
     // ---- Prove the claim before sending anything (see verifyClaim above) ----
     try {
-      await verifyClaim(db, callerUid, callerEmail, { type, targetUid, postId, resourceId, noticeId });
+      await verifyClaim(db, callerUid, callerEmail, { type, targetUid, postId, resourceId, noticeId, reportId });
     } catch (claimErr) {
       const status = claimErr.status || 400;
       return res.status(status).json({ error: claimErr.message || "Couldn't verify this request." });
@@ -290,10 +319,13 @@ export default async function handler(req, res) {
     const { title, body } = buildNotification(type, { text, actorName, urgent });
 
     // A new comment, like, or mention only notifies one specific student
-    // (the post's author, or whoever got @mentioned) — never the whole department.
+    // (the post's author, or whoever got @mentioned); a new report only
+    // notifies the admin(s) — never the whole department either way.
     const pairs = (type === "comment" || type === "like" || type === "mention")
       ? await collectTokensFor(db, targetUid, callerUid)
-      : await collectAllTokens(db, callerUid);
+      : type === "report"
+        ? await collectAdminTokens(db, callerUid)
+        : await collectAllTokens(db, callerUid);
 
     // FCM data payloads only allow string values, hence the explicit casts.
     const result = await sendToTokens(messaging, db, pairs, { url: "/", type: String(type), title, body });
