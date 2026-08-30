@@ -283,6 +283,144 @@ export function clampableHtml(rawText, extraClass = "") {
 }
 
 // ============================================================
+// RICH TEXT — @mentions and #hashtags, shared by post text and
+// comment text. `mentions` is the [{uid,name}] array stored on the
+// post/comment doc (see wireMentionAutocomplete below for how that
+// gets built while composing). Escaping happens first, exactly like
+// clampableHtml, so this is just as XSS-safe — the mention/hashtag
+// markup added afterwards is built entirely from trusted fragments
+// (fixed tag strings + already-escaped text), never raw user input.
+// ============================================================
+const HASHTAG_RE = /#([A-Za-z0-9_\u0980-\u09FF]{2,40})/g;
+
+function escapeRegExp(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Extract lowercase, deduped hashtags (no "#") from raw post text — used when saving a post. */
+export function extractHashtags(rawText = "") {
+  const found = new Set();
+  for (const m of rawText.matchAll(HASHTAG_RE)) found.add(m[1].toLowerCase());
+  return [...found];
+}
+
+export function richTextHtml(rawText, mentions = []) {
+  let safe = escapeHtml(rawText);
+
+  // Longest name first, so "Sam" can't eat into the middle of "Samantha Rahman".
+  const uniqueMentions = [...new Map((mentions || []).filter(m => m && m.uid && m.name).map(m => [m.uid, m])).values()]
+    .sort((a, b) => b.name.length - a.name.length);
+  uniqueMentions.forEach((m) => {
+    const escapedName = escapeHtml(m.name);
+    const re = new RegExp(`@${escapeRegExp(escapedName)}(?=\\s|$|[.,!?;:)])`, "g");
+    safe = safe.replace(re, `<button type="button" class="mention-chip" data-mention-uid="${escapeHtml(m.uid)}">@${escapedName}</button>`);
+  });
+
+  safe = safe.replace(HASHTAG_RE, (whole, tag) =>
+    `<button type="button" class="hashtag-chip" data-hashtag="${tag.toLowerCase()}">#${tag}</button>`);
+
+  return safe;
+}
+
+/** Like clampableHtml, but also linkifies @mentions and #hashtags. */
+export function clampableRichHtml(rawText, mentions = [], extraClass = "") {
+  const html = richTextHtml(rawText, mentions);
+  const isLong = rawText.length > 260;
+  return `<p class="clampable ${extraClass} ${isLong ? "is-clampable" : ""}">${html}</p>${isLong ? `<button type="button" class="clamp-toggle"> See more</button>` : ""}`;
+}
+
+/** Wire up every not-yet-wired mention/hashtag chip under `root`. Safe to call on every re-render. */
+export function wireRichTextClicks(root) {
+  root.querySelectorAll(".mention-chip").forEach((btn) => {
+    if (btn.dataset.wired) return;
+    btn.dataset.wired = "1";
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const { openUserProfilePage } = await import("./profile-view.js");
+      openUserProfilePage(btn.dataset.mentionUid);
+    });
+  });
+  root.querySelectorAll(".hashtag-chip").forEach((btn) => {
+    if (btn.dataset.wired) return;
+    btn.dataset.wired = "1";
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const { openHashtagResults } = await import("./wall.js");
+      openHashtagResults(btn.dataset.hashtag);
+    });
+  });
+}
+
+// ============================================================
+// @MENTION AUTOCOMPLETE — shared by the post composer, post edit
+// box, and comment box. Watches a text field for an "@" trigger word
+// under the caret and shows a small suggestion dropdown positioned
+// under the field. `getCandidates(query)` should return up to a
+// handful of {uid, name, ...profile} matches; `onPick(candidate)` is
+// called after the name has been spliced into the field so the
+// caller can remember {uid, name} for when the post/comment is saved.
+// ============================================================
+export function wireMentionAutocomplete(fieldEl, getCandidates, onPick) {
+  if (!fieldEl || fieldEl.dataset.mentionWired) return;
+  fieldEl.dataset.mentionWired = "1";
+
+  const host = fieldEl.parentElement;
+  if (getComputedStyle(host).position === "static") host.style.position = "relative";
+
+  const dropdown = document.createElement("div");
+  dropdown.className = "mention-dropdown hidden";
+  host.appendChild(dropdown);
+
+  function currentTrigger() {
+    const value = fieldEl.value;
+    const caret = fieldEl.selectionStart ?? value.length;
+    const match = value.slice(0, caret).match(/(?:^|\s)@([^\s@]{0,30})$/);
+    return match ? match[1] : null;
+  }
+
+  function close() {
+    dropdown.classList.add("hidden");
+    dropdown.innerHTML = "";
+  }
+
+  function pick(candidate) {
+    const value = fieldEl.value;
+    const caret = fieldEl.selectionStart ?? value.length;
+    const before = value.slice(0, caret).replace(/@([^\s@]{0,30})$/, `@${candidate.name} `);
+    fieldEl.value = before + value.slice(caret);
+    const newCaret = before.length;
+    fieldEl.focus();
+    fieldEl.setSelectionRange(newCaret, newCaret);
+    close();
+    onPick(candidate);
+  }
+
+  function open(query) {
+    const matches = (getCandidates(query) || []).slice(0, 6);
+    if (!matches.length) { close(); return; }
+    dropdown.innerHTML = matches.map((m, i) =>
+      `<button type="button" class="mention-option" data-index="${i}">
+        <span class="avatar avatar-sm">${avatarInner(m)}</span>
+        <span>${escapeHtml(m.name || "Classmate")}</span>
+      </button>`
+    ).join("");
+    dropdown.classList.remove("hidden");
+    dropdown.querySelectorAll(".mention-option").forEach((btn, i) => {
+      // mousedown (not click) so the field never loses focus before we act.
+      btn.addEventListener("mousedown", (e) => { e.preventDefault(); pick(matches[i]); });
+    });
+  }
+
+  fieldEl.addEventListener("input", () => {
+    const q = currentTrigger();
+    if (q === null) { close(); return; }
+    open(q);
+  });
+  fieldEl.addEventListener("blur", () => setTimeout(close, 120));
+  fieldEl.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+}
+
+// ============================================================
 // OWNER "THREE-DOT" MENU — reused wherever a student should be
 // able to edit/delete something they own (posts, comments,
 // resources, notices). Markup + wiring live here once so every

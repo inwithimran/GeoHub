@@ -496,7 +496,7 @@ function renderSettingsPage() {
   }
   pushToggle.onchange = async () => {
     if (pushToggle.checked) {
-      await initPush();
+      await initPush({ requestPermission: true });
       const granted = Notification.permission === "granted";
       pushToggle.checked = granted;
       pushStatus.textContent = granted

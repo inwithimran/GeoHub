@@ -20,10 +20,14 @@ import {
 import { currentProfile } from "./auth.js";
 import {
   showToast, escapeHtml, timeAgo, openModal, closeModal, setBtnLoading,
-  clampableHtml, attachClampToggle, avatarInner, nameWithBadge,
-  kebabMenuHtml, wireKebabMenus, confirmDialog
+  clampableRichHtml, richTextHtml, wireRichTextClicks, attachClampToggle, avatarInner, nameWithBadge,
+  kebabMenuHtml, wireKebabMenus, confirmDialog, isAdminEmail
 } from "./ui-utils.js";
-import { authorProfile, openEditPostModal, deletePost, toggleLike, openLikesModal } from "./wall.js";
+import {
+  authorProfile, openEditPostModal, deletePost, wireMentions,
+  openReactionsModal, wireReactionControl, paintReactionButton, REACTION_EMOJIS,
+  pollHtml, wirePoll, togglePinPost
+} from "./wall.js";
 import { openUserProfilePage } from "./profile-view.js";
 import { postImagesHtml, wirePostImageViewer, applyPostImageRatios } from "./media-picker.js";
 import { triggerPush } from "./push-trigger.js";
@@ -110,10 +114,9 @@ export function teardownPostDetail() {
 // ============================================================
 function renderPostDetail(postId, post, comments, container, { focusComment, onDeleted }) {
   const uid = auth.currentUser.uid;
-  const liked = (post.likes || []).includes(uid);
-  const likeCount = (post.likes || []).length;
   const author = authorProfile(post.authorUid, post.authorName);
   const isOwnPost = post.authorUid === uid;
+  const isAdmin = isAdminEmail(auth.currentUser.email);
 
   // A live update (someone else liking/commenting) re-renders this whole
   // container — preserve whatever the person was mid-typing (and focus/
@@ -129,44 +132,47 @@ function renderPostDetail(postId, post, comments, container, { focusComment, onD
     ? comments.map(c => commentItemHtml(c, uid)).join("")
     : `<p class="empty-state" style="padding:10px 0;">No comments yet — be the first to reply.</p>`;
 
+  let kebabActions = [];
+  if (isOwnPost) kebabActions.push({ action: "edit", label: "Edit Post" });
+  if (isAdmin) kebabActions.push({ action: "pin", label: post.pinned ? "Unpin Post" : "Pin Post" });
+  if (isOwnPost) kebabActions.push({ action: "delete", label: "Delete Post", danger: true });
+  else if (isAdmin) kebabActions.push({ action: "delete", label: "Remove Post (Admin)", danger: true });
+
   container.innerHTML = `
     <article class="feed-post">
       <div class="post-head">
         <button type="button" class="avatar avatar-btn" data-author="${post.authorUid}">${avatarInner(author)}</button>
         <div class="post-meta">
           <button type="button" class="post-author-name" data-author="${post.authorUid}">${nameWithBadge(post.authorName, post.authorEmail)}</button>
-          <small>${timeAgo(post.createdAt)}${post.editedAt ? " · edited" : ""}</small>
+          <small>${post.pinned ? "📌 Pinned · " : ""}${timeAgo(post.createdAt)}${post.editedAt ? " · edited" : ""}</small>
         </div>
-        ${isOwnPost ? kebabMenuHtml(postId, [
-          { action: "edit", label: "Edit Post" },
-          { action: "delete", label: "Delete Post", danger: true }
-        ]) : ""}
+        ${kebabActions.length ? kebabMenuHtml(postId, kebabActions) : ""}
       </div>
-      ${clampableHtml(post.text, "post-text")}
+      ${clampableRichHtml(post.text, post.mentions, "post-text")}
       ${postImagesHtml(post.images)}
+      ${pollHtml(post)}
       <div class="post-actions">
-        <button type="button" class="post-action-btn leaf-like-btn ${liked ? "liked" : ""}" aria-pressed="${liked}">
-          <span class="leaf-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="${liked ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2" stroke-linejoin="round">
-              <path d="M20 4c-8 0-16 4-16 13 0 1.5.3 2.6.8 3.4C6 15 11 9 18 6c-6 4-10 10-12.4 13.7.5.2 1 .3 1.4.3C16 20 20 12 20 4z"/>
-            </svg>
-          </span>
-          <span>${liked ? "Liked" : "Like"}</span>
-        </button>
+        <div class="reaction-control">
+          <button type="button" class="post-action-btn reaction-btn" data-id="${postId}">
+            <span class="reaction-icon" aria-hidden="true"></span>
+            <span>Like</span>
+          </button>
+          <div class="reaction-picker hidden">
+            ${REACTION_EMOJIS.map(e => `<button type="button" class="reaction-option" data-emoji="${e}">${e}</button>`).join("")}
+          </div>
+        </div>
         <button type="button" class="post-action-btn comment-jump-btn">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
           <span>Comment</span>
         </button>
-        <button type="button" class="post-like-count ${likeCount ? "" : "hidden"}">
-          <span class="leaf-mini"></span> ${likeCount} ${likeCount === 1 ? "like" : "likes"}
-        </button>
+        <button type="button" class="post-like-count hidden"></button>
       </div>
     </article>
     <div class="comments-block">
       ${commentsHtml}
       <div class="comment-input-row">
         <div class="avatar avatar-sm">${avatarInner(currentProfile || {})}</div>
-        <input type="text" placeholder="Write a comment…" />
+        <input type="text" placeholder="Write a comment… (@mention a classmate)" />
         <button type="button" class="comment-send-btn">
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         </button>
@@ -185,35 +191,44 @@ function renderPostDetail(postId, post, comments, container, { focusComment, onD
 
   // ---------- post-level wiring ----------
   const postEl = container.querySelector(".feed-post");
-  const likeBtn = postEl.querySelector(".leaf-like-btn");
+  const reactionBtn = postEl.querySelector(".reaction-btn");
   const likeCountBtn = postEl.querySelector(".post-like-count");
 
   postEl.querySelectorAll("[data-author]").forEach(b =>
     b.addEventListener("click", () => openUserProfilePage(post.authorUid)));
-  likeBtn.addEventListener("click", () => toggleLike(postId, post, likeBtn, likeCountBtn));
-  likeCountBtn.addEventListener("click", () => openLikesModal(post.likes || []));
+  wireReactionControl(postEl, postId, post);
+  paintReactionButton(reactionBtn, likeCountBtn, post);
+  likeCountBtn.addEventListener("click", () => openReactionsModal(reactionsOfPost(post)));
   postEl.querySelector(".comment-jump-btn").addEventListener("click", () => focusCommentInput(container));
   attachClampToggle(postEl);
+  wireRichTextClicks(postEl);
   applyPostImageRatios(postEl);
   wirePostImageViewer(postEl);
-  wireKebabMenus(postEl, {
-    edit: () => openEditPostModal(postId, post.text, () => {}, post.images || []),
-    delete: () => confirmDialog({
-      title: "Delete this post?",
-      text: "This post and all of its comments will be removed from the Wall. This can't be undone.",
-      confirmLabel: "Delete",
-      onConfirm: () => deletePost(postId, onDeleted)
-    })
-  });
+  wirePoll(postEl, postId, post);
+  if (kebabActions.length) {
+    wireKebabMenus(postEl, {
+      edit: () => openEditPostModal(postId, post.text, () => {}, post.images || [], post.mentions || []),
+      pin: () => togglePinPost(postId, !!post.pinned),
+      delete: () => confirmDialog({
+        title: isOwnPost ? "Delete this post?" : "Remove this post?",
+        text: isOwnPost
+          ? "This post and all of its comments will be removed from the Wall. This can't be undone."
+          : "This will remove the post and its comments from the Wall for everyone. This can't be undone.",
+        confirmLabel: isOwnPost ? "Delete" : "Remove",
+        onConfirm: () => deletePost(postId, onDeleted)
+      })
+    });
+  }
 
   // ---------- comment thread wiring ----------
   const commentsEl = container.querySelector(".comments-block");
   commentsEl.querySelectorAll("[data-author]").forEach(b =>
     b.addEventListener("click", () => openUserProfilePage(b.dataset.author)));
+  wireRichTextClicks(commentsEl);
   wireKebabMenus(commentsEl, {
     edit: (commentId) => {
       const c = comments.find(x => x.id === commentId);
-      openEditCommentModal(postId, commentId, c ? c.text : "");
+      openEditCommentModal(postId, commentId, c ? c.text : "", c ? c.mentions || [] : []);
     },
     delete: (commentId) => confirmDialog({
       title: "Delete this comment?",
@@ -223,13 +238,19 @@ function renderPostDetail(postId, post, comments, container, { focusComment, onD
     })
   });
 
+  const { getMentions } = wireMentions(input);
   const sendBtn = commentsEl.querySelector(".comment-send-btn");
-  sendBtn.addEventListener("click", () => submitComment(postId, commentsEl, sendBtn, post.authorUid));
+  sendBtn.addEventListener("click", () => submitComment(postId, commentsEl, sendBtn, post.authorUid, getMentions));
   input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") submitComment(postId, commentsEl, sendBtn, post.authorUid);
+    if (e.key === "Enter") submitComment(postId, commentsEl, sendBtn, post.authorUid, getMentions);
   });
 
   if (focusComment) focusCommentInput(container);
+}
+
+/** Same legacy-likes fallback as wall.js's internal reactionsOf() — kept local since it's not exported. */
+function reactionsOfPost(post) {
+  return post.reactions || Object.fromEntries((post.likes || []).map((u) => [u, "👍"]));
 }
 
 function commentItemHtml(c, uid) {
@@ -240,7 +261,7 @@ function commentItemHtml(c, uid) {
       <button type="button" class="avatar avatar-sm avatar-btn" data-author="${c.authorUid}">${avatarInner(author)}</button>
       <div class="comment-body">
         <button type="button" class="comment-author" data-author="${c.authorUid}">${nameWithBadge(c.authorName, c.authorEmail)}</button>
-        <p>${escapeHtml(c.text)}</p>
+        <p>${richTextHtml(c.text, c.mentions)}</p>
         <small>${timeAgo(c.createdAt)}${c.editedAt ? " · edited" : ""}</small>
       </div>
       ${isOwnComment ? kebabMenuHtml(c.id, [
@@ -257,11 +278,12 @@ function focusCommentInput(container) {
   input.focus();
 }
 
-async function submitComment(postId, commentsEl, sendBtn, postAuthorUid) {
+async function submitComment(postId, commentsEl, sendBtn, postAuthorUid, getMentions) {
   if (sendBtn.disabled) return; // guards against a double-send race (Enter + tap)
   const input = commentsEl.querySelector(".comment-input-row input");
   const text = input.value.trim();
   if (!text) return;
+  const mentions = getMentions ? getMentions() : [];
 
   // Clear the field immediately, BEFORE the write. addDoc()'s optimistic
   // local write can make the comments onSnapshot fire (and re-render this
@@ -280,6 +302,7 @@ async function submitComment(postId, commentsEl, sendBtn, postAuthorUid) {
       authorName: currentProfile.name,
       authorEmail: auth.currentUser.email,
       text,
+      mentions,
       createdAt: serverTimestamp()
     });
     // Only notify the post's author, and never notify someone that they
@@ -288,6 +311,12 @@ async function submitComment(postId, commentsEl, sendBtn, postAuthorUid) {
       logActivity({ type: "comment", text, targetUid: postAuthorUid, postId });
       triggerPush({ type: "comment", text, actorName: currentProfile.name, targetUid: postAuthorUid, postId });
     }
+    // @mentions in a comment notify those specific classmates too (never the commenter themself).
+    mentions.forEach((m) => {
+      if (!m.uid || m.uid === auth.currentUser.uid) return;
+      logActivity({ type: "mention", text, targetUid: m.uid, postId });
+      triggerPush({ type: "mention", text, actorName: currentProfile.name, targetUid: m.uid, postId });
+    });
   } catch (err) {
     // Put the text back so it isn't lost if the write failed.
     const liveInput = commentsEl.querySelector(".comment-input-row input");
@@ -302,7 +331,7 @@ async function submitComment(postId, commentsEl, sendBtn, postAuthorUid) {
 // ============================================================
 // EDIT OWN COMMENT — reached via the comment's three-dot menu
 // ============================================================
-function openEditCommentModal(postId, commentId, currentText) {
+function openEditCommentModal(postId, commentId, currentText, currentMentions = []) {
   openModal(`
     <div class="composer-modal">
       <div class="composer-modal-head">
@@ -317,13 +346,14 @@ function openEditCommentModal(postId, commentId, currentText) {
       <button type="button" class="btn-primary full raised composer-post-btn" id="comment-edit-save-btn">Save Changes</button>
     </div>
   `);
+  const { getMentions } = wireMentions(document.getElementById("comment-edit-input"), currentMentions);
   document.getElementById("comment-edit-save-btn").addEventListener("click", async (e) => {
     const text = document.getElementById("comment-edit-input").value.trim();
     const errorEl = document.getElementById("comment-edit-error");
     if (!text) { errorEl.textContent = "Comment can't be empty."; return; }
     setBtnLoading(e.currentTarget, true, "Saving…");
     try {
-      await updateDoc(doc(db, "posts", postId, "comments", commentId), { text, editedAt: serverTimestamp() });
+      await updateDoc(doc(db, "posts", postId, "comments", commentId), { text, mentions: getMentions(), editedAt: serverTimestamp() });
       closeModal(); // the live comments listener redraws the thread with the edit
     } catch (err) {
       errorEl.textContent = "Couldn't save changes: " + err.message;

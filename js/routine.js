@@ -127,7 +127,7 @@ function mergedActivity() {
  * through.)
  */
 function visibleToMe(a) {
-  if (a.type === "comment" || a.type === "like") {
+  if (a.type === "comment" || a.type === "like" || a.type === "mention") {
     return a.targetUid === auth.currentUser?.uid;
   }
   // Public activity (post/resource/notice) exists to tell OTHER classmates
@@ -597,6 +597,7 @@ function activityLine(a) {
     case "resource": return `shared a note/sheet${a.text ? `: <strong>${escapeHtml(truncate(a.text, 70))}</strong>` : ""}`;
     case "comment": return `commented on a post${quoted}`;
     case "like": return `liked your post`;
+    case "mention": return `mentioned you${quoted}`;
     case "notice": return `posted a notice${quoted}`;
     default: return escapeHtml(a.text || "did something on GeoHub");
   }
@@ -659,7 +660,8 @@ async function openActivityDestination(a) {
   switch (a.type) {
     case "post":
     case "like":
-    case "comment": {
+    case "comment":
+    case "mention": {
       if (!a.postId) return; // older entries logged before postId existed
       const { openPostDetailPage } = await import("./post-detail.js");
       openPostDetailPage(a.postId, { focusComment: a.type === "comment" });

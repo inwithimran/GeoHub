@@ -10,8 +10,8 @@
 import { auth } from "./firebase-config.js";
 
 /**
- * @param {{type:"post"|"resource"|"notice"|"comment"|"like", text?:string, actorName?:string, urgent?:boolean, targetUid?:string}} payload
- *   targetUid is required for types "comment" and "like" (the post author who should be notified).
+ * @param {{type:"post"|"resource"|"notice"|"comment"|"like"|"mention", text?:string, actorName?:string, urgent?:boolean, targetUid?:string, postId?:string}} payload
+ *   targetUid is required for types "comment", "like" and "mention" (who should be notified).
  */
 export async function triggerPush(payload) {
   try {

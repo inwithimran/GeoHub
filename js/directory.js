@@ -21,6 +21,11 @@ let activeYear = "All";
 let allStudents = [];
 let unsubscribeDirectory = null;
 
+/** The current classmate list (for @mention autocomplete elsewhere — wall.js, post-detail.js). */
+export function getAllStudents() {
+  return allStudents;
+}
+
 export function initDirectory() {
   searchInput.addEventListener("input", renderDirectory);
 
