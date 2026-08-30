@@ -547,8 +547,8 @@ function openProfileDetailsModal(isFirstTime = false) {
         : `You've already changed your name recently — you can change it again in ${nameStatus.daysRemaining} day${nameStatus.daysRemaining === 1 ? "" : "s"}.`}</small>
     </label>
     <label class="field">
-      <span>Class Roll</span>
-      <input type="text" id="pd-roll" placeholder="e.g. 105" value="${escapeHtml(currentProfile.roll || "")}" />
+      <span>Roll / Registration No.</span>
+      <input type="text" id="pd-roll" placeholder="e.g. 2024-GEO-014" value="${escapeHtml(currentProfile.roll || "")}" />
     </label>
     <label class="field">
       <span>Blood Group</span>
@@ -679,6 +679,19 @@ async function saveProfileDetails(isFirstTime, getSelectedPhotoFile) {
       : "Couldn't save your details. Please try again.";
     setBtnLoading(btn, false);
   }
+}
+
+// ============================================================
+// PWA — register the service worker on every visit (not just once
+// push is enabled) so GeoHub is installable and caches its app
+// shell for offline/instant repeat loads. Idempotent: push.js
+// re-registers the same script later to attach FCM, which just
+// reuses this registration.
+// ============================================================
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/firebase-messaging-sw.js").catch(() => {});
+  });
 }
 
 // ============================================================
