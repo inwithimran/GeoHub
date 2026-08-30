@@ -196,7 +196,15 @@ service cloud.firestore {
       // Only the two people IN the conversation may ever read/write it —
       // nobody can browse or tamper with someone else's DMs, even another
       // signed-in classmate.
-      allow read: if isSignedIn() && request.auth.uid in resource.data.participants;
+      // NOTE: ensureConversation() in js/messages.js does a getDoc() on this
+      // path *before* the doc necessarily exists (first message to a new
+      // classmate). On a nonexistent doc, `resource` is null, so evaluating
+      // `resource.data.participants` throws — which Firestore denies as
+      // permission-denied instead of "not found". Checking `resource == null`
+      // first lets that first-contact read through; the client then falls
+      // back to `allow create` to actually make the doc.
+      allow read: if isSignedIn() &&
+        (resource == null || request.auth.uid in resource.data.participants);
       allow create: if isSignedIn() &&
         request.auth.uid in request.resource.data.participants &&
         request.resource.data.participants.size() == 2;

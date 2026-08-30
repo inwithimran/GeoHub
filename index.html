@@ -593,25 +593,33 @@
 
   /* ============================================================
      MESSAGES (js/messages.js) — Class Chat + Direct Messages.
-     The whole page is height-locked to the viewport (topbar height
-     subtracted) instead of using the app's normal window-scroll
-     pattern, so the message list scrolls INSIDE its own box while
-     the composer stays pinned at the very bottom — a real chat
-     layout instead of a long page you scroll past. The negative
-     margins cancel out .content's own padding so this section can
-     claim the full viewport width/height; chat-input-bar's bottom
-     margin then clears the floating pill bottom-nav on mobile
-     (hidden entirely on desktop, so no clearance needed there).
+     The whole page is height-locked to the viewport (topbar height,
+     and on mobile the reserved bottom-nav row too, subtracted)
+     instead of using the app's normal window-scroll pattern, so the
+     message list scrolls INSIDE its own box while the composer stays
+     pinned near the bottom — a real chat layout instead of a long
+     page you scroll past. The negative margins cancel out .content's
+     own padding so this section can claim the full viewport width;
+     chat-input-bar's small bottom margin then clears the floating
+     pill bottom-nav on mobile (hidden entirely on desktop, so no
+     clearance needed there).
   ============================================================= */
   .msg-route, .dm-thread-route {
-    margin:-16px -14px -96px; height:calc(100dvh - 58px);
+    /* Mobile subtracts BOTH the topbar (58px) and the reserved bottom-nav
+       grid row (68px, see .app-shell's grid-template-rows) — missing the
+       second one used to make this box taller than the space the grid
+       track actually had, which forced the whole page (not just this
+       panel) to grow and scroll by the difference. */
+    margin:-16px -14px -96px; height:calc(100dvh - 58px - 68px);
     display:flex; flex-direction:column; min-width:0; gap:0 !important;
   }
   @media (min-width:900px) {
+    /* Desktop's grid has no third row (bottom-nav is hidden entirely), so
+       subtracting just the topbar here is already correct. */
     .msg-route, .dm-thread-route { margin:-26px -28px -40px; height:calc(100dvh - 64px); }
   }
 
-  .msg-subtabs { @apply flex shrink-0 gap-1.5; padding:12px 14px 8px; background: var(--color-paper); }
+  .msg-subtabs { @apply flex shrink-0 gap-1.5; padding:12px 14px 10px; background: var(--color-paper); border-bottom:1px solid var(--color-line); }
   @media (min-width:900px) { .msg-subtabs { padding:0 0 14px; } }
   .msg-subtab-btn {
     @apply relative flex-1 flex items-center justify-center gap-1.5 text-sm font-extrabold rounded-full transition-colors;
@@ -627,18 +635,24 @@
   .msg-subtab-panel.active { @apply flex; }
 
   .chat-header {
-    @apply flex items-center justify-between shrink-0; padding:2px 14px 10px;
+    @apply flex items-center justify-between shrink-0; padding:10px 14px; background: var(--color-paper); border-bottom:1px solid var(--color-line);
   }
-  @media (min-width:900px) { .chat-header { padding:0 0 12px; } }
+  @media (min-width:900px) { .chat-header { padding:0 0 12px; background:transparent; border-bottom:none; } }
   .chat-header strong { @apply block text-[.95rem]; }
   .chat-header-sub { @apply block text-[.72rem] font-semibold; color: var(--color-ink-faint); }
   .chat-header-sub.online-now { color: var(--color-forest-600); }
 
   .chat-scroll {
     @apply flex-1 min-h-0 flex flex-col gap-2.5; overflow-y:auto; -webkit-overflow-scrolling:touch;
-    padding:2px 14px 14px;
+    padding:14px 14px 14px;
+    /* Faint "field survey" dot-grid wallpaper instead of a flat panel —
+       same paper/forest palette as the rest of the app, just enough
+       texture that the message list doesn't read as a bare list view. */
+    background-image: radial-gradient(circle, color-mix(in srgb, var(--color-forest-600) 16%, transparent) 1px, transparent 1px);
+    background-size: 20px 20px;
+    background-color: var(--color-paper);
   }
-  @media (min-width:900px) { .chat-scroll { padding:0 2px 14px; } }
+  @media (min-width:900px) { .chat-scroll { padding:14px 2px 14px; } }
 
   /* ---- chat bubbles (Class Chat + DM thread share this) ---- */
   .chat-bubble-row { @apply flex items-end gap-2 max-w-[86%]; }
@@ -650,28 +664,35 @@
   .chat-bubble {
     @apply relative text-[.87rem] leading-snug rounded-[18px] break-words; padding:9px 13px;
     background: var(--color-surface); color: var(--color-ink); border:1px solid var(--color-line); border-bottom-left-radius:5px;
+    box-shadow: var(--shadow-card);
   }
   .chat-bubble-row.mine .chat-bubble {
     @apply text-white; background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800));
     border-color:transparent; border-bottom-left-radius:18px; border-bottom-right-radius:5px;
+    box-shadow: 0 4px 14px rgba(26,76,48,.24);
   }
   .chat-bubble-meta { @apply flex items-center gap-1.5 px-1 text-[.65rem] font-semibold; color: var(--color-ink-faint); }
   .chat-bubble-row.mine .chat-bubble-meta { @apply flex-row-reverse; }
   .chat-bubble-row .kebab-menu { align-self:center; }
   .chat-bubble-row .kebab-btn { width:24px; height:24px; }
-  .chat-day-divider { @apply self-center text-[.68rem] font-extrabold uppercase tracking-wide rounded-full; padding:4px 12px; color: var(--color-ink-faint); background: var(--color-paper-deep); margin:6px 0; }
-  .chat-empty { @apply flex-1 flex items-center justify-center text-center; color: var(--color-ink-faint); font-size:.88rem; padding:30px; }
+  .chat-day-divider { @apply self-center text-[.68rem] font-extrabold uppercase tracking-wide rounded-full; padding:4px 12px; color: var(--color-ink-faint); background: var(--color-surface); box-shadow: var(--shadow-card); margin:6px 0; }
+  .chat-empty { @apply flex-1 flex flex-col items-center justify-center text-center gap-2.5; color: var(--color-ink-faint); font-size:.88rem; padding:30px; }
+  .chat-empty::before {
+    content:""; display:block; width:52px; height:52px; border-radius:50%;
+    background: var(--color-forest-100) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23226241' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'/%3E%3C/svg%3E") no-repeat center/22px;
+  }
 
   /* ---- fixed-feeling composer at the very bottom of the panel ---- */
   .chat-input-bar {
-    @apply flex items-center gap-2 shrink-0; padding:10px 14px; margin-bottom:88px;
-    background: var(--color-surface); border-top:1px solid var(--color-line);
+    @apply flex items-center gap-2 shrink-0; padding:10px 12px; margin:8px 12px 14px;
+    background: var(--color-surface); border-radius:26px; box-shadow: var(--shadow-card); border:1px solid var(--color-line);
   }
-  @media (min-width:900px) { .chat-input-bar { margin-bottom:0; padding:12px 2px 4px; } }
+  @media (min-width:900px) { .chat-input-bar { margin:8px 2px 0; padding:10px 8px; } }
   .chat-input-bar input {
-    @apply flex-1 border-[1.5px] rounded-full text-sm; border-color: var(--color-line); background: var(--color-paper-deep); padding:11px 16px;
+    @apply flex-1 border-none rounded-full text-sm; background: transparent; padding:8px 10px;
   }
-  .chat-input-bar input:focus { outline:none; border-color: var(--color-forest-600); background:#fff; }
+  .chat-input-bar input:focus { outline:none; }
+  .chat-input-bar:focus-within { border-color: var(--color-forest-600); box-shadow: var(--shadow-cardhover); }
   .chat-send-btn {
     @apply flex items-center justify-center shrink-0 rounded-full text-white transition-transform; width:42px; height:42px;
     background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800)); box-shadow: var(--shadow-btn);
@@ -680,10 +701,16 @@
   .chat-send-btn:not(:disabled):active { transform:scale(.92); }
 
   /* ---- Direct Messages: conversation list ---- */
-  .dm-list-wrap { @apply flex-1 min-h-0 flex flex-col gap-3; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:12px 14px 24px; }
-  @media (min-width:900px) { .dm-list-wrap { padding:0 0 24px; } }
+  .dm-list-wrap { @apply flex-1 min-h-0 flex flex-col gap-2.5; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:12px 14px 24px; }
+  @media (min-width:900px) { .dm-list-wrap { padding:12px 0 24px; } }
+  .dm-list-wrap .empty-state { @apply flex-1 flex flex-col items-center justify-center gap-3; box-shadow:none; background:transparent; padding:40px 20px; }
+  .dm-list-wrap .empty-state::before {
+    content:""; display:block; width:56px; height:56px; border-radius:50%;
+    background: var(--color-forest-100) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23226241' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='7' r='4'/%3E%3Cpath d='M2 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2'/%3E%3Cpath d='M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75'/%3E%3C/svg%3E") no-repeat center/24px;
+  }
   .dm-conv-row { @apply w-full flex items-center gap-3 text-left rounded-2xl bg-surface transition-transform; padding:11px 12px; box-shadow: var(--shadow-card); border:1px solid var(--color-line); }
   .dm-conv-row:active { transform:scale(.985); }
+  .dm-conv-row .avatar { box-shadow:0 0 0 2.5px var(--color-surface), 0 0 0 4px var(--color-forest-200); }
   .dm-conv-info { @apply flex-1 min-w-0; }
   .dm-conv-info strong { @apply block text-[.9rem]; }
   .dm-conv-preview { @apply flex items-center gap-1 text-[.78rem] font-medium whitespace-nowrap overflow-hidden text-ellipsis; color: var(--color-ink-faint); max-width:100%; }
@@ -694,10 +721,17 @@
     @apply flex items-center justify-center text-white font-extrabold rounded-full; min-width:19px; height:19px; font-size:.65rem; padding:0 5px;
     background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800));
   }
+  /* A conversation with unread messages gets a soft tinted card + left
+     accent bar instead of blending in with already-read rows — the list
+     used to give unread rows no visual weight beyond the small dot. */
+  .dm-conv-row:has(.dm-unread-dot) {
+    background: var(--color-forest-50); border-color: var(--color-forest-200);
+    box-shadow: var(--shadow-card), inset 3px 0 0 var(--color-forest-600);
+  }
 
   /* ---- Direct Messages: thread header (avatar + name + presence, on the drill-down page) ---- */
-  .dm-thread-header { @apply flex items-center gap-2.5 shrink-0; padding:2px 14px 10px; }
-  @media (min-width:900px) { .dm-thread-header { padding:0 0 12px; } }
+  .dm-thread-header { @apply flex items-center gap-2.5 shrink-0; padding:2px 14px 12px; background: var(--color-paper); border-bottom:1px solid var(--color-line); }
+  @media (min-width:900px) { .dm-thread-header { padding:0 0 12px; background:transparent; border-bottom:none; } }
   .dm-thread-header .avatar { width:36px; height:36px; }
   .dm-thread-header-name { @apply text-[.95rem] font-extrabold; }
 
