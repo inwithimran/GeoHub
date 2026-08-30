@@ -3,7 +3,7 @@
 // used by wall.js / resources.js / directory.js / routine.js
 // ============================================================
 import { ADMIN_EMAILS, ADMIN_NAME, db } from "./firebase-config.js";
-import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import { doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const toastEl = document.getElementById("toast");
 let toastTimer = null;
@@ -399,7 +399,7 @@ export function wireCharCounter(field, limit) {
 // ============================================================
 const userCache = new Map();
 const profileListeners = new Set();
-const pendingProfileFetches = new Set();
+const subscribedProfiles = new Set();
 
 export function cacheUserProfile(uid, profile) {
   if (!uid || !profile) return;
@@ -417,14 +417,21 @@ export function subscribeToProfileUpdates(callback) {
   return () => profileListeners.delete(callback);
 }
 
-/** If `uid` isn't cached yet, fetch it once directly (covers authors outside the Directory's loaded page). Safe to call repeatedly. */
+/**
+ * If `uid` isn't cached yet, start following it directly (covers a
+ * classmate outside the Directory's loaded page — e.g. a DM thread with
+ * someone beyond the first 60 students). This is a LIVE listener, not a
+ * one-off fetch: a one-off used to leave that student's name/avatar AND
+ * online status frozen forever at whatever they were the moment the
+ * thread opened, which is why presence could look badly stale (or never
+ * update at all) outside the Directory. Safe to call repeatedly — once
+ * subscribed for a uid, it stays live for the rest of the session. */
 export function ensureProfileLoaded(uid) {
-  if (!uid || userCache.has(uid) || pendingProfileFetches.has(uid)) return;
-  pendingProfileFetches.add(uid);
-  getDoc(doc(db, "users", uid))
-    .then(snap => { if (snap.exists()) cacheUserProfile(uid, snap.data()); })
-    .catch(() => { /* best-effort — avatar just falls back to the generic icon */ })
-    .finally(() => pendingProfileFetches.delete(uid));
+  if (!uid || subscribedProfiles.has(uid)) return;
+  subscribedProfiles.add(uid);
+  onSnapshot(doc(db, "users", uid), (snap) => {
+    if (snap.exists()) cacheUserProfile(uid, snap.data());
+  }, () => { /* best-effort — avatar/presence just falls back to the generic state */ });
 }
 
 /** Long posts / notices collapse behind a "See more" toggle instead of stretching the feed. */

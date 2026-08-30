@@ -7,7 +7,7 @@
 import { auth, db } from "./firebase-config.js";
 import { collection, onSnapshot, query, limit } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { escapeHtml, showToast, setBtnLoading, cacheUserProfile, avatarInner, nameWithBadge, friendlyError } from "./ui-utils.js";
-import { presenceDotHtml } from "./presence.js";
+import { avatarPresenceDotHtml } from "./presence.js";
 import { openUserProfilePage } from "./profile-view.js";
 import { openDmThread } from "./messages.js";
 
@@ -105,9 +105,12 @@ function renderDirectory() {
 
   directoryList.innerHTML = `<div class="flat-list">` + filtered.map(s => `
     <div class="directory-row" data-uid="${escapeHtml(s.uid || "")}">
-      <div class="avatar">${avatarInner(s)}</div>
+      <span class="avatar-presence-wrap">
+        <div class="avatar">${avatarInner(s)}</div>
+        ${avatarPresenceDotHtml(s.uid)}
+      </span>
       <div class="directory-info">
-        <strong>${nameWithBadge(s.name || "Unnamed", s.email)}${presenceDotHtml(s.uid)}</strong>
+        <strong>${nameWithBadge(s.name || "Unnamed", s.email)}</strong>
         <div class="directory-sub">
           <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M4 17V7l8-4 8 4v10l-8 4-8-4z"/></svg>
           ${escapeHtml(s.roll || "—")}${s.year ? " · " + escapeHtml(s.year) : (s.session ? " · " + escapeHtml(s.session) : "")}

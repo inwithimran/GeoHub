@@ -29,15 +29,15 @@ import { db, auth } from "./firebase-config.js";
 import { doc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { getCachedProfile, subscribeToProfileUpdates, timeAgo } from "./ui-utils.js";
 
-const HEARTBEAT_INTERVAL_MS = 45_000;
+const HEARTBEAT_INTERVAL_MS = 20_000;
 // A little over 2x the heartbeat, so one slightly-late beat (a flaky
 // connection, a throttled tab) never makes someone flicker offline.
-const ONLINE_WINDOW_MS = 100_000;
+const ONLINE_WINDOW_MS = 45_000;
 // Repaint every dot/label on screen periodically even without any new
 // Firestore data landing — this is what actually flips someone from
 // "Online" to "Active Xm ago" once their heartbeat goes stale, since
 // nothing else would otherwise re-trigger that check.
-const REPAINT_TICK_MS = 20_000;
+const REPAINT_TICK_MS = 10_000;
 
 let heartbeatTimer = null;
 
@@ -114,6 +114,20 @@ export function presenceDotHtml(uid) {
 export function presenceTextHtml(uid, className = "presence-text") {
   if (!uid) return "";
   return `<span class="${className}" data-presence-text-uid="${uid}"></span>`;
+}
+
+/**
+ * A small badge meant to sit on the corner of an avatar (Messenger/WhatsApp
+ * style) rather than floating after a name — wrap the avatar in
+ * `.avatar-presence-wrap` and drop this right after it. Reuses the same
+ * `data-presence-uid` hook as presenceDotHtml(), so paintPresenceUI() above
+ * keeps it in sync automatically; only the CSS differs (see
+ * .avatar-presence-badge). Used across Directory/Messages — deliberately
+ * NOT used on Profile pages, which keep their existing presence display.
+ */
+export function avatarPresenceDotHtml(uid) {
+  if (!uid) return "";
+  return `<span class="avatar-presence-badge" data-presence-uid="${uid}" aria-hidden="true"></span>`;
 }
 
 /**

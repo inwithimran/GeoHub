@@ -33,7 +33,7 @@ import {
 } from "./ui-utils.js";
 import { authorProfile } from "./wall.js";
 import { getAllStudents } from "./directory.js";
-import { isUserOnline, presenceDotHtml, presenceTextHtml, paintPresenceUI } from "./presence.js";
+import { isUserOnline, avatarPresenceDotHtml, presenceTextHtml, paintPresenceUI } from "./presence.js";
 
 // ---------- Shared element refs ----------
 const subtabBtns = document.querySelectorAll(".msg-subtab-btn");
@@ -71,6 +71,19 @@ function dmConversationId(uidA, uidB) {
 // SUB-TABS — Class Chat / Direct Messages. A plain show/hide toggle,
 // same tab pattern as a classmate's Profile page (profile-view.js).
 // ============================================================
+/** Whether the Class Chat sub-tab (full live room + composer) is the one currently showing — used to also hide the bottom nav for it, same as a DM thread. */
+export function isClassChatSubtabActive() {
+  return document.querySelector(".msg-subtab-btn.active")?.dataset.msgtab === "class";
+}
+
+function syncMessageChatMode() {
+  // Only the Messages route ever has this section visible, so it's safe
+  // to flip chat-mode straight from a sub-tab click — see app.js's own
+  // route-level toggle (which handles every other route, and re-syncs
+  // this whenever the Messages route is (re)entered from elsewhere).
+  document.getElementById("app-shell")?.classList.toggle("chat-mode", isClassChatSubtabActive());
+}
+
 function wireSubtabs() {
   subtabBtns.forEach(btn => {
     btn.addEventListener("click", () => {
@@ -80,6 +93,7 @@ function wireSubtabs() {
         b.setAttribute("aria-selected", String(active));
       });
       subtabPanels.forEach(p => p.classList.toggle("active", p.dataset.msgtabPanel === btn.dataset.msgtab));
+      syncMessageChatMode();
     });
   });
 }
@@ -252,9 +266,12 @@ function renderConversationList() {
       : "Say hello 👋";
     return `
       <button type="button" class="dm-conv-row" data-uid="${escapeHtml(uid)}">
-        <span class="avatar" data-author="${escapeHtml(uid)}">${avatarInner(profile)}</span>
+        <span class="avatar-presence-wrap">
+          <span class="avatar" data-author="${escapeHtml(uid)}">${avatarInner(profile)}</span>
+          ${avatarPresenceDotHtml(uid)}
+        </span>
         <div class="dm-conv-info">
-          <strong>${nameWithBadge(profile.name || "Classmate", profile.email)}${presenceDotHtml(uid)}</strong>
+          <strong>${nameWithBadge(profile.name || "Classmate", profile.email)}</strong>
           <div class="dm-conv-preview ${unread > 0 ? "unread" : ""}">${escapeHtml(previewText)}</div>
         </div>
         <div class="dm-conv-meta">
@@ -342,7 +359,10 @@ function renderDmThreadHeader(uid) {
   const topbarTitle = document.getElementById("topbar-title");
   if (topbarTitle) topbarTitle.textContent = profile.name || "Direct Message";
   dmThreadHeaderEl.innerHTML = `
-    <span class="avatar" data-author="${escapeHtml(uid)}">${avatarInner(profile)}</span>
+    <span class="avatar-presence-wrap">
+      <span class="avatar" data-author="${escapeHtml(uid)}">${avatarInner(profile)}</span>
+      ${avatarPresenceDotHtml(uid)}
+    </span>
     <div>
       <span class="dm-thread-header-name">${nameWithBadge(profile.name || "Classmate", profile.email)}</span>
       ${presenceTextHtml(uid, "dm-thread-presence-chip")}

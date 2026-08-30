@@ -17,7 +17,7 @@ import { initResources, teardownResources, loadUserResources } from "./resources
 import { initDirectory, teardownDirectory } from "./directory.js";
 import { initRoutine, teardownRoutine, registerNotificationsRouter } from "./routine.js";
 import { initPresence, teardownPresence } from "./presence.js";
-import { initMessages, teardownMessages, registerDmThreadRouter, openDmThread, getOpenDmUid, teardownDmThread } from "./messages.js";
+import { initMessages, teardownMessages, registerDmThreadRouter, openDmThread, getOpenDmUid, teardownDmThread, isClassChatSubtabActive } from "./messages.js";
 import { openUserProfilePage, loadUserPosts, registerProfilePageRouter, getOpenProfileUid, teardownProfilePage } from "./profile-view.js";
 import { openPostDetailPage, registerPostDetailRouter, teardownPostDetail, getOpenPostId } from "./post-detail.js";
 import {
@@ -316,11 +316,16 @@ function goToRoute(route, { fromPopstate = false, replace = false, state = {} } 
   });
   // An open DM thread has its own composer AND its own Back button, so
   // hiding the floating pill bottom-nav there loses nothing (unlike the
-  // main Messages tab, which IS a bottom-nav destination and needs the
+  // Direct Messages LIST, which IS a bottom-nav destination and needs the
   // nav to navigate away) — it just gives the composer the full width of
-  // the screen to breathe instead of squeezing in above the nav. See
-  // .app-shell.chat-mode in the CSS.
-  document.getElementById("app-shell")?.classList.toggle("chat-mode", route === "dm-thread");
+  // the screen to breathe instead of squeezing in above the nav. Class
+  // Chat is the same kind of full live-room + composer surface as a DM
+  // thread (just reached via a sub-tab instead of a drill-down page), so
+  // it hides the nav too whenever that sub-tab is the one showing — see
+  // .app-shell.chat-mode in the CSS, and messages.js's own
+  // syncMessageChatMode() for the same toggle on a sub-tab click without
+  // a full route change.
+  document.getElementById("app-shell")?.classList.toggle("chat-mode", route === "dm-thread" || (route === "message" && isClassChatSubtabActive()));
   document.getElementById("topbar-title").textContent = routeTitles[route] || "GeoHub";
   document.getElementById("topbar-subtitle").textContent = route === "user-profile" ? "Classmate Profile" : route === "dm-thread" ? "Direct Message" : route === "settings" ? "App preferences & account" : "Geography & Environment";
 
