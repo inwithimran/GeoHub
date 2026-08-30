@@ -18,7 +18,7 @@ import {
   ensureProfileLoaded, subscribeToProfileUpdates, friendlyError
 } from "./ui-utils.js";
 import { openUserProfilePage } from "./profile-view.js";
-import { presenceDotHtml } from "./presence.js";
+import { avatarPresenceDotHtml } from "./presence.js";
 import { uploadImages } from "./cloudinary.js";
 import { logActivity, deleteActivityForPost } from "./routine.js";
 import { triggerPush } from "./push-trigger.js";
@@ -517,9 +517,12 @@ export function renderPost(postId, post, listEl, { onChanged } = {}) {
 
   el.innerHTML = `
     <div class="post-head">
-      <button type="button" class="avatar avatar-btn" data-author="${post.authorUid}" aria-label="View ${escapeHtml(author.name || post.authorName || "classmate")}’s profile">${avatarInner(author)}</button>
+      <span class="avatar-presence-wrap">
+        <button type="button" class="avatar avatar-btn" data-author="${post.authorUid}" aria-label="View ${escapeHtml(author.name || post.authorName || "classmate")}’s profile">${avatarInner(author)}</button>
+        ${avatarPresenceDotHtml(post.authorUid)}
+      </span>
       <div class="post-meta">
-        <button type="button" class="post-author-name" data-author="${post.authorUid}">${nameWithBadge(post.authorName, post.authorEmail)}${presenceDotHtml(post.authorUid)}</button>
+        <button type="button" class="post-author-name" data-author="${post.authorUid}">${nameWithBadge(post.authorName, post.authorEmail)}</button>
         <small>${post.pinned ? "📌 Pinned · " : ""}${timeAgo(post.createdAt)}${post.editedAt ? " · edited" : ""}</small>
       </div>
       ${kebabMenuHtml(postId, kebabActions)}

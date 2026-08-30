@@ -39,9 +39,10 @@ const HEARTBEAT_INTERVAL_MS = 25_000;
 // single delayed or dropped beat (a slow network round-trip, a
 // throttled background tab, a Firestore write that lands a few
 // seconds late) should never be enough to flip someone's dot off and
-// back on again. That flicker is worse for trust than being a little
-// slow to update.
-const ONLINE_WINDOW_MS = 70_000;
+// back on again. Matches Facebook-style presence: once a dot goes
+// green it stays a solid, stable green for up to ~4 minutes of no
+// fresh heartbeat, instead of flickering on/off on every missed beat.
+const ONLINE_WINDOW_MS = 240_000;
 // Repaint every dot/label on screen periodically even without any new
 // Firestore data landing — this is what actually flips someone from
 // "Online" to "Active Xm ago" once their heartbeat goes stale, since
@@ -50,7 +51,7 @@ const REPAINT_TICK_MS = 12_000;
 // How long to keep heartbeating after the tab is backgrounded before
 // actually pausing — absorbs brief app-switches/notification-checks
 // without a visible status flicker for anyone watching.
-const BACKGROUND_GRACE_MS = 30_000;
+const BACKGROUND_GRACE_MS = 45_000;
 
 let heartbeatTimer = null;
 let backgroundGraceTimer = null;
