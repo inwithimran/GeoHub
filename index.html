@@ -670,8 +670,8 @@
      presence at a glance. Wrap the avatar in .avatar-presence-wrap (plain
      inline-flex, no clipping) so the badge isn't cut off by the avatar's
      own overflow:hidden circle, then drop the badge right after it.
-     Deliberately NOT used on Profile pages — those keep .profile-flow-presence
-     unchanged, per how it already looks. */
+     Deliberately NOT used on Profile pages — those show status as one of
+     the .profile-meta-chip pills next to the name instead. */
   .avatar-presence-wrap { @apply relative inline-flex shrink-0 align-top; }
   .avatar-presence-badge {
     @apply absolute rounded-full pointer-events-none; right:-1px; bottom:-1px; width:13px; height:13px;
@@ -683,12 +683,6 @@
     box-shadow:0 0 0 2px color-mix(in srgb, var(--color-forest-500) 22%, transparent);
   }
   .avatar-presence-wrap:has(.avatar-sm) .avatar-presence-badge { width:11px; height:11px; border-width:2px; }
-  .profile-flow-presence { @apply block; margin-top:3px; }
-  .profile-flow-presence.online-now { color: var(--color-forest-600); }
-  .profile-flow-presence.online-now::before {
-    content:""; display:inline-block; width:7px; height:7px; border-radius:50%;
-    background: var(--color-forest-500); margin-right:5px; vertical-align:middle;
-  }
   .section-heading { @apply text-xs font-extrabold uppercase tracking-wider pl-0.5; color: var(--color-ink-faint); margin:4px 0 -4px; }
 
   /* ============================================================
@@ -1479,9 +1473,41 @@
     border:2.5px solid var(--color-paper); box-shadow:0 4px 10px rgba(0,0,0,.25);
   }
   .profile-flow-head h3 { @apply text-xl font-extrabold; }
-  .profile-role { @apply text-[.78rem] font-bold uppercase tracking-wide mt-1 mb-0.5; color: var(--color-ink-faint); }
-  .profile-admin-note { @apply inline-flex items-center gap-1.5 mt-2 text-[.72rem] font-bold rounded-full; background: var(--color-clay-100); color: var(--color-clay-600); padding:5px 12px; }
-  .profile-own-bio { @apply text-[.9rem] mx-auto leading-relaxed text-center; color: var(--color-ink-soft); max-width:340px; margin-top:14px; }
+
+  /* ---------- Profile meta row — status / session / admin as one line of
+     compact pills under the name, instead of four separate stacked rows.
+     Wraps gracefully on narrow screens; an empty presence pill (own
+     profile, or before presence has resolved) collapses away entirely. ---------- */
+  .profile-meta-row { @apply relative z-[1] flex flex-wrap items-center justify-center gap-1.5; margin-top:9px; }
+  .profile-meta-chip {
+    @apply inline-flex items-center gap-1.5 text-[.72rem] font-bold rounded-full leading-none whitespace-nowrap;
+    padding:6px 12px; background: var(--color-paper-deep); color: var(--color-ink-soft); border:1px solid var(--color-line);
+  }
+  .profile-meta-chip .presence-text { @apply text-[.72rem] font-bold; color:inherit; }
+  .profile-meta-chip:has(.presence-text:empty) { display:none; }
+  .profile-meta-chip.chip-session { @apply font-mono; letter-spacing:.2px; }
+  .profile-meta-chip.chip-admin {
+    background: linear-gradient(135deg, var(--color-gold-100), var(--color-gold-50));
+    color: var(--color-gold-600); border-color: var(--color-gold-100);
+  }
+  .profile-meta-chip.chip-admin svg { width:11px; height:11px; flex-shrink:0; }
+  .profile-meta-chip .presence-text::before {
+    content:""; @apply inline-block rounded-full shrink-0; width:6px; height:6px; margin-right:5px; background: var(--color-ink-faint);
+  }
+  .profile-meta-chip .presence-text.online-now {
+    color: var(--color-forest-600);
+  }
+  .profile-meta-chip .presence-text.online-now::before {
+    background: var(--color-forest-500); box-shadow:0 0 0 2px color-mix(in srgb, var(--color-forest-500) 22%, transparent);
+  }
+
+  /* Bio — a quiet quoted card rather than a bare centered line, so it
+     reads as a distinct "about" note instead of one more stacked fact. */
+  .profile-own-bio {
+    @apply relative mx-auto text-[.87rem] leading-relaxed text-center rounded-2xl;
+    color: var(--color-ink-soft); max-width:360px; margin-top:16px; padding:10px 18px;
+    background: var(--color-paper-deep); border:1px solid var(--color-line); font-style:italic;
+  }
 
   .profile-stat-row { @apply relative z-[1] flex items-stretch justify-center gap-2 mt-4.5 mb-1; }
   .profile-stat-chip {
