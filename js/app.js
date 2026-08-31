@@ -24,10 +24,10 @@ import { openUserProfilePage, loadUserPosts, registerProfilePageRouter, getOpenP
 import { openPostDetailPage, registerPostDetailRouter, teardownPostDetail, getOpenPostId } from "./post-detail.js";
 import {
   escapeHtml, openModal, closeModal, showToast, setBtnLoading, fullDate,
-  avatarInner, nameWithBadge, isAdminEmail, adminBadgeHtml
+  avatarInner, nameWithBadge, isAdminEmail, adminBadgeHtml, friendlyError
 } from "./ui-utils.js";
 import { uploadImage } from "./cloudinary.js";
-import { isAcceptableImageFile } from "./media-picker.js";
+import { isAcceptableImageFile, openImageViewer } from "./media-picker.js";
 import { openImageCropper } from "./image-cropper.js";
 import { initPush, unregisterPushToken } from "./push.js";
 import { getThemePreference, setThemePreference, initTheme } from "./theme.js";
@@ -679,8 +679,8 @@ function renderProfile() {
       <div class="profile-flow-head">
         <div class="profile-flow-avatar-wrap">
           <span class="avatar avatar-lg profile-flow-avatar">${avatarInner(p)}</span>
-          <button type="button" id="profile-edit-fab" class="profile-edit-fab" aria-label="Edit profile">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          <button type="button" id="profile-photo-badge" class="profile-photo-badge" aria-label="Profile photo options">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.5-2.5h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.4"/></svg>
           </button>
         </div>
         <h3>${nameWithBadge(p.name, p.email)}</h3>
@@ -690,11 +690,21 @@ function renderProfile() {
           ${admin ? `<span class="profile-meta-chip chip-admin" title="Admin · can post notices to the whole department">${adminBadgeHtml()} Admin</span>` : ""}
         </div>
       </div>
-      ${p.bio ? `<p class="pv-bio profile-own-bio">${escapeHtml(p.bio)}</p>` : ""}
+      ${p.bio ? `<p class="profile-own-bio">${escapeHtml(p.bio)}</p>` : ""}
       <div class="profile-stat-row">
         <div class="profile-stat-chip"><strong>${escapeHtml(p.roll || "—")}</strong><span>Roll No.</span></div>
         <div class="profile-stat-chip"><strong>${escapeHtml(p.bloodGroup || "—")}</strong><span>Blood Grp</span></div>
         <div class="profile-stat-chip"><strong>${escapeHtml(p.year || p.session || "—")}</strong><span>Year</span></div>
+      </div>
+
+      <!-- Same slot a classmate's Message button sits in — on your own
+           profile it's Edit Profile instead, so the row lines up the
+           same way on every profile page. -->
+      <div class="profile-action-row">
+        <button type="button" id="profile-edit-btn" class="profile-action-primary">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          Edit Profile
+        </button>
       </div>
 
       <div class="profile-tabs" role="tablist">
@@ -718,11 +728,13 @@ function renderProfile() {
       </div>
     </div>
   `;
-  // The pencil FAB on the avatar is the one and only "edit profile" entry
-  // point on this page now (the Settings page also links here) — there
-  // used to be a second, redundant "Edit Profile & Privacy" button at the
-  // bottom of the Info tab.
-  document.getElementById("profile-edit-fab").addEventListener("click", () => openProfileDetailsModal(false));
+  // The camera badge on the avatar opens a small "View Photo / Change
+  // Photo" action sheet instead of jumping straight to the edit form —
+  // Edit Profile now lives in the action row below (the same slot a
+  // classmate's Message button sits in), so it's no longer only reachable
+  // by tapping the photo. The Settings page also links to the same form.
+  document.getElementById("profile-photo-badge").addEventListener("click", () => openAvatarActionSheet(p));
+  document.getElementById("profile-edit-btn").addEventListener("click", () => openProfileDetailsModal(false));
 
   const profileCardEl = document.getElementById("profile-card");
   const tabBtns = profileCardEl.querySelectorAll(".profile-tab-btn");
@@ -843,6 +855,75 @@ function renderSettingsPage() {
       showToast("This device won't receive push notifications anymore.");
     }
   };
+}
+
+// ============================================================
+// AVATAR ACTION SHEET — tapping the camera badge on your own profile
+// photo opens this instead of jumping straight into the (editable)
+// Edit Profile form. "View Photo" reuses the same full-screen
+// tap-to-enlarge viewer as post photos; "Change Photo" goes straight
+// to picking + cropping a new one and saves just that field, without
+// having to open and resubmit the whole details form.
+// ============================================================
+function openAvatarActionSheet(p) {
+  const hasPhoto = !!p.photoURL;
+  openModal(`
+    <h3>Profile Photo</h3>
+    <div class="avatar-sheet">
+      ${hasPhoto ? `
+      <button type="button" class="avatar-sheet-item" id="avatar-view-photo-btn">
+        <span class="avatar-sheet-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg></span>
+        <span>View Photo</span>
+      </button>` : ""}
+      <button type="button" class="avatar-sheet-item" id="avatar-change-photo-btn">
+        <span class="avatar-sheet-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.5-2.5h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.4"/></svg></span>
+        <span>Change Photo</span>
+      </button>
+    </div>
+  `);
+  if (hasPhoto) {
+    document.getElementById("avatar-view-photo-btn").addEventListener("click", () => {
+      closeModal();
+      openImageViewer(p.photoURL);
+    });
+  }
+  document.getElementById("avatar-change-photo-btn").addEventListener("click", () => {
+    closeModal();
+    changeProfilePhotoQuick();
+  });
+}
+
+/** "Change Photo" from the avatar action sheet — pick, crop, upload, and
+ *  save just the photo (reusing the same crop/upload pipeline as the full
+ *  Edit Profile form) rather than reopening that whole form. */
+function changeProfilePhotoQuick() {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/*";
+  input.addEventListener("change", async () => {
+    const file = input.files?.[0];
+    if (!file || !isAcceptableImageFile(file)) return;
+    const cropped = await openImageCropper(file);
+    if (!cropped) return; // cancelled
+    const photoFile = new File([cropped], "avatar.jpg", { type: "image/jpeg" });
+    try {
+      const photoURL = await uploadImage(photoFile, { maxDim: 600, quality: 0.85, folder: "geohub/avatars" });
+      await updateProfileDetails({
+        name: currentProfile.name,
+        roll: currentProfile.roll,
+        blood: currentProfile.bloodGroup,
+        phone: currentProfile.phone || "",
+        gender: currentProfile.gender,
+        photoURL
+      });
+      showToast("Profile photo updated.");
+      if (!document.getElementById("section-profile").classList.contains("hidden")) renderProfile();
+    } catch (err) {
+      const { message, technical } = friendlyError(err, "Couldn't update your photo.");
+      showToast(message, { details: technical });
+    }
+  });
+  input.click();
 }
 
 // ============================================================

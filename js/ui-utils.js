@@ -700,7 +700,12 @@ export function wireKebabMenus(root, handlers) {
     // inside it, so the *next* card (painted after it in normal doc order)
     // can still cover the open dropdown. Elevating the whole card above its
     // siblings while its own menu is open fixes that for every card type.
-    const stackHost = menu.closest(".notice-row, .feed-post, .resource-row, .comment-item, .directory-row") || menu;
+    // .dm-thread-header-row is the same situation: its `backdrop-filter`
+    // creates its own stacking context, which traps this menu's dropdown
+    // inside it — so #dm-thread-list's message bubbles (a later sibling,
+    // painted after the header in normal doc order) end up covering the
+    // open "Block this classmate" dropdown as soon as they scroll under it.
+    const stackHost = menu.closest(".notice-row, .feed-post, .resource-row, .comment-item, .directory-row, .dm-thread-header-row") || menu;
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       const wasHidden = dd.classList.contains("hidden");

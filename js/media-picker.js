@@ -161,7 +161,8 @@ export function wirePostImageViewer(root) {
   });
 }
 
-function openImageViewer(url) {
+/** Opens the same full-screen tap-to-enlarge viewer used for post photos — exported for the profile-photo "View Photo" action in app.js. */
+export function openImageViewer(url) {
   const overlay = document.createElement("div");
   overlay.className = "image-viewer-overlay";
   overlay.innerHTML = `

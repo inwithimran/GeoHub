@@ -573,6 +573,12 @@ let currentDmConversationId = null;
 let unsubscribeDmMessages = null;
 let unsubscribeDmConversation = null;
 let dmThreadAtBottom = true;
+// conversationId -> last-rendered messages array. Lets a thread you've
+// already opened this session redraw instantly from memory instead of
+// flashing back to the "Loading conversation…" skeleton every single
+// time it's reopened — the live listener still re-attaches and repaints
+// it with anything fresh a moment later, same as before.
+const dmMessageCache = new Map();
 
 /** The classmate uid whose thread is currently open (null if the page isn't open) — mirrors getOpenProfileUid()/getOpenPostId(). */
 export function getOpenDmUid() { return currentDmUid; }
@@ -646,7 +652,22 @@ export async function openDmThread(uid, { fromPopstate = false, replace = false 
   currentDmUid = uid;
 
   if (goToRouteRef) goToRouteRef("dm-thread", { fromPopstate, replace, state: { dmUid: uid } });
-  dmThreadListEl.innerHTML = dmThreadSkeletonHtml();
+  // Conversation ids are just the two sorted uids joined together (see
+  // dmConversationId below), so we already know it before ever touching
+  // Firestore — enough to check the cache and skip the skeleton flash for
+  // a thread already opened this session.
+  const likelyConversationId = dmConversationId(auth.currentUser.uid, uid);
+  const cachedMsgs = dmMessageCache.get(likelyConversationId);
+  if (cachedMsgs) {
+    dmThreadListEl.dataset.conversationId = likelyConversationId;
+    dmThreadListEl.dataset.deleteHandler = "dm";
+    renderChatBubbles(dmThreadListEl, cachedMsgs, { emptyText: "No messages yet — say hello 👋", showNames: false });
+    dmThreadListEl.dataset.everLoaded = "1";
+    dmThreadListEl.scrollTop = dmThreadListEl.scrollHeight;
+  } else {
+    dmThreadListEl.innerHTML = dmThreadSkeletonHtml();
+    dmThreadListEl.dataset.everLoaded = "0";
+  }
   dmThreadAtBottom = true;
   // Reset to the ordinary composer until the conversation doc's real
   // blockedBy state comes back — avoids flashing the "blocked" bar for
@@ -681,6 +702,7 @@ export async function openDmThread(uid, { fromPopstate = false, replace = false 
     if (conversationId !== currentDmConversationId) return;
     const wasNearBottom = dmThreadAtBottom || dmThreadListEl.dataset.everLoaded !== "1";
     const msgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    dmMessageCache.set(conversationId, msgs);
     dmThreadListEl.dataset.conversationId = conversationId;
     dmThreadListEl.dataset.deleteHandler = "dm";
     renderChatBubbles(dmThreadListEl, msgs, { emptyText: "No messages yet — say hello 👋", showNames: false });

@@ -18,7 +18,7 @@ import {
   getAuth
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
-  getFirestore
+  initializeFirestore, persistentLocalCache, persistentSingleTabManager
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 // TODO: replace with your own Firebase project credentials
@@ -35,7 +35,23 @@ const firebaseConfig = {
 // Initialize once, export everywhere else needs it
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+
+// ============================================================
+// PERSISTENT LOCAL CACHE — same thing every "professional" app with a
+// realtime backend does: keep a copy of whatever's been read in IndexedDB,
+// so a reload doesn't have to go back to the network for data it already
+// has. Wall posts, notices, the Directory, conversations, messages — all
+// of it now survives a refresh and paints instantly from disk while
+// Firestore re-syncs the live listeners quietly underneath. Reloading a
+// few minutes later (or even fully offline) no longer means sitting
+// through the same loading screen from scratch. `persistentSingleTabManager`
+// keeps this to one tab at a time (no multi-tab coordination overhead) —
+// students opening GeoHub in a second tab just fall back to in-memory-only
+// caching for that extra tab, which is fine.
+// ============================================================
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+});
 
 // ============================================================
 // PUSH NOTIFICATIONS (Firebase Cloud Messaging)

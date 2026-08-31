@@ -14,11 +14,11 @@ import { collection, query, where, getDocs } from "https://www.gstatic.com/fireb
 import { fetchProfile } from "./auth.js";
 import {
   escapeHtml, getCachedProfile, cacheUserProfile, avatarInner, nameWithBadge,
-  isAdminEmail, adminBadgeHtml, fullDate, showToast, friendlyError, confirmDialog
+  isAdminEmail, adminBadgeHtml, fullDate, showToast, friendlyError, confirmDialog, wireKebabMenus
 } from "./ui-utils.js";
 import { loadUserResources } from "./resources.js";
 import { renderPost } from "./wall.js";
-import { presenceTextHtml } from "./presence.js";
+import { avatarPresenceDotHtml } from "./presence.js";
 import { openDmThread, getBlockState, setDmBlocked } from "./messages.js";
 
 const cardEl = document.getElementById("user-profile-card");
@@ -125,20 +125,45 @@ function renderProfilePage(profile, uid) {
       <div class="profile-flow-head">
         <div class="profile-flow-avatar-wrap">
           <span class="avatar avatar-lg profile-flow-avatar">${avatarInner(profile)}</span>
+          ${avatarPresenceDotHtml(uid)}
         </div>
         <h3>${nameWithBadge(profile.name || "Classmate", profile.email)}</h3>
         <div class="profile-meta-row">
-          <span class="profile-meta-chip">${presenceTextHtml(uid, "presence-text")}</span>
           ${profile.session ? `<span class="profile-meta-chip chip-session">${escapeHtml(profile.session)}</span>` : ""}
           ${admin ? `<span class="profile-meta-chip chip-admin" title="Admin · can post notices to the whole department">${adminBadgeHtml()} Admin</span>` : ""}
         </div>
       </div>
-      ${profile.bio ? `<p class="pv-bio profile-own-bio">${escapeHtml(profile.bio)}</p>` : ""}
+      ${profile.bio ? `<p class="profile-own-bio">${escapeHtml(profile.bio)}</p>` : ""}
       <div class="profile-stat-row">
         <div class="profile-stat-chip"><strong>${escapeHtml(profile.roll || "—")}</strong><span>Roll No.</span></div>
         <div class="profile-stat-chip"><strong>${escapeHtml(profile.bloodGroup || "—")}</strong><span>Blood Grp</span></div>
         <div class="profile-stat-chip"><strong>${escapeHtml(profile.year || profile.session || "—")}</strong><span>Year</span></div>
       </div>
+
+      <!-- Facebook-style action row: Message is the one wide primary
+           button, Call (when this classmate hasn't hidden their number)
+           and "more" (Block/Unblock) are small round icon buttons beside
+           it — sits right under the stats, above the tabs, instead of
+           buried at the bottom of the Info tab. -->
+      <div class="profile-action-row">
+        <button type="button" id="user-profile-message-btn" class="profile-action-primary">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h16a1 1 0 0 1 1 1V16a1 1 0 0 1-1 1H8l-4.5 4V6.5a1 1 0 0 1 1-1z"/></svg>
+          Message
+        </button>
+        ${(!profile.hidePhone && profile.phone) ? `
+        <a class="profile-action-icon-btn" href="tel:${escapeHtml(profile.phone)}" aria-label="Call ${escapeHtml((profile.name || "").split(" ")[0] || "")}">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+        </a>` : ""}
+        <div class="kebab-menu profile-more-menu" id="user-profile-more-menu">
+          <button type="button" class="kebab-btn" aria-label="More options" aria-haspopup="true">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor"><circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/></svg>
+          </button>
+          <div class="kebab-dropdown hidden">
+            <button type="button" class="kebab-item danger" id="user-profile-block-item" data-kebab-action="block">Block this classmate</button>
+          </div>
+        </div>
+      </div>
+      ${(!profile.hidePhone && profile.phone) ? "" : `<p class="pv-call-disabled">This student has hidden their contact number.</p>`}
 
       <div class="profile-tabs" role="tablist">
         <button type="button" class="profile-tab-btn active" data-tab="info" role="tab" id="user-profile-tab-info" aria-selected="true" aria-controls="user-profile-panel-info">Info</button>
@@ -149,18 +174,6 @@ function renderProfilePage(profile, uid) {
       <div class="profile-tab-panel active" data-tab-panel="info" role="tabpanel" id="user-profile-panel-info" aria-labelledby="user-profile-tab-info">
         <div class="profile-flow-details">
           ${rows.map(([label, val]) => `<div class="profile-detail-row"><span>${label}</span><span>${val}</span></div>`).join("")}
-        </div>
-        <div class="profile-flow-actions" style="display:flex; gap:10px;">
-          ${(!profile.hidePhone && profile.phone)
-            ? `<a class="btn-primary full" href="tel:${escapeHtml(profile.phone)}">Call ${escapeHtml((profile.name || "").split(" ")[0] || "")}</a>`
-            : `<p class="pv-call-disabled" style="flex:1">This student has hidden their contact number.</p>`}
-          <button type="button" id="user-profile-message-btn" class="btn-outline full msg-btn">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h16a1 1 0 0 1 1 1V16a1 1 0 0 1-1 1H8l-4.5 4V6.5a1 1 0 0 1 1-1z"/></svg>
-            Message
-          </button>
-          <button type="button" id="user-profile-block-btn" class="dm-thread-block-btn" aria-label="Block this classmate">
-            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="5.6" y1="5.6" x2="18.4" y2="18.4"/></svg>
-          </button>
         </div>
       </div>
 
@@ -176,37 +189,51 @@ function renderProfilePage(profile, uid) {
 
   cardEl.querySelector("#user-profile-message-btn")?.addEventListener("click", () => openDmThread(uid));
 
-  // ---- Block/unblock (see js/messages.js — DM-only, scoped to this one
-  // classmate's conversation). Starts in its default (not-blocked) state
-  // while the real status loads, same "avoid flashing the wrong state"
-  // approach as the DM thread header's own version of this button. ----
-  const blockBtn = cardEl.querySelector("#user-profile-block-btn");
-  if (blockBtn) {
+  // ---- Block/unblock, now tucked behind the "more" (⋮) menu instead of
+  // sitting out as its own always-visible button (see js/messages.js —
+  // DM-only, scoped to this one classmate's conversation). Mirrors the DM
+  // thread header's own three-dot menu exactly: starts in its default
+  // (not-blocked) label while the real status loads, then the dropdown
+  // item's own text/danger-styling flips once it resolves. ----
+  const moreMenu = cardEl.querySelector("#user-profile-more-menu");
+  const blockItem = cardEl.querySelector("#user-profile-block-item");
+  if (moreMenu && blockItem) {
     getBlockState(uid).then(({ blockedByMe }) => {
-      if (cardEl.querySelector("#user-profile-block-btn") !== blockBtn) return; // page navigated away/re-rendered meanwhile
-      blockBtn.classList.toggle("active", blockedByMe);
-      blockBtn.setAttribute("aria-label", blockedByMe ? "Unblock this classmate" : "Block this classmate");
+      if (cardEl.querySelector("#user-profile-block-item") !== blockItem) return; // page navigated away/re-rendered meanwhile
+      blockItem.textContent = blockedByMe ? "Unblock this classmate" : "Block this classmate";
+      blockItem.classList.toggle("danger", !blockedByMe);
+      blockItem.dataset.blocked = blockedByMe ? "1" : "0";
+      moreMenu.classList.toggle("is-blocking", blockedByMe);
     });
-    blockBtn.addEventListener("click", () => {
-      const alreadyBlocked = blockBtn.classList.contains("active");
-      if (alreadyBlocked) {
-        setDmBlocked(uid, false)
-          .then(() => { blockBtn.classList.remove("active"); blockBtn.setAttribute("aria-label", "Block this classmate"); })
-          .catch((err) => {
-            const { message, technical } = friendlyError(err, "Couldn't unblock this classmate.");
-            showToast(message, { details: technical });
-          });
-        return;
+    wireKebabMenus(cardEl, {
+      block: () => {
+        const alreadyBlocked = blockItem.dataset.blocked === "1";
+        if (alreadyBlocked) {
+          setDmBlocked(uid, false)
+            .then(() => {
+              blockItem.textContent = "Block this classmate";
+              blockItem.classList.add("danger");
+              blockItem.dataset.blocked = "0";
+              moreMenu.classList.remove("is-blocking");
+            })
+            .catch((err) => {
+              const { message, technical } = friendlyError(err, "Couldn't unblock this classmate.");
+              showToast(message, { details: technical });
+            });
+          return;
+        }
+        confirmDialog({
+          title: "Block this classmate?",
+          text: `${profile.name || "This classmate"} won't be able to send you messages until you unblock them.`,
+          confirmLabel: "Block",
+          onConfirm: () => setDmBlocked(uid, true).then(() => {
+            blockItem.textContent = "Unblock this classmate";
+            blockItem.classList.remove("danger");
+            blockItem.dataset.blocked = "1";
+            moreMenu.classList.add("is-blocking");
+          })
+        });
       }
-      confirmDialog({
-        title: "Block this classmate?",
-        text: `${profile.name || "This classmate"} won't be able to send you messages until you unblock them.`,
-        confirmLabel: "Block",
-        onConfirm: () => setDmBlocked(uid, true).then(() => {
-          blockBtn.classList.add("active");
-          blockBtn.setAttribute("aria-label", "Unblock this classmate");
-        })
-      });
     });
   }
 

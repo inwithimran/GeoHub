@@ -134,6 +134,27 @@ export function presenceLabel(profile) {
   return `Active ${timeAgo(profile.lastActive)}`;
 }
 
+/**
+ * Compact "5m" / "1h" / "2d" for the avatar-corner badge — the same idea
+ * as Facebook's own profile-photo status dot, which swaps to a short
+ * elapsed-time label once someone's gone offline instead of just going
+ * dark. Empty string once it's been a week+ (or nothing's on file), which
+ * the badge treats as "nothing worth showing" and hides itself.
+ */
+function shortTimeAgo(ts) {
+  const ms = toMillis(ts);
+  if (!ms) return "";
+  const seconds = Math.floor((Date.now() - ms) / 1000);
+  if (seconds < 60) return "now";
+  const mins = Math.floor(seconds / 60);
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d`;
+  return "";
+}
+
 /** A small dot, styled green by CSS only once painted `.online` — drop right after a name. Needs a uid. */
 export function presenceDotHtml(uid) {
   if (!uid) return "";
@@ -152,8 +173,10 @@ export function presenceTextHtml(uid, className = "presence-text") {
  * `.avatar-presence-wrap` and drop this right after it. Reuses the same
  * `data-presence-uid` hook as presenceDotHtml(), so paintPresenceUI() above
  * keeps it in sync automatically; only the CSS differs (see
- * .avatar-presence-badge). Used across Directory/Messages — deliberately
- * NOT used on Profile pages, which keep their existing presence display.
+ * .avatar-presence-badge). Used on the Directory, Messages (conversation
+ * list + thread header), and Profile pages: solid green while online, and
+ * — Facebook-style — a short "5m"/"1h"/"2d" elapsed-time label right on
+ * the badge itself once offline, instead of a separate text line.
  */
 export function avatarPresenceDotHtml(uid) {
   if (!uid) return "";
@@ -168,9 +191,24 @@ export function avatarPresenceDotHtml(uid) {
  */
 export function paintPresenceUI() {
   document.querySelectorAll("[data-presence-uid]").forEach((dot) => {
-    const online = isUserOnline(getCachedProfile(dot.dataset.presenceUid));
+    const profile = getCachedProfile(dot.dataset.presenceUid);
+    const online = isUserOnline(profile);
     dot.classList.toggle("online", online);
-    dot.title = online ? "Active Now" : "";
+    if (online) {
+      dot.title = "Active Now";
+      // Only the avatar-corner badge ever carries a text label — the
+      // plain after-name dot (presenceDotHtml) stays a dot either way.
+      if (dot.classList.contains("avatar-presence-badge")) { dot.textContent = ""; dot.classList.remove("has-label"); }
+      return;
+    }
+    if (dot.classList.contains("avatar-presence-badge")) {
+      const label = shortTimeAgo(profile?.lastActive);
+      dot.textContent = label;
+      dot.classList.toggle("has-label", !!label);
+      dot.title = profile?.lastActive ? `Active ${timeAgo(profile.lastActive)}` : "";
+    } else {
+      dot.title = "";
+    }
   });
   document.querySelectorAll("[data-presence-text-uid]").forEach((el) => {
     const profile = getCachedProfile(el.dataset.presenceTextUid);
