@@ -9,8 +9,9 @@
 // deploy at all. Moving the same logic here sidesteps that.
 //
 // Flow: after a student's browser successfully writes a new post/
-// resource/notice/comment/report to Firestore (see wall.js, resources.js,
-// routine.js), it calls this endpoint with a Firebase ID token +
+// resource/notice/comment/report/DM/Class Chat message to Firestore (see
+// wall.js, resources.js, routine.js, messages.js), it calls this endpoint
+// with a Firebase ID token +
 // a small payload describing what happened. This function verifies
 // that token (so only a signed-in student can trigger a send),
 // looks up every registered device's FCM token under
@@ -126,21 +127,32 @@ function truncate(text = "", max = 120) {
 
 /** Builds the { title, body } shown in the notification, per activity type. */
 function buildNotification(type, { text, actorName, urgent }) {
+  const name = actorName || "Someone";
   switch (type) {
     case "post":
-      return { title: `${actorName || "Someone"} posted on the Student Wall`, body: truncate(text) || "Tap to view." };
+      return { title: `${name} shared a new post on the Student Wall`, body: truncate(text) || "Tap to view the post." };
     case "resource":
-      return { title: `${actorName || "Someone"} shared a note/sheet`, body: truncate(text) || "Tap to view." };
+      return { title: `${name} shared a new resource in Notes & Sheets`, body: truncate(text) || "Tap to view." };
     case "notice":
-      return { title: urgent ? "⚠️ Urgent Notice" : "New Notice", body: truncate(text) };
+      return { title: urgent ? "⚠️ Urgent Notice" : "📢 New Notice", body: truncate(text) };
+    case "deadline":
+      return { title: "🗓️ New Deadline Posted", body: truncate(text) || "Tap to view the details." };
+    case "routine":
+      return { title: "🗓️ Weekly Routine Updated", body: truncate(text) || "Tap to view the updated class routine." };
+    case "deadline-reminder":
+      return { title: "⏰ Deadline Tomorrow", body: truncate(text) || "Tap to view the details." };
     case "comment":
-      return { title: `${actorName || "Someone"} commented on your post`, body: truncate(text) };
+      return { title: `${name} commented on your post`, body: truncate(text) };
     case "like":
-      return { title: `${actorName || "Someone"} liked your post`, body: "Tap to view." };
+      return { title: `${name} reacted to your post`, body: "Tap to view." };
     case "mention":
-      return { title: `${actorName || "Someone"} mentioned you`, body: truncate(text) || "Tap to view." };
+      return { title: `${name} mentioned you`, body: truncate(text) || "Tap to view." };
     case "report":
-      return { title: `${actorName || "A classmate"} reported a post`, body: truncate(text) || "Tap to review it." };
+      return { title: `New content report from ${name}`, body: truncate(text) || "Tap to review it." };
+    case "dm":
+      return { title: `${name} sent you a message`, body: truncate(text) || "Tap to view." };
+    case "classChat":
+      return { title: `${name} posted in Department Chat`, body: truncate(text) || "Tap to view." };
     default:
       return { title: "GeoHub", body: truncate(text) };
   }
@@ -159,7 +171,41 @@ function isRecent(timestamp) {
  * the handler, which turns that into the HTTP response.
  */
 async function verifyClaim(db, callerUid, callerEmail, payload) {
-  const { type, targetUid, postId, resourceId, noticeId, reportId } = payload;
+  const { type, targetUid, postId, resourceId, noticeId, reportId, deadlineId, conversationId, messageId } = payload;
+
+  if (type === "deadline") {
+    // Same trust model as "notice": only the CR/admin may trigger this
+    // push (postDeadline() in deadlines.js can't succeed for anyone else
+    // anyway — see firestore.rules — so there's nothing else to verify
+    // per-id beyond "does this deadline exist and was it just created").
+    if (!ADMIN_EMAILS.includes(callerEmail || "")) {
+      throw { status: 403, message: "Only the class admin can send a deadline push." };
+    }
+    if (deadlineId) {
+      const snap = await db.collection("deadlines").doc(deadlineId).get();
+      if (!snap.exists || !isRecent(snap.get("createdAt"))) {
+        throw { status: 400, message: "That deadline doesn't exist or isn't recent." };
+      }
+    }
+    return;
+  }
+
+  if (type === "routine") {
+    // Same trust model as "notice"/"deadline": only the CR/admin may ever
+    // trigger this push (saveRoutine() in routine.js can't succeed for
+    // anyone else anyway — see firestore.rules). The routine lives at a
+    // single fixed doc (routine/weekly) rather than one-per-edit, so
+    // recency is checked against its `updatedAt` field (stamped on every
+    // save) instead of a fresh document id.
+    if (!ADMIN_EMAILS.includes(callerEmail || "")) {
+      throw { status: 403, message: "Only the class admin can send a routine push." };
+    }
+    const snap = await db.collection("routine").doc("weekly").get();
+    if (!snap.exists || !isRecent(snap.get("updatedAt"))) {
+      throw { status: 400, message: "The routine doesn't exist or wasn't just updated." };
+    }
+    return;
+  }
 
   if (type === "notice") {
     // Only the admin/CR may ever trigger a department-wide "notice" push —
@@ -264,6 +310,40 @@ async function verifyClaim(db, callerUid, callerEmail, payload) {
     return;
   }
 
+  if (type === "classChat") {
+    // Same "reporting something that just happened" shape as "post" — one
+    // shared room, so the check is just "did the caller really just post
+    // this message" (broadcasts to everyone else, same as "post").
+    if (!messageId) throw { status: 400, message: "Missing messageId." };
+    const snap = await db.collection("classChat").doc(messageId).get();
+    if (!snap.exists) throw { status: 400, message: "That message doesn't exist." };
+    if (snap.get("authorUid") !== callerUid) throw { status: 403, message: "You didn't send that message." };
+    if (!isRecent(snap.get("createdAt"))) throw { status: 400, message: "That message isn't recent." };
+    return;
+  }
+
+  if (type === "dm") {
+    // A DM push only ever goes to the other participant, never the whole
+    // department — so this has to confirm both that the caller is really
+    // in that conversation AND that targetUid is the other person on it,
+    // on top of the usual "did this message really just get sent" check.
+    if (!conversationId || !messageId || !targetUid) {
+      throw { status: 400, message: "Missing conversationId, messageId or targetUid." };
+    }
+    const convSnap = await db.collection("conversations").doc(conversationId).get();
+    if (!convSnap.exists) throw { status: 400, message: "That conversation doesn't exist." };
+    const participants = convSnap.get("participants") || [];
+    if (!participants.includes(callerUid)) throw { status: 403, message: "You're not part of that conversation." };
+    if (targetUid === callerUid || !participants.includes(targetUid)) {
+      throw { status: 400, message: "targetUid isn't the other participant in that conversation." };
+    }
+    const msgSnap = await db.collection("conversations").doc(conversationId).collection("messages").doc(messageId).get();
+    if (!msgSnap.exists) throw { status: 400, message: "That message doesn't exist." };
+    if (msgSnap.get("senderUid") !== callerUid) throw { status: 403, message: "You didn't send that message." };
+    if (!isRecent(msgSnap.get("createdAt"))) throw { status: 400, message: "That message isn't recent." };
+    return;
+  }
+
   throw { status: 400, message: `Unknown type '${type}'.` };
 }
 
@@ -298,14 +378,14 @@ export default async function handler(req, res) {
     const callerUid = decoded.uid;
     const callerEmail = decoded.email || "";
 
-    const { type, text, actorName, urgent, targetUid, postId, resourceId, noticeId, reportId } = req.body || {};
+    const { type, text, actorName, urgent, targetUid, postId, resourceId, noticeId, reportId, deadlineId, conversationId, messageId } = req.body || {};
     if (!type) return res.status(400).json({ error: "Missing 'type'." });
 
     const db = getFirestore(app);
 
     // ---- Prove the claim before sending anything (see verifyClaim above) ----
     try {
-      await verifyClaim(db, callerUid, callerEmail, { type, targetUid, postId, resourceId, noticeId, reportId });
+      await verifyClaim(db, callerUid, callerEmail, { type, targetUid, postId, resourceId, noticeId, reportId, deadlineId, conversationId, messageId });
     } catch (claimErr) {
       const status = claimErr.status || 400;
       return res.status(status).json({ error: claimErr.message || "Couldn't verify this request." });
@@ -318,10 +398,12 @@ export default async function handler(req, res) {
     const messaging = getMessaging(app);
     const { title, body } = buildNotification(type, { text, actorName, urgent });
 
-    // A new comment, like, or mention only notifies one specific student
-    // (the post's author, or whoever got @mentioned); a new report only
-    // notifies the admin(s) — never the whole department either way.
-    const pairs = (type === "comment" || type === "like" || type === "mention")
+    // A new comment, like, mention, or DM only notifies one specific
+    // student (the post's author, whoever got @mentioned, or the other
+    // side of the conversation); a new report only notifies the admin(s);
+    // everything else — including a new Class Chat message — broadcasts
+    // to the whole department.
+    const pairs = (type === "comment" || type === "like" || type === "mention" || type === "dm")
       ? await collectTokensFor(db, targetUid, callerUid)
       : type === "report"
         ? await collectAdminTokens(db, callerUid)
