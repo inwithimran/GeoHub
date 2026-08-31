@@ -217,7 +217,6 @@
 @keyframes compass-spin { to{ transform:rotate(360deg);} }
 @keyframes orb-glow   { 0%,100%{ opacity:.45; transform:scale(.88);} 50%{ opacity:.9; transform:scale(1.1);} }
 @keyframes mark-breathe { 0%,100%{ transform:scale(1);} 50%{ transform:scale(1.055);} }
-@keyframes bar-sweep  { 0%{ transform:translateX(-115%);} 100%{ transform:translateX(315%);} }
 
 @layer base {
   html, body { height:100%; }
@@ -271,10 +270,19 @@
   .loading-text-block { @apply flex flex-col items-center gap-3; }
   .loading-screen p { @apply text-sm font-semibold opacity-90 m-0; }
   .loading-bar-track { @apply w-[104px] h-[3px] rounded-full overflow-hidden relative; background: rgba(255,255,255,.16); }
+  /* Determinate fill — width is set directly from JS (app.js's
+     setLoadingProgress) to reflect real load milestones (script running →
+     DOM ready → page fully loaded → auth resolved → app ready), not a
+     decorative loop that runs whether or not anything has actually
+     finished. The transition is what makes each jump read as smooth
+     progress instead of a snap; on a fast/cached load the same jumps just
+     happen in quick succession, so the bar fills (and the screen
+     dismisses) correspondingly fast instead of always taking the same
+     fixed time to "look" like it's loading. */
   .loading-bar-fill {
-    @apply absolute inset-y-0 left-0 rounded-full; width:36%;
-    background: linear-gradient(90deg, transparent, #fff 50%, transparent);
-    animation: bar-sweep 1.35s ease-in-out infinite;
+    @apply absolute inset-y-0 left-0 rounded-full; width:0%;
+    background: linear-gradient(90deg, #fff, rgba(255,255,255,.75));
+    transition: width .3s cubic-bezier(.22,.8,.4,1);
   }
 
   /* ============================================================
@@ -689,7 +697,18 @@
     overflow:hidden;
   }
   @media (min-width:900px) {
-    .msg-route, .dm-thread-route { margin:-26px -28px -40px; height:calc(100dvh - 64px); }
+    /* Desktop gets its own "messenger card" treatment instead of the
+       mobile full-bleed strip: a bounded, centered panel with a visible
+       edge (border + shadow + rounded corners) so the chat reads as a
+       deliberate app surface on a wide screen rather than a narrow
+       column of loose rows floating in empty space. */
+    .msg-route, .dm-thread-route {
+      margin:10px auto 28px; max-width:680px; width:100%;
+      height:calc(100dvh - 64px - 38px);
+      background: var(--color-surface); border:1px solid var(--color-line);
+      border-radius:26px; box-shadow: var(--shadow-cardhover);
+      overflow:hidden;
+    }
   }
   @media (max-width:899px) {
     /* Class Chat / DM list (.msg-route) is normally a bottom-nav
@@ -707,7 +726,14 @@
   }
 
   .msg-subtabs { @apply flex shrink-0 gap-1.5; padding:12px 14px 10px; background: var(--color-paper); border-bottom:1px solid var(--color-line); }
-  @media (min-width:900px) { .msg-subtabs { padding:0 0 14px; } }
+  @media (min-width:900px) {
+    /* Inside the desktop card, a two-way segmented control stretched
+       edge-to-edge (flex-1 buttons) reads as a giant near-empty bar — cap
+       it to its own content width instead, sitting inside the card's own
+       header strip. (The flex:0 0 auto override lives further down, AFTER
+       .msg-subtab-btn's base rule, so it actually wins the cascade.) */
+    .msg-subtabs { padding:14px 16px; gap:8px; background: var(--color-paper); border-bottom:1px solid var(--color-line); }
+  }
   .msg-subtab-btn {
     @apply relative flex-1 flex items-center justify-center gap-1.5 text-sm font-extrabold rounded-full transition-colors;
     padding:11px 10px; color: var(--color-ink-soft); background: var(--color-surface); border:1px solid var(--color-line);
@@ -719,6 +745,7 @@
     line-height:1.2;
   }
   .msg-subtab-btn.active { @apply text-white; background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800)); border-color:transparent; box-shadow: var(--shadow-btn); }
+  @media (min-width:900px) { .msg-subtab-btn { flex:0 0 auto; padding:9px 16px; } }
   .msg-subtab-icon { @apply shrink-0; }
   .msg-subtab-label { @apply min-w-0 overflow-hidden whitespace-nowrap text-ellipsis; }
   .msg-tab-badge {
@@ -732,7 +759,7 @@
   .chat-header {
     @apply flex items-center justify-between shrink-0; padding:10px 14px; background: var(--color-paper); border-bottom:1px solid var(--color-line);
   }
-  @media (min-width:900px) { .chat-header { padding:0 0 12px; background:transparent; border-bottom:none; } }
+  @media (min-width:900px) { .chat-header { padding:14px 16px; background: var(--color-paper); border-bottom:1px solid var(--color-line); } }
   .chat-header strong { @apply block text-[.95rem]; }
   .chat-header-sub { @apply block text-[.72rem] font-semibold; color: var(--color-ink-faint); }
   .chat-header-sub.online-now { color: var(--color-forest-600); }
@@ -762,10 +789,11 @@
     background-size: 20px 20px;
     background-color: var(--color-paper);
   }
-  @media (min-width:900px) { .chat-scroll { padding:14px 2px 14px; } }
+  @media (min-width:900px) { .chat-scroll { padding:18px 18px; } }
 
   /* ---- chat bubbles (Class Chat + DM thread share this) ---- */
   .chat-bubble-row { @apply flex items-end gap-2 max-w-[86%]; }
+  @media (min-width:900px) { .chat-bubble-row { max-width:440px; } }
   .chat-bubble-row.mine { @apply self-end flex-row-reverse; }
   .chat-bubble-row .avatar { width:26px; height:26px; box-shadow:none; }
   .chat-bubble-group { @apply flex flex-col gap-0.5 min-w-0; }
@@ -802,7 +830,12 @@
     margin-bottom: calc(16px + env(safe-area-inset-bottom));
     background: var(--color-surface); border-radius:26px; box-shadow: var(--shadow-card); border:1px solid var(--color-line);
   }
-  @media (min-width:900px) { .chat-input-bar { margin:8px 2px 0; padding:10px 8px; } }
+  @media (min-width:900px) {
+    .chat-input-bar {
+      margin:0; padding:12px 16px; border-radius:0; border:none; border-top:1px solid var(--color-line);
+      box-shadow:none; background: var(--color-surface);
+    }
+  }
   .chat-input-bar input {
     @apply flex-1 border-none rounded-full text-sm; background: transparent; padding:8px 10px;
   }
@@ -817,7 +850,7 @@
 
   /* ---- Direct Messages: conversation list ---- */
   .dm-list-wrap { @apply flex-1 min-h-0 flex flex-col gap-2.5; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding:12px 14px 24px; }
-  @media (min-width:900px) { .dm-list-wrap { padding:12px 0 24px; } }
+  @media (min-width:900px) { .dm-list-wrap { padding:14px 16px 20px; } }
   .dm-list-wrap .empty-state { @apply flex-1 flex flex-col items-center justify-center gap-3; box-shadow:none; background:transparent; padding:40px 20px; }
   .dm-list-wrap .empty-state::before {
     content:""; display:block; width:56px; height:56px; border-radius:50%;
@@ -825,6 +858,7 @@
   }
   .dm-conv-row { @apply w-full flex items-center gap-3 text-left rounded-2xl bg-surface transition-transform; padding:11px 12px; box-shadow: var(--shadow-card); border:1px solid var(--color-line); }
   .dm-conv-row:active { transform:scale(.985); }
+  @media (hover:hover) { .dm-conv-row:hover { box-shadow: var(--shadow-cardhover); border-color: var(--color-forest-200); } }
   .dm-conv-row .avatar { box-shadow:0 0 0 2.5px var(--color-surface), 0 0 0 4px var(--color-forest-200); }
   .dm-conv-info { @apply flex-1 min-w-0; }
   .dm-conv-info strong { @apply block text-[.9rem]; }
@@ -849,13 +883,32 @@
      a plain sibling of #dm-thread-header (see the HTML comment above the
      section) so it survives every header re-render untouched. */
   .dm-thread-header-row { @apply flex items-center gap-1 shrink-0; padding:10px 10px 12px; background: var(--color-paper); border-bottom:1px solid var(--color-line); }
-  @media (min-width:900px) { .dm-thread-header-row { padding:4px 0 12px; background:transparent; border-bottom:none; } }
+  @media (min-width:900px) { .dm-thread-header-row { padding:14px 16px; background: var(--color-paper); border-bottom:1px solid var(--color-line); gap:10px; } }
   .dm-thread-back-btn {
     @apply flex items-center justify-center shrink-0 rounded-full transition-colors; width:34px; height:34px;
     color: var(--color-ink-soft); background: transparent;
   }
   .dm-thread-back-btn:active { background: var(--color-paper-deep); }
   @media (hover:hover) { .dm-thread-back-btn:hover { background: var(--color-paper-deep); color: var(--color-ink); } }
+  /* The label span only exists for desktop — on mobile it's display:none so
+     the button renders exactly as it always has (a plain circular icon
+     button, left untouched per spec). On desktop, "just an icon" read as
+     unfinished/unlabeled against the width of the new card header, so it
+     grows into a proper icon+label pill matching .profile-back-btn's
+     styling on the Profile/Post pages — the same "smart back button"
+     treatment on every drill-down surface. */
+  .back-label { @apply hidden; }
+  @media (min-width:900px) {
+    .dm-thread-back-btn {
+      width:auto; height:36px; gap:7px; padding:0 14px 0 8px;
+      background: var(--color-surface); border:1px solid var(--color-line); box-shadow: var(--shadow-card);
+    }
+    .dm-thread-back-btn:active { background: var(--color-paper-deep); transform:scale(.97); }
+    @media (hover:hover) {
+      .dm-thread-back-btn:hover { background: var(--color-forest-50); border-color: var(--color-forest-200); color: var(--color-forest-700); box-shadow: var(--shadow-cardhover); }
+    }
+    .back-label { @apply inline-flex text-[.82rem] font-bold; }
+  }
   .dm-thread-header { @apply flex items-center gap-2.5 min-w-0 flex-1; }
   .dm-thread-header .avatar { width:44px; height:44px; }
   /* Name + presence chip sit in a plain sibling <div> (see js/messages.js
@@ -1423,6 +1476,15 @@
   .profile-back-btn { @apply inline-flex items-center gap-1.5 text-sm font-bold rounded-full pl-1.5 pr-3.5 py-1.5 transition-colors; color: var(--color-ink-soft); }
   .profile-back-btn:active { background: var(--color-paper-deep); }
   .profile-back-btn-icon { @apply w-7 h-7 rounded-full flex items-center justify-center shrink-0; background: var(--color-paper-deep); }
+  @media (min-width:900px) {
+    /* Same pill-with-a-lifted-card feel as the redesigned Messages back
+       button above, so "Back" reads the same way everywhere on desktop. */
+    .profile-back-btn { background: var(--color-surface); border:1px solid var(--color-line); box-shadow: var(--shadow-card); padding:6px 16px 6px 6px; }
+    .profile-back-btn:active { transform:scale(.97); }
+    @media (hover:hover) {
+      .profile-back-btn:hover { background: var(--color-forest-50); border-color: var(--color-forest-200); color: var(--color-forest-700); box-shadow: var(--shadow-cardhover); }
+    }
+  }
 
   .profile-modal-loading { @apply flex items-center justify-center gap-2.5 text-sm; padding:34px 0; color: var(--color-ink-soft); }
   .pv-header { @apply text-center pb-2.5; }
@@ -2166,6 +2228,14 @@
 
       <!-- ===== SECTION 3A: GLOBAL SEARCH (own page, reached via the topbar search icon) ===== -->
       <section id="section-search" class="route-section">
+        <div class="profile-page-topbar">
+          <button type="button" id="search-back-btn" class="profile-back-btn">
+            <span class="profile-back-btn-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+            </span>
+            Back
+          </button>
+        </div>
         <div class="search-bar">
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <input type="text" id="global-search-input" placeholder="Search posts, resources, notices, #hashtags…" />
@@ -2204,6 +2274,7 @@
           <div class="chat-header chat-header-class">
             <button type="button" id="class-chat-back-btn" class="dm-thread-back-btn" aria-label="Back to Private Messages">
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+              <span class="back-label">Back</span>
             </button>
             <span class="chat-header-class-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -2234,6 +2305,7 @@
         <div class="dm-thread-header-row">
           <button type="button" id="dm-thread-back-btn" class="dm-thread-back-btn" aria-label="Back to conversations">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+            <span class="back-label">Back</span>
           </button>
           <div id="dm-thread-header" class="dm-thread-header"></div>
         </div>
@@ -2304,6 +2376,14 @@
 
       <!-- ===== SECTION 8: NOTICES & NOTIFICATIONS (own page, not a modal) ===== -->
       <section id="section-notices" class="route-section">
+        <div class="profile-page-topbar">
+          <button type="button" id="notices-back-btn" class="profile-back-btn">
+            <span class="profile-back-btn-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+            </span>
+            Back
+          </button>
+        </div>
         <div class="notices-page-tabs" role="tablist">
           <button type="button" class="notices-page-tab-btn active" data-tab="notice" role="tab" id="notices-tab-notice" aria-selected="true" aria-controls="notices-panel-notice">
             Notice<span class="tab-badge hidden" id="notice-tab-badge">0</span>
@@ -2332,6 +2412,14 @@
            its own full page now, live-updating, so an admin doesn't need to
            dig into Notices to find it. ===== -->
       <section id="section-reports" class="route-section">
+        <div class="profile-page-topbar">
+          <button type="button" id="reports-back-btn" class="profile-back-btn">
+            <span class="profile-back-btn-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+            </span>
+            Back
+          </button>
+        </div>
         <div class="notif-panel-head">
           <span class="notif-panel-head-title">Reported Posts</span>
         </div>
@@ -2342,6 +2430,14 @@
 
       <!-- ===== SECTION 9: SETTINGS (opened via the header gear icon) ===== -->
       <section id="section-settings" class="route-section">
+        <div class="profile-page-topbar">
+          <button type="button" id="settings-back-btn" class="profile-back-btn">
+            <span class="profile-back-btn-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+            </span>
+            Back
+          </button>
+        </div>
         <div class="settings-page">
           <div class="quick-links-block">
             <div class="quick-links-title">Quick Links</div>
