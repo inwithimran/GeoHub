@@ -699,15 +699,26 @@
      the .profile-meta-chip pills next to the name instead. */
   .avatar-presence-wrap { @apply relative inline-flex shrink-0 align-top; }
   .avatar-presence-badge {
-    @apply absolute rounded-full pointer-events-none; right:-1px; bottom:-1px; width:13px; height:13px;
+    @apply absolute rounded-full pointer-events-none flex items-center justify-center; right:-1px; bottom:-1px; width:13px; height:13px;
     background: var(--color-ink-faint); border:2.5px solid var(--color-surface);
-    opacity:0; transform:scale(.5); transition: opacity .2s, transform .2s, background .2s;
+    opacity:0; transform:scale(.5); color:#fff; font-size:0; font-weight:800; line-height:1; white-space:nowrap;
+    transition: opacity .2s, transform .2s, background .2s, width .15s ease, border-radius .15s ease;
   }
   .avatar-presence-badge.online {
     opacity:1; transform:scale(1); background: var(--color-forest-500);
     box-shadow:0 0 0 2px color-mix(in srgb, var(--color-forest-500) 22%, transparent);
   }
+  /* Offline but recently active — Facebook-style: the same corner spot
+     swaps from a plain dot to a short elapsed-time pill ("5m", "1h", "2d")
+     instead of just going dark, so the status is still readable at a
+     glance without a separate text line anywhere else. */
+  .avatar-presence-badge.has-label {
+    opacity:1; transform:scale(1); width:auto; min-width:19px; height:14px; padding:0 4px;
+    border-radius:7px; background: color-mix(in srgb, var(--color-ink-faint) 85%, black 12%);
+    font-size:.56rem;
+  }
   .avatar-presence-wrap:has(.avatar-sm) .avatar-presence-badge { width:11px; height:11px; border-width:2px; }
+  .avatar-presence-wrap:has(.avatar-sm) .avatar-presence-badge.has-label { width:auto; height:12px; min-width:16px; padding:0 3px; font-size:.5rem; }
   .section-heading { @apply text-xs font-extrabold uppercase tracking-wider pl-0.5; color: var(--color-ink-faint); margin:4px 0 -4px; }
 
   /* ============================================================
@@ -1049,7 +1060,6 @@
     background: var(--color-forest-100); color: var(--color-forest-700);
   }
   .msg-btn:active { transform:scale(.9); background: var(--color-forest-200); }
-  .profile-flow-actions .msg-btn { @apply w-auto rounded-full flex-1 gap-2 text-[.9rem] font-bold; height:50px; background: var(--color-forest-100); }
 
   /* ---- unread badge on the Message nav item (bottom-nav pill + sidebar) ---- */
   .nav-icon-wrap { @apply relative inline-flex; }
@@ -1534,43 +1544,48 @@
   }
   .profile-flow-head { @apply relative z-[1] text-center; padding-top:38px; }
   .profile-flow-avatar-wrap { @apply relative mx-auto; width:96px; height:96px; margin-bottom:18px; }
+  /* The big profile-photo header is its own presence host (see
+     profile-view.js) — same green-dot/offline-time badge as everywhere
+     else, just sized up a notch to read clearly against a 96px photo. */
+  .profile-flow-avatar-wrap .avatar-presence-badge { width:18px; height:18px; border-width:3px; }
+  .profile-flow-avatar-wrap .avatar-presence-badge.has-label { width:auto; height:19px; min-width:26px; padding:0 6px; border-radius:9.5px; font-size:.72rem; }
   .profile-flow-avatar {
     @apply relative z-[1]; width:96px; height:96px; border:4px solid var(--color-paper);
     box-shadow:0 12px 28px rgba(11,25,15,.28), 0 0 0 3px var(--color-gold-500);
   }
-  .profile-edit-fab {
+  /* Own-profile-only badge on the avatar corner — tapping it opens the
+     small "View Photo / Change Photo" action sheet (app.js) instead of
+     jumping straight into the Edit Details form, so viewing your own
+     photo full-size doesn't require opening an editable form first.
+     Deliberately a camera icon, never a pencil — a pencil on the photo
+     itself reads as "edit this image" (crop/draw on it), which isn't
+     what tapping it does. */
+  .profile-photo-badge {
     @apply absolute z-[2] flex items-center justify-center w-8 h-8 rounded-full text-white;
     right:-2px; bottom:-2px; background: linear-gradient(135deg, var(--color-gold-500), var(--color-gold-600));
     border:2.5px solid var(--color-paper); box-shadow:0 4px 10px rgba(0,0,0,.25);
   }
+  .profile-photo-badge:active { transform:scale(.92); }
   .profile-flow-head h3 { @apply text-xl font-extrabold; }
 
   /* ---------- Profile meta row — status / session / admin as one line of
      compact pills under the name, instead of four separate stacked rows.
      Wraps gracefully on narrow screens; an empty presence pill (own
      profile, or before presence has resolved) collapses away entirely. ---------- */
+  /* ---------- Meta pills row (session / admin badge) — the presence text
+     chip that used to live here has moved onto the profile photo itself
+     as a badge (see .profile-flow-avatar-wrap above / presence.js). ---------- */
   .profile-meta-row { @apply relative z-[1] flex flex-wrap items-center justify-center gap-1.5; margin-top:9px; }
   .profile-meta-chip {
     @apply inline-flex items-center gap-1.5 text-[.72rem] font-bold rounded-full leading-none whitespace-nowrap;
     padding:6px 12px; background: var(--color-paper-deep); color: var(--color-ink-soft); border:1px solid var(--color-line);
   }
-  .profile-meta-chip .presence-text { @apply text-[.72rem] font-bold; color:inherit; }
-  .profile-meta-chip:has(.presence-text:empty) { display:none; }
   .profile-meta-chip.chip-session { @apply font-mono; letter-spacing:.2px; }
   .profile-meta-chip.chip-admin {
     background: linear-gradient(135deg, var(--color-gold-100), var(--color-gold-50));
     color: var(--color-gold-600); border-color: var(--color-gold-100);
   }
   .profile-meta-chip.chip-admin svg { width:11px; height:11px; flex-shrink:0; }
-  .profile-meta-chip .presence-text::before {
-    content:""; @apply inline-block rounded-full shrink-0; width:6px; height:6px; margin-right:5px; background: var(--color-ink-faint);
-  }
-  .profile-meta-chip .presence-text.online-now {
-    color: var(--color-forest-600);
-  }
-  .profile-meta-chip .presence-text.online-now::before {
-    background: var(--color-forest-500); box-shadow:0 0 0 2px color-mix(in srgb, var(--color-forest-500) 22%, transparent);
-  }
 
   /* Bio — plain centered text under the header, no card/background. */
   .profile-own-bio {
@@ -1590,12 +1605,49 @@
     @apply text-left bg-surface rounded-[22px] shadow-[var(--shadow-card)];
     padding:6px 16px; border:1px solid var(--color-line);
   }
-  .profile-flow-actions { @apply text-center; padding:18px 0 22px; }
   .profile-detail-row { @apply flex justify-between items-center gap-3 border-b text-[.87rem]; padding:13px 2px; border-color: var(--color-line); }
   .profile-detail-row:last-child { @apply border-b-0; }
   .profile-detail-row span:first-child { @apply font-semibold shrink-0; color: var(--color-ink-faint); }
   .profile-detail-row span:last-child { @apply font-bold text-right break-words; }
   .hidden-field-tag { @apply text-[.66rem] font-extrabold rounded-md ml-1.5 uppercase tracking-wide; background: var(--color-paper-deep); color: var(--color-ink-faint); padding:2px 7px; }
+
+  /* ---------- Profile action row — Facebook-style, sits right under the
+     stat chips (above the Info/Posts/Notes tabs) instead of buried at the
+     bottom of the Info tab. One wide primary pill (Message on a
+     classmate's page, Edit Profile in that exact same slot on your own)
+     plus small circular icon buttons for the secondary actions (Call,
+     and a "more" kebab that now holds Block/Unblock — no permanently
+     visible Block button sitting on the page anymore). ---------- */
+  .profile-action-row { @apply relative z-[1] flex items-center gap-2.5; margin:18px 2px 2px; }
+  .profile-action-primary {
+    @apply flex-1 flex items-center justify-center gap-2 rounded-full text-white text-[.92rem] font-bold transition-transform;
+    height:46px; background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800)); box-shadow: var(--shadow-btn);
+  }
+  .profile-action-primary:active { transform:scale(.98); filter:brightness(.95); }
+  .profile-action-primary svg { @apply shrink-0; }
+  .profile-action-icon-btn {
+    @apply flex items-center justify-center rounded-full shrink-0 transition-transform;
+    width:46px; height:46px; background: var(--color-paper-deep); color: var(--color-ink-soft); border:1px solid var(--color-line);
+  }
+  .profile-action-icon-btn:active { transform:scale(.94); background: var(--color-forest-100); color: var(--color-forest-700); }
+  /* The "more" kebab reuses the shared .kebab-menu/.kebab-dropdown system
+     (see ui-utils.js) — just resized here to match the round action
+     buttons beside it, mirroring how the DM thread header's own
+     three-dot trigger is resized (.dm-thread-more-menu) for its context. */
+  .profile-more-menu .kebab-btn { width:46px; height:46px; background: var(--color-paper-deep); color: var(--color-ink-soft); border:1px solid var(--color-line); }
+  .profile-more-menu .kebab-btn:active { transform:scale(.94); }
+  .profile-more-menu.is-blocking .kebab-btn { color: var(--color-danger-600); background: var(--color-clay-100); border-color:transparent; }
+  .profile-more-menu .kebab-dropdown { min-width:200px; }
+  .pv-call-disabled { @apply text-center text-[.8rem]; color: var(--color-ink-faint); margin:14px 2px 2px; }
+
+  /* ---------- Avatar action sheet (own profile) — "View Photo" /
+     "Change Photo", opened from the camera badge on the avatar. Reuses
+     the shared bottom-sheet modal, styled as a short icon+label list
+     like a native app's photo-menu sheet. ---------- */
+  .avatar-sheet { @apply flex flex-col gap-1 -mx-1; }
+  .avatar-sheet-item { @apply flex items-center gap-3 w-full text-left rounded-2xl text-[.92rem] font-bold; padding:13px 12px; color: var(--color-ink); }
+  .avatar-sheet-item:active { background: var(--color-paper-deep); }
+  .avatar-sheet-icon { @apply flex items-center justify-center rounded-full shrink-0; width:40px; height:40px; background: var(--color-forest-100); color: var(--color-forest-700); }
 
   /* ---------- Profile page header tabs (Info / Posts) — shared by
      "My Profile" and any classmate's full profile page. ---------- */
@@ -1613,18 +1665,6 @@
      app bar itself (#topbar-back-btn, near .topbar-left) — see app.js's
      TOPBAR_BACK_ROUTES — so Search/Profile/Post/Notices/Reports/Settings
      no longer carry a second header row of their own. */
-  .profile-modal-loading { @apply flex items-center justify-center gap-2.5 text-sm; padding:34px 0; color: var(--color-ink-soft); }
-  .pv-header { @apply text-center pb-2.5; }
-  .pv-avatar { @apply mx-auto mb-2.5; width:64px; height:64px; }
-  .pv-header h3 { @apply text-[1.08rem]; }
-  .pv-sub { @apply text-xs mt-0.5; color: var(--color-ink-faint); }
-  .pv-bio { @apply text-[.87rem] text-center leading-relaxed; color: var(--color-ink-soft); max-width:360px; margin:6px auto 14px; }
-  .pv-details { @apply border-t mb-4; border-color: var(--color-line); }
-  .pv-detail-row { @apply flex justify-between border-b text-[.87rem]; padding:11px 2px; border-color: var(--color-line); }
-  .pv-detail-row span:first-child { @apply font-semibold; color: var(--color-ink-faint); }
-  .pv-detail-row span:last-child { @apply font-bold text-right; }
-  .hidden-field { @apply font-semibold italic; color: var(--color-ink-faint); }
-  .pv-call-disabled { @apply text-center text-sm; color: var(--color-ink-faint); padding:10px 0 2px; }
 
   .privacy-block { @apply mt-0.5 mb-1 pt-1.5 border-t; border-color: var(--color-line); }
   .privacy-block-title { @apply text-xs font-extrabold uppercase tracking-wide; color: var(--color-ink-faint); margin:10px 0 8px; }
