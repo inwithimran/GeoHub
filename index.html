@@ -344,13 +344,18 @@
   .auth-form { @apply flex flex-col gap-4 animate-form-in; }
 
   @media (min-width:900px) {
-    .auth-split { grid-template-columns: 44% 56%; }
-    .auth-panel-brand { padding: 52px 50px; }
+    /* Lock the split to exactly the viewport height and let each column
+       scroll independently — the brand panel stays put while only the
+       form column (where the actual content can grow, e.g. the Sign Up
+       fields) scrolls. Without this the whole page scrolled together,
+       dragging the brand panel up and out of view with it. */
+    .auth-split { grid-template-columns: 44% 56%; height:100vh; overflow:hidden; }
+    .auth-panel-brand { padding: 52px 50px; height:100vh; overflow-y:auto; }
     .auth-brand-mid { margin: 36px 0 30px; }
     .auth-brand-mid h1 { font-size:2.3rem; max-width:380px; }
     .auth-brand-mid p { max-width:340px; }
     .auth-feature-list { @apply flex; }
-    .auth-panel-form { align-items:center; padding:40px; }
+    .auth-panel-form { align-items:center; padding:40px; height:100vh; overflow-y:auto; }
     .auth-card { padding: 6px 20px 20px; }
   }
 
@@ -463,27 +468,11 @@
   .btn-google:active { background: var(--color-paper-deep); transform:scale(.98); }
   .btn-google.full { @apply w-full; }
 
-  /* ---------- Auth gate — the first thing shown: two entry buttons,
-     no form in sight until the person picks one. ---------- */
-  .auth-gate { @apply flex flex-col gap-3.5 animate-form-in; }
-  .auth-gate-divider { @apply flex items-center gap-3 text-xs font-semibold; color: var(--color-ink-faint); }
+  /* ---------- Auth card — Google sign-in always sits above the
+     Log In / Sign Up form (never hidden behind a step), so there's
+     no separate "gate" screen and no Back button to get to it. ---------- */
+  .auth-gate-divider { @apply flex items-center gap-3 text-xs font-semibold my-1; color: var(--color-ink-faint); }
   .auth-gate-divider::before, .auth-gate-divider::after { content:""; @apply flex-1 h-px; background: var(--color-line); }
-  .btn-email-gate {
-    @apply flex items-center gap-3 text-left px-4 py-3 rounded-full font-bold text-[.92rem] transition-transform;
-    background: var(--color-forest-50); color: var(--color-forest-700); border:1.5px solid var(--color-forest-200);
-  }
-  .btn-email-gate:active { background: var(--color-forest-100); transform:scale(.98); }
-  .btn-email-gate.full { @apply w-full; }
-  .btn-email-gate-icon {
-    @apply w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-white;
-    background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800));
-  }
-  .auth-form-section { @apply animate-form-in; }
-  .auth-back-btn {
-    @apply inline-flex items-center gap-1.5 text-[.8rem] font-bold mb-4 -ml-1 px-2 py-1 rounded-full transition-colors;
-    color: var(--color-ink-soft);
-  }
-  .auth-back-btn:active { background: var(--color-paper-deep); }
 
   /* ---------- App shell ---------- */
   .app-shell { @apply grid min-h-screen w-full; grid-template-columns:1fr; grid-template-rows:58px 1fr 68px; }
@@ -1806,12 +1795,17 @@
      starts with an <h3> title, that title sticks to the top of the
      scrolling area too (see "#modal-scroll > #modal-body > h3:first-child"
      below) so long modals never scroll their own heading out of view. */
+  /* While a modal is open, lock the page behind it — otherwise scrolling
+     inside the sheet (or over the backdrop) chained into the document
+     underneath once the sheet's own scroll hit its top/bottom. Same
+     body:has() overflow-lock pattern already used for chat-mode above. */
+  body:has(#modal-overlay:not(.hidden)) { overflow:hidden; }
   .modal-overlay { @apply fixed inset-0 z-[100] flex items-end justify-center; background: rgba(8,14,9,.55); backdrop-filter:blur(2px); }
   .modal-sheet {
     @apply relative bg-surface w-full rounded-t-[26px] animate-sheet-up flex flex-col;
     max-width:480px; padding:10px 0 0; max-height:88vh; overflow:hidden;
   }
-  .modal-scroll { @apply overflow-y-auto flex-1 min-h-0; padding:0 22px 26px; }
+  .modal-scroll { @apply overflow-y-auto flex-1 min-h-0; padding:0 22px 26px; overscroll-behavior:contain; }
   .modal-close-btn {
     @apply absolute z-[3] flex items-center justify-center rounded-full text-white transition-transform shrink-0;
     top:14px; right:14px; width:34px; height:34px; background: rgba(23,36,28,.82);
@@ -1990,47 +1984,30 @@
             <small>Log in, or create your student account</small>
           </div>
 
-          <!-- ---------- GATE: the only thing shown at first — two entry
-               buttons, no form fields in sight. ---------- -->
-          <div class="auth-gate" id="auth-gate">
-            <button type="button" id="google-signin-btn" class="btn-google full">
-              <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-                <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.91c1.7-1.57 2.69-3.88 2.69-6.62z"/>
-                <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.91-2.26c-.81.54-1.84.86-3.05.86-2.35 0-4.34-1.58-5.05-3.71H.9v2.33A9 9 0 0 0 9 18z"/>
-                <path fill="#FBBC05" d="M3.95 10.71A5.4 5.4 0 0 1 3.67 9c0-.6.1-1.18.28-1.71V4.96H.9A9 9 0 0 0 0 9c0 1.45.35 2.83.9 4.04l3.05-2.33z"/>
-                <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .9 4.96l3.05 2.33C4.66 5.16 6.65 3.58 9 3.58z"/>
-              </svg>
-              <span>Continue with Google</span>
-            </button>
-            <p id="google-auth-error" class="form-error"></p>
+          <!-- ---------- Google sign-in: always shown above the form (on
+               both the Log In and Sign Up tabs), so it's never hidden
+               behind a separate step and no Back button is needed to
+               reach it. ---------- -->
+          <button type="button" id="google-signin-btn" class="btn-google full">
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+              <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.91c1.7-1.57 2.69-3.88 2.69-6.62z"/>
+              <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.91-2.26c-.81.54-1.84.86-3.05.86-2.35 0-4.34-1.58-5.05-3.71H.9v2.33A9 9 0 0 0 9 18z"/>
+              <path fill="#FBBC05" d="M3.95 10.71A5.4 5.4 0 0 1 3.67 9c0-.6.1-1.18.28-1.71V4.96H.9A9 9 0 0 0 0 9c0 1.45.35 2.83.9 4.04l3.05-2.33z"/>
+              <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .9 4.96l3.05 2.33C4.66 5.16 6.65 3.58 9 3.58z"/>
+            </svg>
+            <span>Continue with Google</span>
+          </button>
+          <p id="google-auth-error" class="form-error"></p>
 
-            <div class="auth-gate-divider"><span>or</span></div>
+          <div class="auth-gate-divider"><span>or</span></div>
 
-            <button type="button" id="open-email-form-btn" class="btn-email-gate full">
-              <span class="btn-email-gate-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m3.5 7 8.5 6 8.5-6"/></svg>
-              </span>
-              <span>Log in with Email &amp; Password</span>
-            </button>
-
-            <p class="auth-switch-hint">New here? <button type="button" class="link-btn" id="open-signup-gate-btn">Create an account</button></p>
+          <div class="auth-toggle" id="auth-tabs" role="tablist">
+            <span class="auth-toggle-thumb"></span>
+            <button class="auth-tab active" data-tab="login" role="tab" id="auth-tab-login" aria-selected="true" aria-controls="login-form">Log In</button>
+            <button class="auth-tab" data-tab="signup" role="tab" id="auth-tab-signup" aria-selected="false" aria-controls="signup-form" tabindex="-1">Sign Up</button>
           </div>
 
-          <!-- ---------- FORM SECTION: only reached after choosing the
-               email option above; a Back button returns to the gate. ---------- -->
-          <div class="auth-form-section hidden" id="auth-form-section">
-            <button type="button" class="auth-back-btn" id="auth-back-btn">
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-              Back
-            </button>
-
-            <div class="auth-toggle" id="auth-tabs" role="tablist">
-              <span class="auth-toggle-thumb"></span>
-              <button class="auth-tab active" data-tab="login" role="tab" id="auth-tab-login" aria-selected="true" aria-controls="login-form">Log In</button>
-              <button class="auth-tab" data-tab="signup" role="tab" id="auth-tab-signup" aria-selected="false" aria-controls="signup-form" tabindex="-1">Sign Up</button>
-            </div>
-
-            <div class="auth-body">
+          <div class="auth-body">
             <!-- LOGIN FORM -->
             <form id="login-form" class="auth-form" role="tabpanel" aria-labelledby="auth-tab-login">
           <label class="field-line">
@@ -2129,7 +2106,6 @@
 
           <p class="auth-switch-hint">Already a member? <button type="button" class="link-btn" data-tab="login">Log in</button></p>
         </form>
-            </div>
           </div>
         </div>
       </div>
