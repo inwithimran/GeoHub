@@ -259,7 +259,14 @@ service cloud.firestore {
     match /resources/{resId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.contributorUid == request.auth.uid;
-      allow update: if isOwner(resource.data.contributorUid);
+      // The contributor can edit anything on their own resource. Anyone else
+      // who's signed in may ONLY bump the "openCount" field (view/download
+      // tally, incremented client-side when someone taps Open/Download on
+      // resources.js's row) — same narrow-field pattern as posts' likes —
+      // so a classmate opening a note they didn't share can't touch
+      // anything else on the document.
+      allow update: if isOwner(resource.data.contributorUid) ||
+        (isSignedIn() && onlyChangedFields(["openCount"]));
       allow delete: if isOwner(resource.data.contributorUid) || isAdmin();
     }
 

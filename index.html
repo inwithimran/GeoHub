@@ -436,6 +436,10 @@
   .btn-google {
     @apply flex items-center justify-center gap-2.5 px-4.5 py-3.5 rounded-full font-bold text-[.92rem] transition-transform;
     background:#fff; color:#3c4043; border:1.5px solid var(--color-line); box-shadow:0 1px 2px rgba(23,36,28,.05), 0 4px 12px rgba(23,36,28,.05);
+    /* Same fixed-height reasoning as .btn-primary/.btn-outline above — this
+       one was missing it, so setBtnLoading()'s spinner swap could nudge the
+       line-box height and make the button "grow" for an instant. */
+    line-height:1.2; min-height:52px;
   }
   .btn-google:active { background: var(--color-paper-deep); transform:scale(.98); }
   .btn-google.full { @apply w-full; }
@@ -696,11 +700,18 @@
   .msg-subtab-btn {
     @apply relative flex-1 flex items-center justify-center gap-1.5 text-sm font-extrabold rounded-full transition-colors;
     padding:11px 10px; color: var(--color-ink-soft); background: var(--color-surface); border:1px solid var(--color-line);
+    /* Fixed line-height + a nowrap/truncating label (below) means this bar
+       renders at the SAME height whether its unread badge is hidden or
+       showing — without this, the badge appearing eats into the row's
+       width, "Private Messages"/"Department Chat" wraps onto a second
+       line, and the whole bar grows taller right as the badge lights up. */
+    line-height:1.2;
   }
   .msg-subtab-btn.active { @apply text-white; background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800)); border-color:transparent; box-shadow: var(--shadow-btn); }
   .msg-subtab-icon { @apply shrink-0; }
+  .msg-subtab-label { @apply min-w-0 overflow-hidden whitespace-nowrap text-ellipsis; }
   .msg-tab-badge {
-    @apply inline-flex items-center justify-center text-white font-extrabold rounded-full;
+    @apply inline-flex items-center justify-center text-white font-extrabold rounded-full shrink-0;
     min-width:17px; height:17px; font-size:.62rem; padding:0 4px;
     background: linear-gradient(135deg, var(--color-danger-500), var(--color-danger-600));
   }
@@ -1120,6 +1131,7 @@
   .resource-row-info { @apply flex-1 min-w-0; }
   .resource-row-info h4 { @apply text-[.92rem] font-bold leading-snug break-words; margin:2px 0; }
   .res-meta { @apply text-xs; color: var(--color-ink-faint); }
+  .res-open-count { @apply font-bold; color: var(--color-forest-600); }
   .res-cat { @apply text-[.66rem] font-extrabold uppercase tracking-wide rounded-md; background: var(--color-gold-50); color: var(--color-gold-600); padding:2px 7px; }
   a.res-link {
     @apply shrink-0 inline-flex items-center gap-1.5 text-[.78rem] font-extrabold text-white rounded-full transition-transform;
@@ -1189,6 +1201,7 @@
     @apply w-9 h-9 rounded-full flex items-center justify-center text-[.95rem] shrink-0;
     background: var(--color-gold-50); color: var(--color-gold-600);
   }
+  .search-result-avatar.avatar { @apply w-9 h-9; } /* match the other result kinds' .search-result-icon size */
   .search-result-info { @apply flex-1 min-w-0; }
   .search-result-info strong { @apply block text-[.88rem] whitespace-nowrap overflow-hidden text-ellipsis; }
   .search-result-info strong.search-result-title-full { @apply whitespace-normal break-words leading-snug; }
@@ -2104,6 +2117,10 @@
 
       <!-- ===== SECTION 2: NOTES & SHEET HUB ===== -->
       <section id="section-resources" class="route-section">
+        <div class="search-bar">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="resource-search" placeholder="Search notes &amp; sheets by title…" />
+        </div>
         <div class="chip-scroller">
           <div class="chip-row" id="resource-categories">
             <!-- category chips injected by JS -->
@@ -2156,11 +2173,11 @@
         <div class="msg-subtabs" role="tablist">
           <button type="button" class="msg-subtab-btn active" data-msgtab="dm" role="tab" aria-selected="true" id="msg-subtab-dm">
             <svg class="msg-subtab-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="3.4"/><path d="M2.5 20v-1.2A5.3 5.3 0 0 1 7.8 13.5h2.4"/><path d="M14 15.5l2.7 2.7 4.3-4.7"/></svg>
-            Private Messages <span id="dm-total-unread-badge" class="msg-tab-badge hidden">0</span>
+            <span class="msg-subtab-label">Private Messages</span> <span id="dm-total-unread-badge" class="msg-tab-badge hidden">0</span>
           </button>
           <button type="button" class="msg-subtab-btn" data-msgtab="class" role="tab" aria-selected="false" id="msg-subtab-class">
             <svg class="msg-subtab-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20l1.4-3.7A7.6 7.6 0 1 1 8 19.4z"/></svg>
-            Department Chat <span id="class-chat-unread-badge" class="msg-tab-badge hidden">0</span>
+            <span class="msg-subtab-label">Department Chat</span> <span id="class-chat-unread-badge" class="msg-tab-badge hidden">0</span>
           </button>
         </div>
 
