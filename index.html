@@ -1501,12 +1501,10 @@
     background: var(--color-forest-500); box-shadow:0 0 0 2px color-mix(in srgb, var(--color-forest-500) 22%, transparent);
   }
 
-  /* Bio — a quiet quoted card rather than a bare centered line, so it
-     reads as a distinct "about" note instead of one more stacked fact. */
+  /* Bio — plain centered text under the header, no card/background. */
   .profile-own-bio {
-    @apply relative mx-auto text-[.87rem] leading-relaxed text-center rounded-2xl;
-    color: var(--color-ink-soft); max-width:360px; margin-top:16px; padding:10px 18px;
-    background: var(--color-paper-deep); border:1px solid var(--color-line); font-style:italic;
+    @apply relative text-[.87rem] leading-relaxed text-center;
+    color: var(--color-ink-soft); max-width:360px; margin:14px auto 0;
   }
 
   .profile-stat-row { @apply relative z-[1] flex items-stretch justify-center gap-2 mt-4.5 mb-1; }
@@ -1549,7 +1547,7 @@
   .pv-avatar { @apply mx-auto mb-2.5; width:64px; height:64px; }
   .pv-header h3 { @apply text-[1.08rem]; }
   .pv-sub { @apply text-xs mt-0.5; color: var(--color-ink-faint); }
-  .pv-bio { @apply text-[.87rem] text-center leading-relaxed; color: var(--color-ink-soft); margin:6px 0 14px; }
+  .pv-bio { @apply text-[.87rem] text-center leading-relaxed; color: var(--color-ink-soft); max-width:360px; margin:6px auto 14px; }
   .pv-details { @apply border-t mb-4; border-color: var(--color-line); }
   .pv-detail-row { @apply flex justify-between border-b text-[.87rem]; padding:11px 2px; border-color: var(--color-line); }
   .pv-detail-row span:first-child { @apply font-semibold; color: var(--color-ink-faint); }
@@ -2216,6 +2214,7 @@
         </button>
         <button type="button" class="topbar-notif-btn" id="topbar-settings-btn" aria-label="Menu">
           <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+          <span class="notif-badge hidden" id="topbar-settings-badge">0</span>
         </button>
       </div>
     </header>
