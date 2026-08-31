@@ -247,7 +247,17 @@ function subscribeClassChatRead() {
   const myUid = auth.currentUser?.uid;
   if (!myUid || unsubscribeClassChatRead) return;
   unsubscribeClassChatRead = onSnapshot(doc(db, "classChatReads", myUid), (snap) => {
-    classChatLastReadMs = snap.exists() ? (snap.data().lastReadAt?.toMillis?.() || 0) : 0;
+    const lastReadAt = snap.data()?.lastReadAt;
+    // markClassChatRead()'s setDoc(..., serverTimestamp()) fires this listener
+    // TWICE for the same write: once immediately with the local/pending
+    // version (where a serverTimestamp() sentinel reads back as null until
+    // the server confirms it), then again once it's actually confirmed. If
+    // we trusted the first one, `lastReadAt?.toMillis?.() || 0` would reset
+    // classChatLastReadMs to 0 for that instant — every message would look
+    // unread again — and the badge would flash back on before immediately
+    // clearing once the real timestamp lands. Skip that in-between echo.
+    if (snap.metadata.hasPendingWrites && lastReadAt == null) return;
+    classChatLastReadMs = snap.exists() ? (lastReadAt?.toMillis?.() || 0) : 0;
     paintClassChatBadge();
   }, () => { /* no doc yet (never opened Class Chat before), or offline — badge just stays at its last known count */ });
 }

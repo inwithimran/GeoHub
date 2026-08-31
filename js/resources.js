@@ -1,11 +1,15 @@
 // ============================================================
 // RESOURCES.JS — Central Note & Sheet Hub
 // Resources live in the "resources" collection:
-// { title, category, contributorName, contributorUid, link, createdAt }
+// { title, category, contributorName, contributorUid, link, openCount, createdAt }
+// openCount is a simple view/download tally (see bumpResourceOpenCount()),
+// bumped by ANY signed-in student who taps Open/Download — not just the
+// contributor — so the Hub can surface which notes are actually useful,
+// not just recently posted.
 // ============================================================
 import { db, auth, RESOURCE_CATEGORIES } from "./firebase-config.js";
 import {
-  collection, addDoc, updateDoc, deleteDoc, doc, setDoc, onSnapshot, query, where, orderBy, limit, getDocs, serverTimestamp
+  collection, addDoc, updateDoc, deleteDoc, doc, setDoc, onSnapshot, query, where, orderBy, limit, getDocs, serverTimestamp, increment
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { currentProfile } from "./auth.js";
 import {
@@ -39,6 +43,7 @@ function extOf(name = "") {
 const chipRow = document.getElementById("resource-categories");
 const resourceList = document.getElementById("resource-list");
 const addBtn = document.getElementById("add-resource-btn");
+const searchInput = document.getElementById("resource-search");
 
 let allResources = [];
 let activeCategory = "All";
@@ -72,6 +77,7 @@ let lastLoadedCount = 0;
 export function initResources() {
   buildChips();
   addBtn.addEventListener("click", openAddResourceModal);
+  searchInput?.addEventListener("input", renderResources);
   subscribeResources();
   subscribeBookmarks();
 }
@@ -156,27 +162,43 @@ function buildChips() {
   });
 }
 
+/** Keyword search over title, category, and contributor name — combined with
+ *  whichever category chip (or the Saved chip) is active, same "narrow what's
+ *  already loaded" approach as the Directory's own search box. */
+function matchesResourceSearch(r, term) {
+  if (!term) return true;
+  return (r.title || "").toLowerCase().includes(term) ||
+    (r.category || "").toLowerCase().includes(term) ||
+    (r.contributorName || "").toLowerCase().includes(term);
+}
+
 function renderResources() {
+  const term = (searchInput?.value || "").trim().toLowerCase();
+
   // The Saved chip renders straight from the bookmarks listener, not a
   // filtered slice of `allResources` — see the big comment above
   // subscribeBookmarks() for why. It's a small personal list, so it never
   // paginates the way the main Hub view does below.
   if (activeCategory === SAVED_CHIP_KEY) {
-    renderResourceRows(savedResources, resourceList, "No saved notes yet — tap the bookmark icon on any resource to save it for later.", { savedView: true });
+    const savedFiltered = savedResources.filter(r => matchesResourceSearch(r, term));
+    renderResourceRows(savedFiltered, resourceList, term ? "No saved notes match your search." : "No saved notes yet — tap the bookmark icon on any resource to save it for later.", { savedView: true });
     return;
   }
 
-  const filtered = activeCategory === "All"
+  const filtered = (activeCategory === "All"
     ? allResources
-    : allResources.filter(r => r.category === activeCategory);
-  renderResourceRows(filtered, resourceList, "No resources shared yet in this category.");
+    : allResources.filter(r => r.category === activeCategory)
+  ).filter(r => matchesResourceSearch(r, term));
+  renderResourceRows(filtered, resourceList, term ? "No resources match your search." : "No resources shared yet in this category.");
 
   // A full page came back — there may be more resources beyond it.
   // (Switching category chips only ever filters what's already loaded,
   // so the button reflects the loaded set being capped, not the
   // filtered count.) Only the main Hub list paginates this way — a
   // profile's "Notes" tab uses loadUserResources() below instead.
-  if (lastLoadedCount === resourcePageLimit) {
+  // Skipped while actively searching/filtering, since "load more" would
+  // just fetch more unfiltered pages instead of surfacing better matches.
+  if (!term && lastLoadedCount === resourcePageLimit) {
     const loadMoreBtn = document.createElement("button");
     loadMoreBtn.type = "button";
     loadMoreBtn.className = "btn-outline full resource-load-more";
@@ -198,6 +220,17 @@ function renderResources() {
  * the meta line reads "Saved <time>" instead of "Shared by <name> <time>",
  * and there's no owner edit/delete kebab (unsaving is the only action).
  */
+/** Best-effort "someone opened/downloaded this" tally — fire-and-forget so a
+ *  slow/offline write never delays the actual Open/Download navigation
+ *  (the anchor's own href does that natively). Lets contributors and
+ *  browsers alike see which notes are actually getting used, not just
+ *  freshly posted. */
+function bumpResourceOpenCount(resId) {
+  updateDoc(doc(db, "resources", resId), { openCount: increment(1) }).catch(() => {
+    /* non-critical — a missed tally isn't worth surfacing an error for */
+  });
+}
+
 function renderResourceRows(resources, listEl, emptyMessage, { savedView = false } = {}) {
   if (!listEl) return;
   if (!resources.length) {
@@ -211,16 +244,18 @@ function renderResourceRows(resources, listEl, emptyMessage, { savedView = false
     const metaLine = savedView
       ? `${r.contributorName ? "Shared by " + escapeHtml(r.contributorName) + " · " : ""}Saved ${timeAgo(r.savedAt)}`
       : `Shared by ${escapeHtml(r.contributorName)} · ${timeAgo(r.createdAt)}`;
+    const openCount = r.openCount || 0;
+    const openCountLabel = r.sourceType === "upload" ? "download" : "view";
     return `
     <div class="resource-row" data-res-id="${r.id}">
       <div class="resource-row-icon">${fileGlyph(r)}</div>
       <div class="resource-row-info">
         <span class="res-cat">${escapeHtml(r.category)}</span>
         <h4>${escapeHtml(r.title)}</h4>
-        <div class="res-meta">${metaLine}</div>
+        <div class="res-meta">${metaLine}${openCount > 0 ? ` · <span class="res-open-count" title="${openCount} ${openCountLabel}${openCount === 1 ? "" : "s"}">${openCount} ${openCountLabel}${openCount === 1 ? "" : "s"}</span>` : ""}</div>
       </div>
       ${bookmarkBtnHtml(r.id, saved)}
-      <a class="res-link" href="${escapeHtml(r.link)}" target="_blank" rel="noopener">
+      <a class="res-link" href="${escapeHtml(r.link)}" target="_blank" rel="noopener" data-res-open-id="${r.id}">
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3h7v7"/><path d="M10 14 21 3"/><path d="M19 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h6"/></svg>
         <span>${r.sourceType === "upload" ? "Download" : "Open"}</span>
       </a>
@@ -236,6 +271,10 @@ function renderResourceRows(resources, listEl, emptyMessage, { savedView = false
     btn.addEventListener("click", () => {
       toggleBookmark(btn.dataset.resId, btn.dataset.saved === "1");
     });
+  });
+
+  listEl.querySelectorAll(".res-link[data-res-open-id]").forEach(a => {
+    a.addEventListener("click", () => bumpResourceOpenCount(a.dataset.resOpenId));
   });
 
   if (savedView) return; // nothing else to wire — unsaving is the only action in this view
@@ -383,6 +422,7 @@ async function submitResource() {
       title, category, link, sourceType, fileExt, fileName,
       contributorName: currentProfile.name,
       contributorUid: auth.currentUser.uid,
+      openCount: 0,
       createdAt: serverTimestamp()
     });
     closeModal();

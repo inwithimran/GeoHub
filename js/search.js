@@ -1,8 +1,8 @@
 // ============================================================
 // SEARCH.JS — Global Search (topbar search icon -> its own page).
 // Searches Wall posts, Notes & Sheet Hub resources, the Notice Board,
-// and the Deadline tracker all from one search bar, including
-// "#hashtag" search over Wall posts.
+// the Deadline tracker, AND the Classmate Directory, all from one
+// search bar, including "#hashtag" search over Wall posts.
 //
 // Firestore has no built-in full-text search, and this app is a single
 // department's worth of data (dozens/hundreds of docs, not millions) —
@@ -14,10 +14,17 @@
 // of very-old content (beyond the cap) not being searchable — an
 // acceptable trade-off for how this app is actually used (finding
 // something from recent weeks, not archaeology).
+//
+// Classmates are the exception: they don't need their own fetch at all.
+// The Directory (js/directory.js) already keeps a live, always-warm
+// roster in memory for @mention autocomplete everywhere else in the
+// app, via getAllStudents() — so this just reads straight from that on
+// every keystroke instead of caching its own copy.
 // ============================================================
 import { db, auth } from "./firebase-config.js";
 import { collection, getDocs, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
-import { escapeHtml, timeAgo, showToast, skeletonRowsHtml } from "./ui-utils.js";
+import { escapeHtml, timeAgo, showToast, skeletonRowsHtml, avatarInner, nameWithBadge } from "./ui-utils.js";
+import { getAllStudents } from "./directory.js";
 
 const FETCH_CAP = 300; // per collection
 
@@ -71,7 +78,7 @@ export function ensureSearchDataLoaded() {
 
 function renderPlaceholderOrResults() {
   if (!input.value.trim()) {
-    resultsEl.innerHTML = `<p class="empty-state">Search across the Student Wall, Notes &amp; Sheets, and Notice Board.</p>`;
+    resultsEl.innerHTML = `<p class="empty-state">Search across the Student Wall, Notes &amp; Sheets, Notice Board, and Classmate Directory.</p>`;
     return;
   }
   runSearch();
@@ -84,11 +91,11 @@ function truncate(text = "", max = 100) {
 function runSearch() {
   if (!dataLoaded) return; // still loading — ensureSearchDataLoaded()'s .then() will call this once ready
   const raw = input.value.trim();
-  if (!raw) { resultsEl.innerHTML = `<p class="empty-state">Search across the Student Wall, Notes &amp; Sheets, and Notice Board.</p>`; return; }
+  if (!raw) { resultsEl.innerHTML = `<p class="empty-state">Search across the Student Wall, Notes &amp; Sheets, Notice Board, and Classmate Directory.</p>`; return; }
 
   const isHashtag = raw.startsWith("#");
   const q = (isHashtag ? raw.slice(1) : raw).toLowerCase().trim();
-  if (!q) { resultsEl.innerHTML = `<p class="empty-state">Search across the Student Wall, Notes &amp; Sheets, and Notice Board.</p>`; return; }
+  if (!q) { resultsEl.innerHTML = `<p class="empty-state">Search across the Student Wall, Notes &amp; Sheets, Notice Board, and Classmate Directory.</p>`; return; }
 
   const matchedPosts = posts.filter(p =>
     isHashtag
@@ -108,7 +115,16 @@ function runSearch() {
     (d.title || "").toLowerCase().includes(q) || (d.course || "").toLowerCase().includes(q) || (d.notes || "").toLowerCase().includes(q)
   ).slice(0, 25);
 
-  const totalCount = matchedPosts.length + matchedResources.length + matchedNotices.length + matchedDeadlines.length;
+  // Classmates: read live off the Directory's always-warm roster (see the
+  // header comment) rather than anything cached by this file, so a new
+  // signup or a profile edit is searchable immediately, no reload needed.
+  const matchedStudents = isHashtag ? [] : getAllStudents().filter(s =>
+    (s.name || "").toLowerCase().includes(q) ||
+    (s.roll || "").toLowerCase().includes(q) ||
+    (s.bloodGroup || "").toLowerCase().includes(q)
+  ).slice(0, 25);
+
+  const totalCount = matchedPosts.length + matchedResources.length + matchedNotices.length + matchedDeadlines.length + matchedStudents.length;
   if (!totalCount) {
     resultsEl.innerHTML = `<p class="empty-state">No results found for “${escapeHtml(raw)}”.</p>`;
     return;
@@ -159,6 +175,18 @@ function runSearch() {
         </div>
       </div>`).join("");
   }
+  if (matchedStudents.length) {
+    html += `<div class="search-result-section-title">Classmates</div>`;
+    html += matchedStudents.map(s => `
+      <div class="search-result-row" data-kind="student" data-id="${escapeHtml(s.uid || "")}">
+        <span class="avatar search-result-avatar">${avatarInner(s)}</span>
+        <div class="search-result-info">
+          <strong>${nameWithBadge(s.name || "Unnamed", s.email)}</strong>
+          <small>${escapeHtml(s.roll || "—")}${s.year ? " · " + escapeHtml(s.year) : ""}</small>
+        </div>
+      </div>`).join("");
+  }
+
   resultsEl.innerHTML = html;
 
   resultsEl.querySelectorAll(".search-result-row").forEach(row => {
@@ -168,6 +196,11 @@ function runSearch() {
 
 async function openResult(kind, id) {
   switch (kind) {
+    case "student": {
+      const { openUserProfilePage } = await import("./profile-view.js");
+      openUserProfilePage(id);
+      break;
+    }
     case "post": {
       const { openPostDetailPage } = await import("./post-detail.js");
       openPostDetailPage(id);
