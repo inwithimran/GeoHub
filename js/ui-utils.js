@@ -173,6 +173,26 @@ window.addEventListener("popstate", () => {
   closingFromPopstate = false;
 });
 
+// ============================================================
+// HORIZONTAL CHIP-ROW SCROLLING ON DESKTOP — .chip-row (category
+// filters on the Notes & Sheets Hub, year filters in the Classmate
+// Directory, …) hides its scrollbar and relies on a touch/trackpad
+// swipe to scroll sideways. A plain desktop mouse only has a
+// vertical wheel, so any chips past the visible edge were simply
+// unreachable there. Redirect an ordinary vertical wheel scroll into
+// horizontal scrolling whenever it happens over a .chip-row that
+// still has somewhere to go — delegated on document so it also
+// covers rows built dynamically after this file loads (e.g. the
+// Directory's year chips).
+// ============================================================
+document.addEventListener("wheel", (e) => {
+  const row = e.target.closest?.(".chip-row");
+  if (!row || row.scrollWidth <= row.clientWidth) return;
+  if (Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return; // already a horizontal gesture — let the row handle it natively
+  e.preventDefault();
+  row.scrollLeft += e.deltaY;
+}, { passive: false });
+
 /** Shared shimmer placeholder for any list that's still loading (Notice
  *  board, Notification tab, Classmate Directory, a profile's Posts/Notes
  *  tabs, …) — an avatar + a couple of lines per row, repeated `count` times,

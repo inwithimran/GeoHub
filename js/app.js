@@ -170,8 +170,12 @@ const allTabTriggers = document.querySelectorAll("[data-tab]");
 let featuresInitialized = false; // guards against re-subscribing on hot reload / re-login
 
 // ============================================================
-// AUTH SCREEN — tab switching + form submission
+// AUTH SCREEN — tab switching + form submission. Google sign-in
+// sits above the tabs on both Log In and Sign Up, always visible —
+// there's no separate "gate" step, so no Back button is needed.
 // ============================================================
+const authCardHead = document.getElementById("auth-card-head");
+
 function switchAuthTab(target) {
   const isLogin = target === "login";
   authTabButtons.forEach(t => {
@@ -185,40 +189,9 @@ function switchAuthTab(target) {
   signupForm.classList.toggle("hidden", isLogin);
   document.getElementById("login-error").textContent = "";
   document.getElementById("signup-error").textContent = "";
+  if (authCardHead) authCardHead.querySelector("small").textContent = isLogin ? "Log in to your account" : "Create your student account";
 }
 allTabTriggers.forEach(el => el.addEventListener("click", () => switchAuthTab(el.dataset.tab)));
-
-// ============================================================
-// AUTH GATE — the home/landing state of the auth screen shows
-// only two entry buttons (Google / Email & Password), never a
-// bare form. Picking the email option reveals the form section;
-// Back returns to the gate.
-// ============================================================
-const authGate = document.getElementById("auth-gate");
-const authFormSection = document.getElementById("auth-form-section");
-const authCardHead = document.getElementById("auth-card-head");
-const openEmailFormBtn = document.getElementById("open-email-form-btn");
-const openSignupGateBtn = document.getElementById("open-signup-gate-btn");
-const authBackBtn = document.getElementById("auth-back-btn");
-
-/** Show the gate (two entry buttons) and hide the form section. */
-function showAuthGate() {
-  authFormSection.classList.add("hidden");
-  authGate.classList.remove("hidden");
-  if (authCardHead) authCardHead.querySelector("small").textContent = "Log in, or create your student account";
-}
-
-/** Reveal the email/password form section on a given tab, hiding the gate. */
-function showAuthFormSection(tab) {
-  switchAuthTab(tab);
-  authGate.classList.add("hidden");
-  authFormSection.classList.remove("hidden");
-  if (authCardHead) authCardHead.querySelector("small").textContent = tab === "signup" ? "Create your student account" : "Log in to your account";
-}
-
-openEmailFormBtn.addEventListener("click", () => showAuthFormSection("login"));
-openSignupGateBtn.addEventListener("click", () => showAuthFormSection("signup"));
-authBackBtn.addEventListener("click", showAuthGate);
 
 // ============================================================
 // PASSWORD SHOW / HIDE — works for every ".pw-toggle" button
@@ -1092,7 +1065,7 @@ watchAuthState(
       featuresInitialized = false;
     }
     // Reset auth forms (and any stuck loading buttons) for the next login
-    showAuthGate();
+    switchAuthTab("login");
     loginForm.reset();
     signupForm.reset();
     setBtnLoading(loginForm.querySelector('button[type="submit"]'), false);
