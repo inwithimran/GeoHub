@@ -531,6 +531,25 @@
      column stays pinned to the viewport width and the ellipsis truncation
      further down actually holds. */
   .topbar-left { @apply flex items-center gap-2.5 min-w-0; }
+  /* ---- Back button lives in the same slot as the brand mark: only one
+     of the two is ever showing (see .topbar-left.has-back below), the
+     way a native Android app bar swaps its nav icon for a back arrow on
+     a drill-down screen instead of running a second bar underneath. ---- */
+  .topbar-back-btn {
+    @apply flex items-center justify-center shrink-0 rounded-full transition-transform;
+    width:38px; height:38px; background: rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.16); color:#fff;
+  }
+  .topbar-back-btn:active { background: rgba(255,255,255,.22); transform:scale(.92); }
+  @media (hover:hover) { .topbar-back-btn:hover { background: rgba(255,255,255,.2); } }
+  .topbar-left.has-back .topbar-logo { display:none; }
+  @media (min-width:900px) {
+    /* Desktop has the room to spell the button out, matching the
+       icon+label pill this app already uses for DM/Profile back
+       buttons elsewhere — consistent "smart back button" treatment,
+       just relocated into the bar itself instead of the page body. */
+    .topbar-back-btn { width:auto; height:38px; gap:7px; padding:0 16px 0 12px; }
+    .topbar-back-btn:active { transform:scale(.96); }
+  }
   .topbar-logo { color:#fff !important; }
   .topbar-titles { @apply min-w-0 flex flex-col; }
   #topbar-title { @apply text-[1rem] font-extrabold whitespace-nowrap overflow-hidden text-ellipsis; }
@@ -701,13 +720,42 @@
        mobile full-bleed strip: a bounded, centered panel with a visible
        edge (border + shadow + rounded corners) so the chat reads as a
        deliberate app surface on a wide screen rather than a narrow
-       column of loose rows floating in empty space. */
+       column of loose rows floating in empty space.
+
+       The card's explicit height (driven off 100dvh, ignoring .content's
+       own padding) is what actually decides how much empty space is
+       left under it — margin-bottom alone does NOT, because the card's
+       bottom edge always lands at exactly:
+         (.content's padding-top, 26px) + (margin-top) + height
+       So the height's subtracted amount is kept equal to
+       26(content padding-top) + margin-top + margin-bottom, which makes
+       the visible gap under the card come out equal to margin-bottom —
+       here a small 16px. If you want more/less gap, just change BOTH
+       the 16px in margin AND the matching 52px in the height calc
+       (52 = 26 + 10 + 16) together, keeping that same relationship. */
     .msg-route, .dm-thread-route {
-      margin:10px auto 28px; max-width:680px; width:100%;
-      height:calc(100dvh - 64px - 38px);
+      margin:10px auto 16px; max-width:680px; width:100%;
+      height:calc(100dvh - 64px - 52px);
       background: var(--color-surface); border:1px solid var(--color-line);
       border-radius:26px; box-shadow: var(--shadow-cardhover);
       overflow:hidden;
+    }
+    /* .content's own bottom padding (40px, meant for ordinary feed routes
+       like Wall/Resources that need breathing room above the page's own
+       end) doesn't get absorbed by the card's explicit height above — it
+       sits *outside* the card, so it was quietly making .content's real
+       box 40px taller than the row actually has room for. A grid row
+       doesn't clip that overflow, so the whole page (not just the card)
+       gained an extra 40px of vertical scroll — which visually looked
+       like "the whole card scrolls" even though the card itself has
+       overflow:hidden and never needed to move. Dropping .content's
+       bottom padding specifically while a Messages/DM-thread card is the
+       one showing removes that leftover space, so the card's own sizing
+       above is the only thing deciding the page's height and it stays
+       fixed in place, centered, exactly as tall as the viewport allows. */
+    .content:has(> .msg-route:not(.hidden)),
+    .content:has(> .dm-thread-route:not(.hidden)) {
+      padding-bottom: 0;
     }
   }
   @media (max-width:899px) {
@@ -894,9 +942,9 @@
      the button renders exactly as it always has (a plain circular icon
      button, left untouched per spec). On desktop, "just an icon" read as
      unfinished/unlabeled against the width of the new card header, so it
-     grows into a proper icon+label pill matching .profile-back-btn's
-     styling on the Profile/Post pages — the same "smart back button"
-     treatment on every drill-down surface. */
+     grows into a proper icon+label pill matching #topbar-back-btn's
+     styling in the app bar — the same "smart back button" treatment
+     on every drill-down surface. */
   .back-label { @apply hidden; }
   @media (min-width:900px) {
     .dm-thread-back-btn {
@@ -1471,21 +1519,11 @@
   .profile-tab-panel { @apply hidden; margin-top:16px; }
   .profile-tab-panel.active { @apply block animate-fade-up; }
 
-  /* ---------- Full-page classmate profile (drill-down, not a modal) ---------- */
-  .profile-page-topbar { @apply flex items-center mb-1 -mt-1; }
-  .profile-back-btn { @apply inline-flex items-center gap-1.5 text-sm font-bold rounded-full pl-1.5 pr-3.5 py-1.5 transition-colors; color: var(--color-ink-soft); }
-  .profile-back-btn:active { background: var(--color-paper-deep); }
-  .profile-back-btn-icon { @apply w-7 h-7 rounded-full flex items-center justify-center shrink-0; background: var(--color-paper-deep); }
-  @media (min-width:900px) {
-    /* Same pill-with-a-lifted-card feel as the redesigned Messages back
-       button above, so "Back" reads the same way everywhere on desktop. */
-    .profile-back-btn { background: var(--color-surface); border:1px solid var(--color-line); box-shadow: var(--shadow-card); padding:6px 16px 6px 6px; }
-    .profile-back-btn:active { transform:scale(.97); }
-    @media (hover:hover) {
-      .profile-back-btn:hover { background: var(--color-forest-50); border-color: var(--color-forest-200); color: var(--color-forest-700); box-shadow: var(--shadow-cardhover); }
-    }
-  }
-
+  /* ---------- Full-page classmate profile (drill-down, not a modal) ----------
+     The page-local "Back" pill that used to live here has moved into the
+     app bar itself (#topbar-back-btn, near .topbar-left) — see app.js's
+     TOPBAR_BACK_ROUTES — so Search/Profile/Post/Notices/Reports/Settings
+     no longer carry a second header row of their own. */
   .profile-modal-loading { @apply flex items-center justify-center gap-2.5 text-sm; padding:34px 0; color: var(--color-ink-soft); }
   .pv-header { @apply text-center pb-2.5; }
   .pv-avatar { @apply mx-auto mb-2.5; width:64px; height:64px; }
@@ -2127,7 +2165,17 @@
 
     <!-- ---------- TOP APP BAR ---------- -->
     <header class="topbar">
-      <div class="topbar-left">
+      <div class="topbar-left" id="topbar-left">
+        <!-- Android-style app bar back button: swaps in for the brand mark
+             whenever a drill-down page (Search/Profile/Post/Notices/
+             Reports/Settings — see TOPBAR_BACK_ROUTES in app.js) is open,
+             instead of that page carrying its own separate "Back" pill
+             floating below the bar. Icon-only on mobile; gains the
+             "Back" label on desktop via the shared .back-label rule. -->
+        <button type="button" id="topbar-back-btn" class="topbar-back-btn hidden" aria-label="Back">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+          <span class="back-label">Back</span>
+        </button>
         <div class="logo-mark-small topbar-logo">
           <span class="brand-mark">
             <img src="/icons/geohub-192.png" alt="GeoHub" />
@@ -2228,14 +2276,6 @@
 
       <!-- ===== SECTION 3A: GLOBAL SEARCH (own page, reached via the topbar search icon) ===== -->
       <section id="section-search" class="route-section">
-        <div class="profile-page-topbar">
-          <button type="button" id="search-back-btn" class="profile-back-btn">
-            <span class="profile-back-btn-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-            </span>
-            Back
-          </button>
-        </div>
         <div class="search-bar">
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <input type="text" id="global-search-input" placeholder="Search posts, resources, notices, #hashtags…" />
@@ -2350,40 +2390,16 @@
 
       <!-- ===== SECTION 6: A CLASSMATE'S PROFILE (drill-down page, not a modal) ===== -->
       <section id="section-user-profile" class="route-section">
-        <div class="profile-page-topbar">
-          <button type="button" id="user-profile-back-btn" class="profile-back-btn">
-            <span class="profile-back-btn-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-            </span>
-            Back
-          </button>
-        </div>
         <div id="user-profile-card" class="profile-card-panel"></div>
       </section>
 
       <!-- ===== SECTION 7: POST DETAIL (single-post drill-down page, not a modal) ===== -->
       <section id="section-post-detail" class="route-section">
-        <div class="profile-page-topbar">
-          <button type="button" id="post-detail-back-btn" class="profile-back-btn">
-            <span class="profile-back-btn-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-            </span>
-            Back
-          </button>
-        </div>
         <div id="post-detail-body" class="flat-list"></div>
       </section>
 
       <!-- ===== SECTION 8: NOTICES & NOTIFICATIONS (own page, not a modal) ===== -->
       <section id="section-notices" class="route-section">
-        <div class="profile-page-topbar">
-          <button type="button" id="notices-back-btn" class="profile-back-btn">
-            <span class="profile-back-btn-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-            </span>
-            Back
-          </button>
-        </div>
         <div class="notices-page-tabs" role="tablist">
           <button type="button" class="notices-page-tab-btn active" data-tab="notice" role="tab" id="notices-tab-notice" aria-selected="true" aria-controls="notices-panel-notice">
             Notice<span class="tab-badge hidden" id="notice-tab-badge">0</span>
@@ -2412,14 +2428,6 @@
            its own full page now, live-updating, so an admin doesn't need to
            dig into Notices to find it. ===== -->
       <section id="section-reports" class="route-section">
-        <div class="profile-page-topbar">
-          <button type="button" id="reports-back-btn" class="profile-back-btn">
-            <span class="profile-back-btn-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-            </span>
-            Back
-          </button>
-        </div>
         <div class="notif-panel-head">
           <span class="notif-panel-head-title">Reported Posts</span>
         </div>
@@ -2430,14 +2438,6 @@
 
       <!-- ===== SECTION 9: SETTINGS (opened via the header gear icon) ===== -->
       <section id="section-settings" class="route-section">
-        <div class="profile-page-topbar">
-          <button type="button" id="settings-back-btn" class="profile-back-btn">
-            <span class="profile-back-btn-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-            </span>
-            Back
-          </button>
-        </div>
         <div class="settings-page">
           <div class="quick-links-block">
             <div class="quick-links-title">Quick Links</div>
