@@ -126,10 +126,10 @@ export function isUserOnline(profile) {
   return ms > 0 && (Date.now() - ms) < ONLINE_WINDOW_MS;
 }
 
-/** "Online" / "Active 5m ago" / "" (nothing on file yet — e.g. an older account that predates this feature). */
+/** "Active Now" / "Active 5m ago" / "" (nothing on file yet — e.g. an older account that predates this feature). */
 export function presenceLabel(profile) {
   if (!profile) return "";
-  if (isUserOnline(profile)) return "Online";
+  if (isUserOnline(profile)) return "Active Now";
   if (!profile.lastActive) return "";
   return `Active ${timeAgo(profile.lastActive)}`;
 }
@@ -170,7 +170,7 @@ export function paintPresenceUI() {
   document.querySelectorAll("[data-presence-uid]").forEach((dot) => {
     const online = isUserOnline(getCachedProfile(dot.dataset.presenceUid));
     dot.classList.toggle("online", online);
-    dot.title = online ? "Online" : "";
+    dot.title = online ? "Active Now" : "";
   });
   document.querySelectorAll("[data-presence-text-uid]").forEach((el) => {
     const profile = getCachedProfile(el.dataset.presenceTextUid);
