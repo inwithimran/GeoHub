@@ -420,6 +420,17 @@
   .composer-post-btn:active { transform:scale(.97); }
   button.is-loading { @apply flex items-center justify-center gap-2 opacity-90 cursor-default; }
   .btn-spinner { @apply w-[15px] h-[15px] rounded-full shrink-0 animate-ring; border:2px solid rgba(255,255,255,.4); border-top-color:#fff; }
+  /* setBtnLoading()'s label span, min-w-0 + truncate: a flex item's default
+     min-width is "auto" (its own content width), which blocks it from ever
+     shrinking below that — so a loading label longer than the button's
+     resting label (e.g. confirmDialog's "Please wait…" swapped in for a
+     short "Delete"/"Log Out", inside the half-width .confirm-actions
+     button pair) would wrap onto a second line instead of fitting, and the
+     WHOLE BUTTON would grow taller for as long as the spinner showed. This
+     truncates instead — same fix as .msg-subtab-label above, same root
+     cause: a flex child that needs "let this shrink and ellipsize, don't
+     let it wrap the row taller". */
+  .btn-spinner-label { @apply min-w-0 overflow-hidden whitespace-nowrap text-ellipsis; }
   .btn-spinner.dark { @apply w-[17px] h-[17px]; border-color: rgba(26,76,48,.2); border-top-color: var(--color-forest-700); }
   .btn-google.is-loading .btn-spinner { border-color: rgba(26,76,48,.2); border-top-color: var(--color-forest-700); }
   .btn-outline {
