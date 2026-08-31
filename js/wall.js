@@ -681,6 +681,12 @@ export function wireReactionControl(root, postId, post) {
   btn.addEventListener("pointerdown", startPress);
   btn.addEventListener("pointerup", cancelPress);
   btn.addEventListener("pointerleave", cancelPress);
+  // Belt-and-braces alongside the global `button { user-select:none }` rule —
+  // some Android browsers still offer their own "Copy" callout on a held
+  // press regardless of CSS, which fights with the long-press-to-pick-a-
+  // reaction gesture below. Suppressing the native context menu here keeps
+  // the long press exclusively ours.
+  btn.addEventListener("contextmenu", (e) => e.preventDefault());
   btn.addEventListener("click", (e) => {
     e.stopPropagation();
     if (longPressed) { longPressed = false; return; } // the long-press already opened the picker

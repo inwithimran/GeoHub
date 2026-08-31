@@ -64,7 +64,8 @@ const dmThreadForm = document.getElementById("dm-thread-form");
 const dmThreadInput = document.getElementById("dm-thread-input");
 const dmThreadSendBtn = document.getElementById("dm-thread-send-btn");
 const dmThreadBackBtn = document.getElementById("dm-thread-back-btn");
-const dmThreadBlockBtn = document.getElementById("dm-thread-block-btn");
+const dmThreadMoreMenu = document.getElementById("dm-thread-more-menu");
+const dmThreadBlockItem = document.getElementById("dm-thread-block-item");
 const dmThreadBlockedBar = document.getElementById("dm-thread-blocked-bar");
 const dmThreadBlockedText = document.getElementById("dm-thread-blocked-text");
 const dmThreadUnblockBtn = document.getElementById("dm-thread-unblock-btn");
@@ -200,14 +201,19 @@ function renderChatBubbles(listEl, docs, { emptyText, showNames = true }) {
     const canDelete = mine; // an admin could be added here too, but a chat message is low-stakes — owner-only keeps this simple
     const kebab = canDelete ? kebabMenuHtml(m.id, [{ action: "delete", label: "Delete message", danger: true }]) : "";
 
+    // The kebab lives INSIDE the meta row (next to the timestamp), not as its
+    // own slot alongside the avatar — an own message used to reserve a whole
+    // extra avatar-width column for it, which made every one of your own
+    // bubbles sit visibly narrower/shifted compared to bubbles you received.
+    // Tucking it into the meta line keeps the leading avatar column the same
+    // width on both sides, so mine/theirs line up exactly the same way.
     html += `
       <div class="chat-bubble-row ${mine ? "mine" : ""}" data-msg-id="${escapeHtml(m.id)}">
         ${grouped ? `<span style="width:26px" aria-hidden="true"></span>` : `<span class="avatar" data-author="${escapeHtml(uid || "")}">${avatarInner(profile)}</span>`}
-        ${kebab}
         <div class="chat-bubble-group">
           ${!mine && !grouped && showNames ? `<span class="chat-bubble-name">${nameWithBadge(profile.name || "Classmate", profile.email)}</span>` : ""}
           <div class="chat-bubble">${richTextHtml(m.text || "", [])}</div>
-          <div class="chat-bubble-meta"><span>${timeLabel}</span></div>
+          <div class="chat-bubble-meta"><span>${timeLabel}</span>${kebab}</div>
         </div>
       </div>`;
   });
@@ -483,7 +489,7 @@ function dmThreadSkeletonHtml() {
 /** Reflects the conversation's live `blockedBy` array in the thread UI: the
  *  composer is swapped for a bar (either "You've blocked them" + Unblock,
  *  or a plain "can't message" notice if they've blocked you instead), and
- *  the header's block-toggle button lights up when you're the blocker. */
+ *  the header's three-dot menu item relabels itself Block/Unblock. */
 function paintDmBlockState(otherUid, blockedBy) {
   const myUid = auth.currentUser?.uid;
   const blockedByMe = blockedBy.includes(myUid);
@@ -499,8 +505,12 @@ function paintDmBlockState(otherUid, blockedBy) {
   }
   dmThreadUnblockBtn?.classList.toggle("hidden", !blockedByMe);
 
-  dmThreadBlockBtn?.classList.toggle("active", blockedByMe);
-  dmThreadBlockBtn?.setAttribute("aria-label", blockedByMe ? "Unblock this classmate" : "Block this classmate");
+  if (dmThreadBlockItem) {
+    dmThreadBlockItem.textContent = blockedByMe ? "Unblock this classmate" : "Block this classmate";
+    dmThreadBlockItem.classList.toggle("danger", !blockedByMe);
+    dmThreadBlockItem.dataset.blocked = blockedByMe ? "1" : "0";
+  }
+  dmThreadMoreMenu?.classList.toggle("is-blocking", blockedByMe);
 }
 
 function renderDmThreadHeader(uid) {
@@ -538,7 +548,7 @@ export async function openDmThread(uid, { fromPopstate = false, replace = false 
   // a conversation that was never blocked in the first place.
   dmThreadForm?.classList.remove("hidden");
   dmThreadBlockedBar?.classList.add("hidden");
-  dmThreadBlockBtn?.classList.remove("active");
+  dmThreadMoreMenu?.classList.remove("is-blocking");
 
   if (!getCachedProfile(uid)) ensureProfileLoaded(uid);
   renderDmThreadHeader(uid);
@@ -637,26 +647,29 @@ export function initMessages() {
 
   dmThreadForm?.addEventListener("submit", (e) => { e.preventDefault(); submitDmMessage(); });
   dmThreadInput?.addEventListener("input", () => { dmThreadSendBtn.disabled = !dmThreadInput.value.trim(); });
-  // Block/unblock this classmate for DMs — blocking asks for a quick
-  // confirmation (it silences someone), unblocking doesn't need one.
-  dmThreadBlockBtn?.addEventListener("click", () => {
-    const otherUid = currentDmUid;
-    if (!otherUid) return;
-    const alreadyBlocked = dmThreadBlockBtn.classList.contains("active");
-    if (alreadyBlocked) {
-      setDmBlocked(otherUid, false).catch((err) => {
-        const { message, technical } = friendlyError(err, "Couldn't unblock this classmate.");
-        showToast(message, { details: technical });
+  // Block/unblock this classmate for DMs, now tucked behind the header's
+  // three-dot menu — blocking asks for a quick confirmation (it silences
+  // someone), unblocking doesn't need one.
+  wireKebabMenus(document.getElementById("dm-thread-header-row"), {
+    block: () => {
+      const otherUid = currentDmUid;
+      if (!otherUid) return;
+      const alreadyBlocked = dmThreadBlockItem?.dataset.blocked === "1";
+      if (alreadyBlocked) {
+        setDmBlocked(otherUid, false).catch((err) => {
+          const { message, technical } = friendlyError(err, "Couldn't unblock this classmate.");
+          showToast(message, { details: technical });
+        });
+        return;
+      }
+      const name = getCachedProfile(otherUid)?.name || "this classmate";
+      confirmDialog({
+        title: "Block this classmate?",
+        text: `${name} won't be able to send you messages until you unblock them.`,
+        confirmLabel: "Block",
+        onConfirm: () => setDmBlocked(otherUid, true)
       });
-      return;
     }
-    const name = getCachedProfile(otherUid)?.name || "this classmate";
-    confirmDialog({
-      title: "Block this classmate?",
-      text: `${name} won't be able to send you messages until you unblock them.`,
-      confirmLabel: "Block",
-      onConfirm: () => setDmBlocked(otherUid, true)
-    });
   });
   dmThreadUnblockBtn?.addEventListener("click", () => {
     if (currentDmUid) setDmBlocked(currentDmUid, false).catch((err) => {
