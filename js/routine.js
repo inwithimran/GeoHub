@@ -15,8 +15,10 @@
 //
 // Routine: single doc at routine/weekly, shape:
 //          { Saturday: [{time, subject, room}, ...], Sunday: [...], ... }
-//          Create/edit that doc directly in the Firebase Console,
-//          or build a small admin form later — reading is wired up here.
+//          Read live and edited in-app via the admin-only "Edit" button
+//          on the Routine page (see the routine editor block below) —
+//          no more hand-editing the doc in the Firebase Console. Saving
+//          also drops a "routine updated" notification + push.
 // Notices: realtime "notices" collection, posting restricted to
 //          emails listed in ADMIN_EMAILS (CR / class admins).
 // ============================================================
@@ -54,6 +56,7 @@ subscribeToProfileUpdates((uid) => {
 });
 
 const routineTable = document.getElementById("routine-table");
+const editRoutineBtn = document.getElementById("edit-routine-btn");
 const notifBadge = document.getElementById("topbar-notif-badge");
 const noticeTabBadge = document.getElementById("notice-tab-badge");
 const notificationTabBadge = document.getElementById("notification-tab-badge");
@@ -374,7 +377,17 @@ export function initRoutine() {
     renderActivityList();
   });
 
-  if (ADMIN_EMAILS.includes(auth.currentUser?.email || "")) watchOpenReportCount();
+  const isAdmin = ADMIN_EMAILS.includes(auth.currentUser?.email || "");
+  if (isAdmin) subscribeReports();
+  document.getElementById("topbar-reports-btn")?.classList.toggle("hidden", !isAdmin);
+
+  if (editRoutineBtn) {
+    editRoutineBtn.classList.toggle("hidden", !isAdmin);
+    if (!editRoutineBtn.dataset.wired) {
+      editRoutineBtn.dataset.wired = "1";
+      editRoutineBtn.addEventListener("click", openRoutineEditorModal);
+    }
+  }
 
   subscribeNotifications();
   if (!visibilityHandlerAttached) {
@@ -382,7 +395,7 @@ export function initRoutine() {
     visibilityHandlerAttached = true;
   }
 
-  loadRoutine();
+  subscribeRoutine();
   wireNoticesPageTabs();
 
   if (markAllReadBtn && !markAllReadBtn.dataset.wired) {
@@ -407,26 +420,21 @@ function setBadgeEl(el, count) {
 }
 
 /**
- * Recomputes all three badges from per-item read state: the header bell
- * (total), and each tab's own count (Notice / Notification, counted
- * separately). None of these clear just because a tab or the page was
- * opened — only reading (or deleting) the specific item behind the count
- * does, via markNoticeRead()/markActivityRead()/markAllActivityRead().
+ * Recomputes the header bell (total) and each Notices tab's own count
+ * (Notice / Notification, counted separately). Reported Posts has its own
+ * page now with its own topbar badge (see watchOpenReportCount below), so
+ * it's no longer folded in here. None of these three clear just because a
+ * tab or the page was opened — only reading (or deleting) the specific
+ * notice/notification behind the count does, via
+ * markNoticeRead()/markActivityRead()/markAllActivityRead().
  */
 function updateNoticeBadge() {
   const unreadNotices = latestNotices.filter(n => !noticeReadIds.has(n.id)).length;
   const unreadActivity = mergedActivity().filter(visibleToMe)
     .filter(a => !dismissedActivityIds.has(a.id) && !activityReadIds.has(a.id)).length;
-  // Open (unresolved) reports are the admin's own kind of "unread" —
-  // filing one is what "reads" it, same spirit as everything else on
-  // this badge, so it's folded straight into the bell + the button's
-  // own badge rather than needing a separate per-item read-id set.
-  const isAdmin = !!(auth.currentUser && ADMIN_EMAILS.includes(auth.currentUser.email));
-  const unreadReports = isAdmin ? openReportCount : 0;
-  setBadgeEl(notifBadge, unreadNotices + unreadActivity + unreadReports);
+  setBadgeEl(notifBadge, unreadNotices + unreadActivity);
   setBadgeEl(noticeTabBadge, unreadNotices);
   setBadgeEl(notificationTabBadge, unreadActivity);
-  setBadgeEl(document.getElementById("reports-tab-badge"), unreadReports);
 }
 
 // ============================================================
@@ -479,22 +487,12 @@ function renderNoticeTabBody() {
             <input type="checkbox" id="notice-urgent" /> Mark as urgent
           </label>
           <button id="notice-submit" type="button" class="btn-primary full notice-submit-btn">Post Notice</button>
-          <button id="view-reports-btn" type="button" class="btn-outline full">
-            <span id="view-reports-label">Reported Posts</span>
-            <span class="tab-badge hidden" id="reports-tab-badge">0</span>
-          </button>
         </div>` : ""}
       <div id="notice-list"><p class="empty-state">Loading notices…</p></div>
     `;
     if (isAdmin) {
       wireCharCounter(document.getElementById("notice-input"), NOTICE_TEXT_LIMIT);
       document.getElementById("notice-submit").addEventListener("click", postNotice);
-      document.getElementById("view-reports-btn").addEventListener("click", openReportsModal);
-      // The listener itself is already running (started in initRoutine as
-      // soon as an admin session begins, so the bell badge is live even
-      // before this tab is ever opened) — just paint whatever count it's
-      // already seen onto this newly-built button.
-      setBadgeEl(document.getElementById("reports-tab-badge"), openReportCount);
     }
   }
   renderNoticesList();
@@ -504,98 +502,87 @@ function renderNoticeTabBody() {
 // ADMIN — REPORTED POSTS. A student's "Report Post" action (see
 // wall.js) writes here; only the admin can read this collection
 // (enforced in firestore.rules), so this whole block quietly does
-// nothing for a non-admin.
+// nothing for a non-admin. Lives on its own page (section-reports in
+// index.html, reached via the topbar flag icon) rather than a modal
+// tucked inside the Notice tab, so an admin can find it directly.
 // ============================================================
-let unsubscribeReportCount = null;
+let unsubscribeReports = null;
 let openReportCount = 0;
+let openReports = [];
 
 /**
- * Keeps the open-report count live for the whole admin session — started
- * from initRoutine() as soon as an admin signs in (not lazily when the
- * Notice tab happens to be opened), so the bell badge and this button's
- * own badge both reflect new reports right away, and so a push arriving
- * for one is backed by the same "something needs your attention" signal
- * shown in the UI.
+ * Keeps the open reports (and their count) live for the whole admin
+ * session — started from initRoutine() as soon as an admin signs in (not
+ * lazily when the Reports page happens to be opened), so the topbar badge
+ * reflects a new report right away, and so a push arriving for one is
+ * backed by the same "something needs your attention" signal shown in
+ * the UI, and the page itself is already populated the moment it's opened.
  */
-function watchOpenReportCount() {
-  if (unsubscribeReportCount) return;
+function subscribeReports() {
+  if (unsubscribeReports) return;
+  // A where()+orderBy() combo on different fields needs a composite
+  // Firestore index. This admin-only collection is always small, so we
+  // drop the orderBy (an equality-only where needs no composite index)
+  // and sort client-side instead — same result, no manual index setup.
   const q = query(collection(db, "reports"), where("resolved", "==", false));
-  unsubscribeReportCount = onSnapshot(q, (snap) => {
+  unsubscribeReports = onSnapshot(q, (snap) => {
     openReportCount = snap.size;
-    const label = document.getElementById("view-reports-label");
-    if (label) label.textContent = "Reported Posts";
-    setBadgeEl(document.getElementById("reports-tab-badge"), openReportCount);
-    updateNoticeBadge();
-  }, () => { /* not admin, or offline — badge just stays at its last known count */ });
+    openReports = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+    setBadgeEl(document.getElementById("topbar-reports-badge"), openReportCount);
+    renderReportsPage();
+  }, () => { /* not admin, or offline — page/badge just stay at their last known state */ });
 }
 
-async function openReportsModal() {
-  openModal(`<h3>Reported Posts</h3><div id="reports-modal-list">${skeletonRowsHtml(3)}</div>`);
-  const listEl = document.getElementById("reports-modal-list");
-  try {
-    // A where()+orderBy() combo on different fields needs a composite
-    // Firestore index (previously this crashed with "the query requires an
-    // index" — see the screenshot this was reported with). This admin-only
-    // collection is always small, so we drop the orderBy (an equality-only
-    // where needs no composite index) and sort client-side instead — same
-    // result, no manual index setup required.
-    const q = query(collection(db, "reports"), where("resolved", "==", false));
-    const snap = await getDocs(q);
-    if (snap.empty) {
-      listEl.innerHTML = `<p class="empty-state">No open reports. 🎉</p>`;
-      return;
-    }
-    const sortedDocs = [...snap.docs].sort((a, b) =>
-      (b.get("createdAt")?.toMillis?.() || 0) - (a.get("createdAt")?.toMillis?.() || 0));
-    listEl.innerHTML = `<div class="flat-list">` + sortedDocs.map(d => {
-      const r = d.data();
-      return `
-        <div class="report-row" data-report-id="${escapeHtml(d.id)}" data-post-id="${escapeHtml(r.postId || "")}">
-          <p class="report-post-snippet">${escapeHtml(r.postText || "(post text unavailable)")}</p>
-          ${r.reason ? `<p class="report-reason">Reason: ${escapeHtml(r.reason)}</p>` : ""}
-          <small>Reported by ${escapeHtml(r.reportedByName || "a classmate")} · ${timeAgo(r.createdAt)}</small>
-          <div class="report-row-actions">
-            <button type="button" class="btn-outline small" data-report-action="view">View Post</button>
-            <button type="button" class="btn-outline small" data-report-action="dismiss">Dismiss</button>
-            <button type="button" class="btn-outline small danger-solid" data-report-action="remove">Remove Post</button>
-          </div>
-        </div>`;
-    }).join("") + `</div>`;
-
-    listEl.querySelectorAll(".report-row").forEach(row => {
-      const reportId = row.dataset.reportId;
-      const postId = row.dataset.postId;
-      row.querySelector('[data-report-action="view"]').addEventListener("click", async () => {
-        closeModal();
-        const { openPostDetailPage } = await import("./post-detail.js");
-        openPostDetailPage(postId);
-      });
-      row.querySelector('[data-report-action="dismiss"]').addEventListener("click", async (e) => {
-        setBtnLoading(e.currentTarget, true, "…");
-        try {
-          await updateDoc(doc(db, "reports", reportId), { resolved: true });
-          row.remove();
-        } catch (err) {
-          const { message, technical } = friendlyError(err, "Couldn't dismiss.");
-          showToast(message, { details: technical });
-          setBtnLoading(e.currentTarget, false);
-        }
-      });
-      row.querySelector('[data-report-action="remove"]').addEventListener("click", () => confirmDialog({
-        title: "Remove this post?",
-        text: "This deletes the reported post (and its comments) from the Wall and closes the report.",
-        confirmLabel: "Remove",
-        onConfirm: async () => {
-          const { deletePost } = await import("./wall.js");
-          if (postId) await deletePost(postId, () => {});
-          await updateDoc(doc(db, "reports", reportId), { resolved: true });
-          row.remove();
-        }
-      }));
-    });
-  } catch (err) {
-    listEl.innerHTML = `<p class="empty-state">Couldn't load reports: ${escapeHtml(err.message)}</p>`;
+/** Renders the live Reported Posts list — same View/Dismiss/Remove actions the old modal had, just on their own page now. Re-run automatically by subscribeReports() on every change, so dismissing/removing one just quietly drops it from the list rather than needing a manual row.remove(). */
+function renderReportsPage() {
+  const listEl = document.getElementById("reports-page-list");
+  if (!listEl) return; // page not in the DOM yet
+  if (!openReports.length) {
+    listEl.innerHTML = `<p class="empty-state">No open reports. 🎉</p>`;
+    return;
   }
+  listEl.innerHTML = openReports.map(r => `
+    <div class="report-row" data-report-id="${escapeHtml(r.id)}" data-post-id="${escapeHtml(r.postId || "")}">
+      <p class="report-post-snippet">${escapeHtml(r.postText || "(post text unavailable)")}</p>
+      ${r.reason ? `<p class="report-reason">Reason: ${escapeHtml(r.reason)}</p>` : ""}
+      <small>Reported by ${escapeHtml(r.reportedByName || "a classmate")} · ${timeAgo(r.createdAt)}</small>
+      <div class="report-row-actions">
+        <button type="button" class="btn-outline small" data-report-action="view">View Post</button>
+        <button type="button" class="btn-outline small" data-report-action="dismiss">Dismiss</button>
+        <button type="button" class="btn-outline small danger-solid" data-report-action="remove">Remove Post</button>
+      </div>
+    </div>`).join("");
+
+  listEl.querySelectorAll(".report-row").forEach(row => {
+    const reportId = row.dataset.reportId;
+    const postId = row.dataset.postId;
+    row.querySelector('[data-report-action="view"]').addEventListener("click", async () => {
+      const { openPostDetailPage } = await import("./post-detail.js");
+      openPostDetailPage(postId);
+    });
+    row.querySelector('[data-report-action="dismiss"]').addEventListener("click", async (e) => {
+      setBtnLoading(e.currentTarget, true, "…");
+      try {
+        await updateDoc(doc(db, "reports", reportId), { resolved: true });
+        // No manual row.remove() — the live listener above re-renders without it.
+      } catch (err) {
+        const { message, technical } = friendlyError(err, "Couldn't dismiss.");
+        showToast(message, { details: technical });
+        setBtnLoading(e.currentTarget, false);
+      }
+    });
+    row.querySelector('[data-report-action="remove"]').addEventListener("click", () => confirmDialog({
+      title: "Remove this post?",
+      text: "This deletes the reported post (and its comments) from the Wall and closes the report.",
+      confirmLabel: "Remove",
+      onConfirm: async () => {
+        const { deletePost } = await import("./wall.js");
+        if (postId) await deletePost(postId, () => {});
+        await updateDoc(doc(db, "reports", reportId), { resolved: true });
+      }
+    }));
+  });
 }
 
 function renderNoticesList() {
@@ -647,6 +634,12 @@ function renderNoticesList() {
       }
     })
   });
+}
+
+/** Switch to the Notice tab and open a specific notice — used by global search results. */
+export function openNoticeById(noticeId) {
+  switchToNoticeTab();
+  openNoticeDetail(noticeId);
 }
 
 function openNoticeDetail(noticeId) {
@@ -742,7 +735,7 @@ async function postNotice() {
  * notification is about, so clicking it in the Notification tab can jump
  * straight to that content instead of just opening the actor's profile.
  */
-export async function logActivity({ type, text = "", targetUid = null, postId = null, resourceId = null, noticeId = null }) {
+export async function logActivity({ type, text = "", targetUid = null, postId = null, resourceId = null, noticeId = null, deadlineId = null }) {
   if (!auth.currentUser) return;
   try {
     await addDoc(collection(db, "activity"), {
@@ -752,6 +745,7 @@ export async function logActivity({ type, text = "", targetUid = null, postId = 
       postId,
       resourceId,
       noticeId,
+      deadlineId,
       actorUid: auth.currentUser.uid,
       actorName: currentProfile ? currentProfile.name : (auth.currentUser.email || "Someone"),
       actorEmail: auth.currentUser.email,
@@ -787,6 +781,8 @@ export function deleteActivityForPost(postId) { return deleteActivityMatching("p
 export function deleteActivityForResource(resourceId) { return deleteActivityMatching("resourceId", resourceId); }
 /** Call after deleting a notice — removes its "posted a notice" entry. */
 export function deleteActivityForNotice(noticeId) { return deleteActivityMatching("noticeId", noticeId); }
+/** Call after deleting a deadline — removes its "posted a deadline" entry. */
+export function deleteActivityForDeadline(deadlineId) { return deleteActivityMatching("deadlineId", deadlineId); }
 
 function truncate(text, max) {
   return text.length > max ? text.slice(0, max) + "…" : text;
@@ -795,12 +791,14 @@ function truncate(text, max) {
 function activityLine(a) {
   const quoted = a.text ? ` — “${escapeHtml(truncate(a.text, 90))}”` : "";
   switch (a.type) {
-    case "post": return `posted on the Student Wall${quoted}`;
-    case "resource": return `shared a note/sheet${a.text ? `: <strong>${escapeHtml(truncate(a.text, 70))}</strong>` : ""}`;
-    case "comment": return `commented on a post${quoted}`;
-    case "like": return `liked your post`;
+    case "post": return `shared a new post on the Student Wall${quoted}`;
+    case "resource": return `shared a new resource in Notes &amp; Sheets${a.text ? `: <strong>${escapeHtml(truncate(a.text, 70))}</strong>` : ""}`;
+    case "comment": return `commented on your post${quoted}`;
+    case "like": return `reacted to your post`;
     case "mention": return `mentioned you${quoted}`;
-    case "notice": return `posted a notice${quoted}`;
+    case "notice": return `posted a new notice${quoted}`;
+    case "routine": return `updated the weekly class routine${quoted}`;
+    case "deadline": return `posted a new deadline${a.text ? `: <strong>${escapeHtml(truncate(a.text, 70))}</strong>` : ""}`;
     default: return escapeHtml(a.text || "did something on GeoHub");
   }
 }
@@ -895,6 +893,18 @@ async function openActivityDestination(a) {
       if (a.noticeId) openNoticeDetail(a.noticeId);
       break;
     }
+    case "deadline": {
+      if (goToRouteRef) goToRouteRef("routine");
+      if (a.deadlineId) {
+        const { focusDeadline } = await import("./deadlines.js");
+        focusDeadline(a.deadlineId);
+      }
+      break;
+    }
+    case "routine": {
+      if (goToRouteRef) goToRouteRef("routine");
+      break;
+    }
     default: {
       if (!a.actorUid) return;
       const { openUserProfilePage } = await import("./profile-view.js");
@@ -912,45 +922,173 @@ function switchToNoticeTab() {
 }
 
 // ============================================================
-// WEEKLY ROUTINE
+// WEEKLY ROUTINE — single doc at routine/weekly, shape:
+//   { Saturday: [{time, subject, room}, ...], Sunday: [...], …,
+//     updatedAt: <server timestamp, stamped on every save — used by
+//     api/send-push.js to confirm a "routine updated" push claim is
+//     reporting something that just happened> }
+// Read live (not a one-shot fetch) so an admin's edit shows up for
+// everyone with the page open, without needing a refresh. Writing is
+// admin-only (see the in-app editor below and firestore.rules).
 // ============================================================
-async function loadRoutine() {
-  try {
-    const snap = await getDoc(doc(db, "routine", "weekly"));
-    if (!snap.exists()) {
-      routineTable.innerHTML = `<p class="empty-state">Routine has not been published yet.</p>`;
-      return;
-    }
-    const data = snap.data();
-    const dayOrder = ["Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
-    let html = "";
-    dayOrder.forEach(day => {
-      const slots = data[day];
-      if (!slots || !slots.length) return;
-      html += `<div class="routine-day"><h4>${day}</h4>` +
-        slots.map(s => `
-          <div class="routine-slot">
-            <span>${escapeHtml(s.time)}</span>
-            <span>${escapeHtml(s.subject)}${s.room ? " · " + escapeHtml(s.room) : ""}</span>
-          </div>`).join("") +
-        `</div>`;
-    });
-    routineTable.innerHTML = html || `<p class="empty-state">Routine has not been published yet.</p>`;
-  } catch (err) {
+const DAY_ORDER = ["Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+let latestRoutineData = null;
+let unsubscribeRoutineDoc = null;
+
+function subscribeRoutine() {
+  if (unsubscribeRoutineDoc) return;
+  unsubscribeRoutineDoc = onSnapshot(doc(db, "routine", "weekly"), (snap) => {
+    latestRoutineData = snap.exists() ? snap.data() : null;
+    renderRoutineTable();
+  }, () => {
     routineTable.innerHTML = `<p class="empty-state">Couldn't load routine.</p>`;
+  });
+}
+
+function renderRoutineTable() {
+  if (!latestRoutineData) {
+    routineTable.innerHTML = `<p class="empty-state">Routine has not been published yet.</p>`;
+    return;
+  }
+  let html = "";
+  DAY_ORDER.forEach(day => {
+    const slots = latestRoutineData[day];
+    if (!slots || !slots.length) return;
+    html += `<div class="routine-day"><h4>${day}</h4>` +
+      slots.map(s => `
+        <div class="routine-slot">
+          <span>${escapeHtml(s.time)}</span>
+          <span>${escapeHtml(s.subject)}${s.room ? " · " + escapeHtml(s.room) : ""}</span>
+        </div>`).join("") +
+      `</div>`;
+  });
+  routineTable.innerHTML = html || `<p class="empty-state">Routine has not been published yet.</p>`;
+}
+
+// ----------------------------------------------------------------
+// IN-APP ROUTINE EDITOR (admin only, enforced again server-side by
+// firestore.rules) — replaces having to edit the routine/weekly doc by
+// hand in the Firebase Console. One card per day; each day holds a list
+// of {time, subject, room} slot rows that can be added/removed freely.
+// Saving overwrites the WHOLE doc (not a merge) so a day/slot that was
+// removed in the editor actually disappears from the published routine,
+// then drops a "routine updated" Notification-tab entry + push to the
+// whole department, the same way posting a Notice does.
+// ----------------------------------------------------------------
+function slotRowHtml(s = {}) {
+  return `
+    <div class="routine-editor-slot-row">
+      <input type="text" class="routine-editor-input rt-time" placeholder="9:00–10:20" value="${escapeHtml(s.time || "")}" />
+      <input type="text" class="routine-editor-input rt-subject" placeholder="Subject" value="${escapeHtml(s.subject || "")}" />
+      <input type="text" class="routine-editor-input rt-room" placeholder="Room" value="${escapeHtml(s.room || "")}" />
+      <button type="button" class="routine-editor-remove-btn" data-remove-slot aria-label="Remove this class">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>`;
+}
+
+function dayEditorHtml(day, slots) {
+  const rows = slots.map(s => slotRowHtml(s)).join("");
+  return `
+    <div class="routine-editor-day" data-day="${escapeHtml(day)}">
+      <div class="routine-editor-day-head">
+        <h4>${escapeHtml(day)}</h4>
+        <button type="button" class="routine-editor-add-slot-btn" data-add-slot>
+          <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add class
+        </button>
+      </div>
+      <div class="routine-editor-slot-list">${rows}</div>
+    </div>`;
+}
+
+function openRoutineEditorModal() {
+  const data = latestRoutineData || {};
+  openModal(`
+    <h3>Edit Weekly Routine</h3>
+    <p class="routine-editor-hint">Add class times for each day. A day left with no classes won't be shown on the routine.</p>
+    <div id="routine-editor-days">
+      ${DAY_ORDER.map(day => dayEditorHtml(day, data[day] || [])).join("")}
+    </div>
+    <p id="routine-editor-error" class="form-error"></p>
+    <button type="button" class="btn-primary full" id="routine-editor-save-btn">Save &amp; Notify Class</button>
+  `);
+  wireRoutineEditor();
+}
+
+function wireRoutineEditor() {
+  const host = document.getElementById("routine-editor-days");
+  host.querySelectorAll(".routine-editor-day").forEach(dayEl => {
+    dayEl.querySelector("[data-add-slot]").addEventListener("click", () => {
+      dayEl.querySelector(".routine-editor-slot-list").insertAdjacentHTML("beforeend", slotRowHtml());
+    });
+  });
+  // Delegated so it keeps working for rows added by "Add class" above, not just the ones rendered on open.
+  host.addEventListener("click", (e) => {
+    const removeBtn = e.target.closest("[data-remove-slot]");
+    if (removeBtn) removeBtn.closest(".routine-editor-slot-row").remove();
+  });
+  document.getElementById("routine-editor-save-btn").addEventListener("click", saveRoutine);
+}
+
+async function saveRoutine() {
+  const btn = document.getElementById("routine-editor-save-btn");
+  const errorEl = document.getElementById("routine-editor-error");
+  const host = document.getElementById("routine-editor-days");
+  const payload = { updatedAt: serverTimestamp() };
+  let hasAnySlot = false;
+
+  for (const dayEl of host.querySelectorAll(".routine-editor-day")) {
+    const day = dayEl.dataset.day;
+    const slots = [];
+    for (const row of dayEl.querySelectorAll(".routine-editor-slot-row")) {
+      const time = row.querySelector(".rt-time").value.trim();
+      const subject = row.querySelector(".rt-subject").value.trim();
+      const room = row.querySelector(".rt-room").value.trim();
+      if (!time && !subject && !room) continue; // a fully blank row is just skipped, not an error
+      if (!time || !subject) {
+        errorEl.textContent = `${day}: please fill in both time and subject, or remove that row.`;
+        return;
+      }
+      slots.push({ time, subject, room });
+    }
+    if (slots.length) { payload[day] = slots; hasAnySlot = true; }
+  }
+
+  errorEl.textContent = "";
+  setBtnLoading(btn, true, "Saving…");
+  try {
+    // Full overwrite (not updateDoc/merge) — a day or slot removed in the
+    // editor is meant to actually disappear from the published routine,
+    // not linger because a merge only ever adds/replaces fields.
+    await setDoc(doc(db, "routine", "weekly"), payload);
+    closeModal();
+    showToast("Routine updated.");
+    if (hasAnySlot) {
+      logActivity({ type: "routine", text: "The weekly class routine was updated." });
+      triggerPush({ type: "routine", text: "The weekly class routine was updated." });
+    }
+  } catch (err) {
+    const { message, technical } = friendlyError(err, "Couldn't update routine.");
+    errorEl.textContent = message;
+    if (technical) console.warn(technical);
+    setBtnLoading(btn, false);
   }
 }
 
 export function teardownRoutine() {
   unsubscribeNotifications(); // also nulls out unsubscribeNotices/ActivityPublic/ActivityPrivate
-  if (unsubscribeReportCount) unsubscribeReportCount();
-  unsubscribeReportCount = null;
+  if (unsubscribeReports) unsubscribeReports();
+  unsubscribeReports = null;
+  if (unsubscribeRoutineDoc) { unsubscribeRoutineDoc(); unsubscribeRoutineDoc = null; }
+  latestRoutineData = null;
   clearTimeout(backgroundDetachTimer);
   if (visibilityHandlerAttached) {
     document.removeEventListener("visibilitychange", handleVisibilityChange);
     visibilityHandlerAttached = false;
   }
   openReportCount = 0;
+  openReports = [];
   latestNotices = [];
   latestActivityPublic = [];
   latestActivityPrivate = [];

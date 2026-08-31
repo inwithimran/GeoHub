@@ -541,6 +541,21 @@ export function wireMentionAutocomplete(fieldEl, getCandidates, onPick) {
   dropdown.className = "mention-dropdown hidden";
   host.appendChild(dropdown);
 
+  // Anchor the dropdown to the FIELD's own box, not the host container's —
+  // the host is sometimes a whole modal (composer, edit-post) with a poll
+  // builder, image picker, and submit button below the textarea, and
+  // `top:100%` on the host would drop the list under all of that instead
+  // of right under what the person is typing. fieldEl is always a direct
+  // child of `host`, so its offsetTop/offsetLeft are already relative to it.
+  function reposition() {
+    dropdown.style.top = `${fieldEl.offsetTop + fieldEl.offsetHeight + 4}px`;
+    dropdown.style.left = `${fieldEl.offsetLeft}px`;
+    dropdown.style.width = `${fieldEl.offsetWidth}px`;
+  }
+
+  let activeIndex = -1;
+  let currentMatches = [];
+
   function currentTrigger() {
     const value = fieldEl.value;
     const caret = fieldEl.selectionStart ?? value.length;
@@ -551,6 +566,8 @@ export function wireMentionAutocomplete(fieldEl, getCandidates, onPick) {
   function close() {
     dropdown.classList.add("hidden");
     dropdown.innerHTML = "";
+    currentMatches = [];
+    activeIndex = -1;
   }
 
   function pick(candidate) {
@@ -565,11 +582,19 @@ export function wireMentionAutocomplete(fieldEl, getCandidates, onPick) {
     onPick(candidate);
   }
 
+  function paintActive() {
+    dropdown.querySelectorAll(".mention-option").forEach((btn, i) => {
+      btn.classList.toggle("active", i === activeIndex);
+    });
+  }
+
   function open(query) {
-    const matches = (getCandidates(query) || []).slice(0, 6);
-    if (!matches.length) { close(); return; }
-    dropdown.innerHTML = matches.map((m, i) =>
-      `<button type="button" class="mention-option" data-index="${i}">
+    currentMatches = (getCandidates(query) || []).slice(0, 6);
+    if (!currentMatches.length) { close(); return; }
+    activeIndex = 0;
+    reposition();
+    dropdown.innerHTML = currentMatches.map((m, i) =>
+      `<button type="button" class="mention-option ${i === 0 ? "active" : ""}" data-index="${i}">
         <span class="avatar avatar-sm">${avatarInner(m)}</span>
         <span>${escapeHtml(m.name || "Classmate")}</span>
       </button>`
@@ -577,7 +602,8 @@ export function wireMentionAutocomplete(fieldEl, getCandidates, onPick) {
     dropdown.classList.remove("hidden");
     dropdown.querySelectorAll(".mention-option").forEach((btn, i) => {
       // mousedown (not click) so the field never loses focus before we act.
-      btn.addEventListener("mousedown", (e) => { e.preventDefault(); pick(matches[i]); });
+      btn.addEventListener("mousedown", (e) => { e.preventDefault(); pick(currentMatches[i]); });
+      btn.addEventListener("mouseenter", () => { activeIndex = i; paintActive(); });
     });
   }
 
@@ -587,7 +613,25 @@ export function wireMentionAutocomplete(fieldEl, getCandidates, onPick) {
     open(q);
   });
   fieldEl.addEventListener("blur", () => setTimeout(close, 120));
-  fieldEl.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+  fieldEl.addEventListener("keydown", (e) => {
+    if (dropdown.classList.contains("hidden")) return;
+    if (e.key === "Escape") { close(); return; }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      activeIndex = (activeIndex + 1) % currentMatches.length;
+      paintActive();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      activeIndex = (activeIndex - 1 + currentMatches.length) % currentMatches.length;
+      paintActive();
+    } else if (e.key === "Enter" || e.key === "Tab") {
+      if (currentMatches[activeIndex]) {
+        e.preventDefault();
+        pick(currentMatches[activeIndex]);
+      }
+    }
+  });
+  window.addEventListener("resize", () => { if (!dropdown.classList.contains("hidden")) reposition(); });
 }
 
 // ============================================================

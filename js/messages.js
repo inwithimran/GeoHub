@@ -34,6 +34,7 @@ import {
 import { authorProfile } from "./wall.js";
 import { getAllStudents } from "./directory.js";
 import { isUserOnline, avatarPresenceDotHtml, presenceTextHtml, paintPresenceUI } from "./presence.js";
+import { triggerPush } from "./push-trigger.js";
 
 // ---------- Shared element refs ----------
 const subtabBtns = document.querySelectorAll(".msg-subtab-btn");
@@ -46,8 +47,12 @@ const classChatSendBtn = document.getElementById("class-chat-send-btn");
 const classChatOnlineCount = document.getElementById("class-chat-online-count");
 
 const dmListEl = document.getElementById("dm-conversation-list");
-const dmTotalBadges = [
-  document.getElementById("dm-total-unread-badge"),
+// Each sub-tab shows only its OWN unread count; the header/bottom-nav
+// "Messages" badges are the combined total of both, so they still light
+// up no matter which sub-tab a new message landed in.
+const dmTabBadge = document.getElementById("dm-total-unread-badge");
+const classChatTabBadge = document.getElementById("class-chat-unread-badge");
+const navTotalBadges = [
   document.getElementById("msg-nav-badge-bottom"),
   document.getElementById("msg-nav-badge-sidebar")
 ].filter(Boolean);
@@ -85,17 +90,21 @@ function syncMessageChatMode() {
 }
 
 function wireSubtabs() {
-  subtabBtns.forEach(btn => {
-    btn.addEventListener("click", () => {
-      subtabBtns.forEach(b => {
-        const active = b === btn;
-        b.classList.toggle("active", active);
-        b.setAttribute("aria-selected", String(active));
-      });
-      subtabPanels.forEach(p => p.classList.toggle("active", p.dataset.msgtabPanel === btn.dataset.msgtab));
-      syncMessageChatMode();
+  function activateSubtab(name) {
+    subtabBtns.forEach(b => {
+      const active = b.dataset.msgtab === name;
+      b.classList.toggle("active", active);
+      b.setAttribute("aria-selected", String(active));
     });
-  });
+    subtabPanels.forEach(p => p.classList.toggle("active", p.dataset.msgtabPanel === name));
+    syncMessageChatMode();
+    if (name === "class") markClassChatRead();
+  }
+  subtabBtns.forEach(btn => btn.addEventListener("click", () => activateSubtab(btn.dataset.msgtab)));
+  // Department Chat hides the bottom nav (see syncMessageChatMode/chat-mode),
+  // so — just like an open DM thread — it needs its own way back rather than
+  // relying on nav the person can no longer see.
+  document.getElementById("class-chat-back-btn")?.addEventListener("click", () => activateSubtab("dm"));
 }
 
 // ============================================================
@@ -104,6 +113,17 @@ function wireSubtabs() {
 const CLASS_CHAT_TEXT_LIMIT = 1000;
 let unsubscribeClassChat = null;
 let classChatAtBottom = true; // whether the reader is scrolled near the bottom right now
+
+// ---- Class Chat's own unread badge ----
+// Class Chat has no per-message read-state (it's one shared room, not a
+// per-pair `unread` map like DMs), so instead each student gets one tiny
+// doc — classChatReads/{myUid} — holding only "when did I last look at
+// this". Unread is just "how many of the last 150 loaded messages are
+// from someone else and newer than that timestamp".
+let classChatMessages = [];
+let classChatLastReadMs = 0;
+let unsubscribeClassChatRead = null;
+let dmUnreadTotal = 0; // kept alongside Class Chat's own count so the nav badges can show the combined total
 
 function isNearBottom(el, slack = 80) {
   return el.scrollHeight - el.scrollTop - el.clientHeight < slack;
@@ -188,6 +208,50 @@ function paintClassChatOnlineCount() {
   classChatOnlineCount.classList.toggle("online-now", onlineCount > 0);
 }
 
+/** The header/bottom-nav "Messages" badges show DM + Class Chat combined, so a new message in either lights them up. */
+function paintNavTotalBadge() {
+  const total = dmUnreadTotal + classChatUnreadCount();
+  navTotalBadges.forEach(el => {
+    el.textContent = total > 99 ? "99+" : String(total);
+    el.classList.toggle("hidden", total === 0);
+  });
+}
+
+function classChatUnreadCount() {
+  const myUid = auth.currentUser?.uid;
+  return classChatMessages.filter(m =>
+    m.authorUid !== myUid && (m.createdAt?.toMillis?.() || 0) > classChatLastReadMs
+  ).length;
+}
+
+function paintClassChatBadge() {
+  const count = classChatUnreadCount();
+  if (classChatTabBadge) {
+    classChatTabBadge.textContent = count > 99 ? "99+" : String(count);
+    classChatTabBadge.classList.toggle("hidden", count === 0);
+  }
+  paintNavTotalBadge();
+}
+
+/** Marks Class Chat as read right now — called the moment its sub-tab opens, and again for any message that arrives while it's already the active sub-tab (same "opening/staying on it is what reads it" idea as markConversationRead() for a DM thread). */
+function markClassChatRead() {
+  const myUid = auth.currentUser?.uid;
+  if (!myUid) return;
+  classChatLastReadMs = Date.now(); // paint instantly; the write below (and its own onSnapshot) settles the real value right after
+  paintClassChatBadge();
+  setDoc(doc(db, "classChatReads", myUid), { lastReadAt: serverTimestamp() }, { merge: true }).catch(() => {});
+}
+
+/** Keeps classChatLastReadMs live for the whole session, same "started once at init, not lazily on tab open" reasoning as watchOpenReportCount() in routine.js — so the badge is accurate even before Messages has ever been opened. */
+function subscribeClassChatRead() {
+  const myUid = auth.currentUser?.uid;
+  if (!myUid || unsubscribeClassChatRead) return;
+  unsubscribeClassChatRead = onSnapshot(doc(db, "classChatReads", myUid), (snap) => {
+    classChatLastReadMs = snap.exists() ? (snap.data().lastReadAt?.toMillis?.() || 0) : 0;
+    paintClassChatBadge();
+  }, () => { /* no doc yet (never opened Class Chat before), or offline — badge just stays at its last known count */ });
+}
+
 function subscribeClassChat() {
   if (unsubscribeClassChat) return;
   // Capped to the most recent 150 messages — a live room doesn't need
@@ -197,11 +261,15 @@ function subscribeClassChat() {
   unsubscribeClassChat = onSnapshot(q, (snap) => {
     const wasNearBottom = classChatAtBottom || classChatList.dataset.everLoaded !== "1";
     const msgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    renderChatBubbles(classChatList, msgs, { emptyText: "No messages yet — say hello to the class!" });
+    classChatMessages = msgs;
+    renderChatBubbles(classChatList, msgs, { emptyText: "No messages yet — say hello to the department!" });
     classChatList.dataset.everLoaded = "1";
     if (wasNearBottom) classChatList.scrollTop = classChatList.scrollHeight;
+    // Any incoming message while this sub-tab is already open counts as read immediately.
+    if (isClassChatSubtabActive()) markClassChatRead();
+    else paintClassChatBadge();
   }, (err) => {
-    const { message, technical } = friendlyError(err, "Couldn't load Class Chat.");
+    const { message, technical } = friendlyError(err, "Couldn't load Department Chat.");
     showToast(message, { details: technical });
   });
   classChatList.addEventListener("scroll", () => { classChatAtBottom = isNearBottom(classChatList); });
@@ -214,11 +282,17 @@ async function submitClassChat() {
   classChatSendBtn.disabled = true;
   classChatAtBottom = true; // sending your own message should always snap the view to it
   try {
-    await addDoc(collection(db, "classChat"), {
+    const msgRef = await addDoc(collection(db, "classChat"), {
       authorUid: auth.currentUser.uid,
       authorName: currentProfile?.name || auth.currentUser.email,
       text,
       createdAt: serverTimestamp()
+    });
+    triggerPush({
+      type: "classChat",
+      text,
+      actorName: currentProfile?.name || auth.currentUser.email,
+      messageId: msgRef.id
     });
   } catch (err) {
     classChatInput.value = text; // hand the text back so nothing typed is lost
@@ -240,11 +314,12 @@ function otherParticipant(conv) {
 
 function paintTotalUnreadBadges() {
   const myUid = auth.currentUser?.uid;
-  const total = allConversations.reduce((sum, c) => sum + (Number(c.unread?.[myUid]) || 0), 0);
-  dmTotalBadges.forEach(el => {
-    el.textContent = total > 99 ? "99+" : String(total);
-    el.classList.toggle("hidden", total === 0);
-  });
+  dmUnreadTotal = allConversations.reduce((sum, c) => sum + (Number(c.unread?.[myUid]) || 0), 0);
+  if (dmTabBadge) {
+    dmTabBadge.textContent = dmUnreadTotal > 99 ? "99+" : String(dmUnreadTotal);
+    dmTabBadge.classList.toggle("hidden", dmUnreadTotal === 0);
+  }
+  paintNavTotalBadge();
 }
 
 function renderConversationList() {
@@ -360,7 +435,7 @@ function dmThreadSkeletonHtml() {
 function renderDmThreadHeader(uid) {
   const profile = getCachedProfile(uid) || { uid, name: "Classmate" };
   const topbarTitle = document.getElementById("topbar-title");
-  if (topbarTitle) topbarTitle.textContent = profile.name || "Direct Message";
+  if (topbarTitle) topbarTitle.textContent = profile.name || "Private Message";
   dmThreadHeaderEl.innerHTML = `
     <span class="avatar-presence-wrap">
       <span class="avatar" data-author="${escapeHtml(uid)}">${avatarInner(profile)}</span>
@@ -439,7 +514,7 @@ async function submitDmMessage() {
   dmThreadAtBottom = true;
   try {
     const myUid = auth.currentUser.uid;
-    await addDoc(collection(db, "conversations", conversationId, "messages"), {
+    const msgRef = await addDoc(collection(db, "conversations", conversationId, "messages"), {
       senderUid: myUid,
       text,
       createdAt: serverTimestamp()
@@ -449,6 +524,14 @@ async function submitDmMessage() {
       lastMessageAt: serverTimestamp(),
       lastSenderUid: myUid,
       [`unread.${otherUid}`]: increment(1)
+    });
+    triggerPush({
+      type: "dm",
+      text,
+      actorName: currentProfile?.name || auth.currentUser.email,
+      targetUid: otherUid,
+      conversationId,
+      messageId: msgRef.id
     });
   } catch (err) {
     dmThreadInput.value = text;
@@ -466,6 +549,7 @@ export function initMessages() {
   classChatForm?.addEventListener("submit", (e) => { e.preventDefault(); submitClassChat(); });
   classChatInput?.addEventListener("input", () => { classChatSendBtn.disabled = !classChatInput.value.trim(); });
   subscribeClassChat();
+  subscribeClassChatRead();
   paintClassChatOnlineCount();
 
   dmThreadForm?.addEventListener("submit", (e) => { e.preventDefault(); submitDmMessage(); });
@@ -494,6 +578,8 @@ export function initMessages() {
 export function teardownMessages() {
   if (unsubscribeClassChat) unsubscribeClassChat();
   unsubscribeClassChat = null;
+  if (unsubscribeClassChatRead) unsubscribeClassChatRead();
+  unsubscribeClassChatRead = null;
   if (unsubscribeConversations) unsubscribeConversations();
   unsubscribeConversations = null;
   allConversations = [];

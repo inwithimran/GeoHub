@@ -16,6 +16,8 @@ import { initWall, teardownWall } from "./wall.js";
 import { initResources, teardownResources, loadUserResources } from "./resources.js";
 import { initDirectory, teardownDirectory } from "./directory.js";
 import { initRoutine, teardownRoutine, registerNotificationsRouter } from "./routine.js";
+import { initDeadlines, teardownDeadlines } from "./deadlines.js";
+import { initGlobalSearch, ensureSearchDataLoaded, registerSearchRouter } from "./search.js";
 import { initPresence, teardownPresence } from "./presence.js";
 import { initMessages, teardownMessages, registerDmThreadRouter, openDmThread, getOpenDmUid, teardownDmThread, isClassChatSubtabActive } from "./messages.js";
 import { openUserProfilePage, loadUserPosts, registerProfilePageRouter, getOpenProfileUid, teardownProfilePage } from "./profile-view.js";
@@ -269,10 +271,12 @@ const routeTitles = {
   routine: "Weekly Routine",
   profile: "My Profile",
   notices: "Notices & Notifications",
+  reports: "Reported Posts",
+  search: "Search",
   settings: "Settings",
   "user-profile": "Profile", // overwritten with the classmate's name once loaded
   "post-detail": "Post", // overwritten with "<name>'s Post" once loaded
-  "dm-thread": "Direct Message" // overwritten with the classmate's name once loaded
+  "dm-thread": "Private Message" // overwritten with the classmate's name once loaded
 };
 
 let currentRoute = "wall";
@@ -327,10 +331,11 @@ function goToRoute(route, { fromPopstate = false, replace = false, state = {} } 
   // a full route change.
   document.getElementById("app-shell")?.classList.toggle("chat-mode", route === "dm-thread" || (route === "message" && isClassChatSubtabActive()));
   document.getElementById("topbar-title").textContent = routeTitles[route] || "GeoHub";
-  document.getElementById("topbar-subtitle").textContent = route === "user-profile" ? "Classmate Profile" : route === "dm-thread" ? "Direct Message" : route === "settings" ? "App preferences & account" : "Geography & Environment";
+  document.getElementById("topbar-subtitle").textContent = route === "user-profile" ? "Classmate Profile" : route === "dm-thread" ? "Private Message" : route === "settings" ? "App preferences & account" : route === "reports" ? "Admin only" : "Geography & Environment";
 
   if (route === "profile") renderProfile();
   if (route === "settings") renderSettingsPage();
+  if (route === "search") ensureSearchDataLoaded();
   // Post Detail and a classmate's Profile are opened fresh each time (a new
   // post or a different classmate is a brand-new page underneath the same
   // route name), so they always start at the top. Every other route restores
@@ -359,6 +364,7 @@ registerProfilePageRouter(goToRoute);
 registerNotificationsRouter(goToRoute);
 registerPostDetailRouter(goToRoute);
 registerDmThreadRouter(goToRoute);
+registerSearchRouter(goToRoute);
 
 document.querySelectorAll(".nav-item[data-route]").forEach(btn => {
   btn.addEventListener("click", () => {
@@ -367,6 +373,12 @@ document.querySelectorAll(".nav-item[data-route]").forEach(btn => {
 });
 document.getElementById("topbar-notif-btn").addEventListener("click", () => {
   if (currentRoute !== "notices") goToRoute("notices");
+});
+document.getElementById("topbar-reports-btn")?.addEventListener("click", () => {
+  if (currentRoute !== "reports") goToRoute("reports");
+});
+document.getElementById("topbar-search-btn").addEventListener("click", () => {
+  if (currentRoute !== "search") goToRoute("search");
 });
 document.getElementById("topbar-settings-btn").addEventListener("click", () => {
   if (currentRoute !== "settings") goToRoute("settings");
@@ -842,6 +854,8 @@ watchAuthState(
       initResources();
       initDirectory();
       initRoutine();
+      initDeadlines();
+      initGlobalSearch();
       initPresence();
       initMessages();
       featuresInitialized = true;
@@ -870,6 +884,7 @@ watchAuthState(
       teardownResources();
       teardownDirectory();
       teardownRoutine();
+      teardownDeadlines();
       teardownPostDetail();
       teardownPresence();
       teardownMessages();

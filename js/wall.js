@@ -260,10 +260,7 @@ function openComposerModal() {
         <span>Add a poll</span>
       </button>
       <div class="poll-builder hidden" id="poll-builder">
-        <div class="poll-builder-options" id="poll-options">
-          <input type="text" class="poll-option-input" placeholder="Option 1" maxlength="80" />
-          <input type="text" class="poll-option-input" placeholder="Option 2" maxlength="80" />
-        </div>
+        <div class="poll-builder-options" id="poll-options"></div>
         <button type="button" class="poll-add-option-btn" id="poll-add-option">+ Add option</button>
         <p class="modal-hint">Your post text above is the poll question.</p>
       </div>
@@ -286,6 +283,9 @@ function openComposerModal() {
   });
 }
 
+const POLL_MIN_OPTIONS = 2;
+const POLL_MAX_OPTIONS = 6;
+
 /** Wires the composer's "Add a poll" toggle + dynamic option list. Returns getPoll(), which is null unless the poll is enabled with 2+ filled-in options. */
 function wirePollBuilder() {
   const toggleBtn = document.getElementById("poll-toggle-btn");
@@ -294,6 +294,42 @@ function wirePollBuilder() {
   const addBtn = document.getElementById("poll-add-option");
   let enabled = false;
 
+  // Every row — including the starting two — gets a remove (×) button, so
+  // a mistaken extra option is never stuck; removing is only ever blocked
+  // (button dimmed, not removed from the layout) once exactly
+  // POLL_MIN_OPTIONS remain, since a poll needs at least two choices.
+  function addRow() {
+    const row = document.createElement("div");
+    row.className = "poll-option-row";
+    row.innerHTML = `
+      <span class="poll-option-index"></span>
+      <input type="text" class="poll-option-input" maxlength="80" />
+      <button type="button" class="poll-option-remove-btn" aria-label="Remove this option">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>`;
+    row.querySelector(".poll-option-remove-btn").addEventListener("click", () => {
+      if (optionsWrap.children.length <= POLL_MIN_OPTIONS) return;
+      row.remove();
+      renumber();
+    });
+    optionsWrap.appendChild(row);
+    renumber();
+  }
+
+  // Keep placeholders/index badges ("1", "2", …) and the remove/add
+  // affordances in sync after every add or remove.
+  function renumber() {
+    const rows = [...optionsWrap.querySelectorAll(".poll-option-row")];
+    rows.forEach((row, i) => {
+      row.querySelector(".poll-option-index").textContent = i + 1;
+      row.querySelector(".poll-option-input").placeholder = `Option ${i + 1}`;
+      row.querySelector(".poll-option-remove-btn").classList.toggle("is-disabled", rows.length <= POLL_MIN_OPTIONS);
+    });
+    addBtn.classList.toggle("is-disabled", rows.length >= POLL_MAX_OPTIONS);
+  }
+
+  for (let i = 0; i < POLL_MIN_OPTIONS; i++) addRow();
+
   toggleBtn.addEventListener("click", () => {
     enabled = !enabled;
     builder.classList.toggle("hidden", !enabled);
@@ -301,13 +337,8 @@ function wirePollBuilder() {
     toggleBtn.querySelector("span").textContent = enabled ? "Remove poll" : "Add a poll";
   });
   addBtn.addEventListener("click", () => {
-    if (optionsWrap.children.length >= 6) return;
-    const input = document.createElement("input");
-    input.type = "text";
-    input.className = "poll-option-input";
-    input.maxLength = 80;
-    input.placeholder = `Option ${optionsWrap.children.length + 1}`;
-    optionsWrap.appendChild(input);
+    if (optionsWrap.children.length >= POLL_MAX_OPTIONS) return;
+    addRow();
   });
 
   return {

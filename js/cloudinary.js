@@ -78,3 +78,47 @@ export async function uploadImage(file, { maxDim = 1600, quality = 0.8, folder }
 export async function uploadImages(files, opts = {}) {
   return Promise.all(Array.from(files).map((f) => uploadImage(f, opts)));
 }
+
+// ============================================================
+// RAW FILE UPLOADS (PDFs, Word/Excel/PowerPoint docs, zips, …) — used
+// by the Notes & Sheet Hub's "Upload a file" option (js/resources.js),
+// so a student sharing a note doesn't have to go create a Google Drive
+// link first.
+//
+// Deliberately posted to Cloudinary's /raw/upload endpoint (not
+// /auto/upload) rather than letting Cloudinary auto-detect the resource
+// type: Cloudinary auto-detects PDFs specifically as an "image" asset
+// (for thumbnailing), and *delivering* an "image"-type PDF is blocked by
+// default under Cloudinary's account-level PDF/ZIP delivery security
+// setting unless that's manually turned on in the console — a trap for
+// exactly this use case. Uploading explicitly as "raw" sidesteps that
+// setting entirely: a raw asset is delivered as-is, no image pipeline
+// involved, so a shared PDF opens for classmates with no extra
+// Cloudinary console configuration required.
+// ============================================================
+const RAW_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/raw/upload`;
+
+/**
+ * Upload a single non-image file (PDF, .docx, .pptx, .xlsx, .zip, etc.)
+ * to Cloudinary as a raw asset. Returns the resulting secure_url.
+ */
+export async function uploadRawFile(file, { folder } = {}) {
+  const form = new FormData();
+  form.append("file", file, file.name || "upload");
+  form.append("upload_preset", UPLOAD_PRESET);
+  // Keeps the original filename (with a uniqueness suffix) in the stored
+  // asset instead of a random id, so the URL still ends in a sensible
+  // name/extension when a classmate opens or downloads it.
+  form.append("use_filename", "true");
+  form.append("unique_filename", "true");
+  if (folder) form.append("folder", folder);
+
+  const res = await fetch(RAW_UPLOAD_URL, { method: "POST", body: form });
+  if (!res.ok) {
+    let msg = "Upload failed.";
+    try { msg = (await res.json())?.error?.message || msg; } catch { /* ignore */ }
+    throw new Error(msg);
+  }
+  const data = await res.json();
+  return data.secure_url;
+}
