@@ -340,7 +340,7 @@ export function setBtnLoading(btn, loading, label) {
     if (btn.dataset.originalHtml === undefined) btn.dataset.originalHtml = btn.innerHTML;
     btn.disabled = true;
     btn.classList.add("is-loading");
-    btn.innerHTML = `${spinnerHtml}<span>${label || "Please wait…"}</span>`;
+    btn.innerHTML = `${spinnerHtml}<span class="btn-spinner-label">${label || "Please wait…"}</span>`;
   } else {
     btn.disabled = false;
     btn.classList.remove("is-loading");
