@@ -965,24 +965,18 @@
      margins that could add up to a bigger-than-intended gap. */
   .dm-thread-header > div { @apply flex flex-col justify-center; gap:3px; }
   .dm-thread-header-name { @apply block text-[1.08rem] font-extrabold; margin:0; }
-  /* A softer, more legible presence chip than a plain text line — grey
-     "pill" while away, tinted forest-green with a glowing dot once the
-     classmate comes online. Scoped to its own class (not the shared
-     .presence-text used on Profile pages) so it doesn't affect other
-     screens. */
-  .dm-thread-presence-chip {
-    @apply inline-flex items-center gap-1.5 text-[.62rem] font-bold rounded-full w-fit;
-    padding:2px 8px 2px 6px; color: var(--color-ink-faint); background: var(--color-paper-deep);
-  }
+  /* A plain presence line under the thread name — the green light itself
+     lives only on the avatar photo (avatarPresenceDotHtml, the corner
+     badge above), so this used to also carry its own dot inside a
+     pill/button-looking background, which duplicated it. Simplified to
+     just text — grey while away, green once the classmate's active —
+     matching how Department Chat's own "X online now" line
+     (.chat-header-sub) already looks. Scoped to its own class (not the
+     shared .presence-text used on Profile pages) so it doesn't affect
+     other screens. */
+  .dm-thread-presence-chip { @apply block text-[.72rem] font-semibold; color: var(--color-ink-faint); }
   .dm-thread-presence-chip:empty { display:none; }
-  .dm-thread-presence-chip::before {
-    content:""; width:5px; height:5px; border-radius:50%; background: var(--color-ink-faint); flex-shrink:0;
-  }
-  .dm-thread-presence-chip.online-now { color: var(--color-forest-700); background: var(--color-forest-100); }
-  .dm-thread-presence-chip.online-now::before {
-    background: var(--color-forest-500);
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-forest-500) 25%, transparent);
-  }
+  .dm-thread-presence-chip.online-now { color: var(--color-forest-600); }
 
   /* ---- Message button (Directory row + a classmate's Profile) ---- */
   .msg-btn {
