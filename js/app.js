@@ -374,9 +374,6 @@ document.querySelectorAll(".nav-item[data-route]").forEach(btn => {
 document.getElementById("topbar-notif-btn").addEventListener("click", () => {
   if (currentRoute !== "notices") goToRoute("notices");
 });
-document.getElementById("topbar-reports-btn")?.addEventListener("click", () => {
-  if (currentRoute !== "reports") goToRoute("reports");
-});
 document.getElementById("topbar-search-btn").addEventListener("click", () => {
   if (currentRoute !== "search") goToRoute("search");
 });

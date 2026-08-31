@@ -379,7 +379,7 @@ export function initRoutine() {
 
   const isAdmin = ADMIN_EMAILS.includes(auth.currentUser?.email || "");
   if (isAdmin) subscribeReports();
-  document.getElementById("topbar-reports-btn")?.classList.toggle("hidden", !isAdmin);
+  document.getElementById("admin-panel-block")?.classList.toggle("hidden", !isAdmin);
 
   if (editRoutineBtn) {
     editRoutineBtn.classList.toggle("hidden", !isAdmin);
@@ -529,7 +529,7 @@ function subscribeReports() {
     openReportCount = snap.size;
     openReports = snap.docs.map(d => ({ id: d.id, ...d.data() }))
       .sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
-    setBadgeEl(document.getElementById("topbar-reports-badge"), openReportCount);
+    setBadgeEl(document.getElementById("admin-reports-badge"), openReportCount);
     renderReportsPage();
   }, () => { /* not admin, or offline — page/badge just stay at their last known state */ });
 }
