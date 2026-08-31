@@ -228,7 +228,16 @@
     overscroll-behavior-y: none;
   }
   h1,h2,h3,h4 { font-family: var(--font-display); }
-  button { font-family: inherit; cursor:pointer; }
+  /* No native text-selection/callout on buttons anywhere in the app — without
+     this, a press-and-hold on any button (most noticeably the Wall's reaction
+     button, whose long-press already has its own meaning) can trigger the
+     phone's own "Select/Copy" text-selection bubble fighting for the same
+     gesture. Buttons aren't text to select, so this is switched off globally
+     rather than patched one screen at a time. */
+  button {
+    font-family: inherit; cursor:pointer;
+    -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
+  }
   input, textarea, select { font-family: inherit; font-size:1rem; }
   a { color: var(--color-gold-600); }
   :focus-visible { outline:2.5px solid var(--color-gold-500); outline-offset:2px; border-radius:6px; }
@@ -758,18 +767,21 @@
     .dm-thread-route { height:calc(100dvh - 58px); }
   }
 
-  .msg-subtabs { @apply flex shrink-0 gap-1.5; padding:12px 14px 10px; background: var(--color-paper); border-bottom:1px solid var(--color-line); }
+  /* A single pill-shaped "segmented control" housing both sub-tabs (like a
+     native iOS switcher) reads as one deliberate control, rather than two
+     separate button chips floating side by side — the active side gets the
+     brand gradient + a lifted shadow, the inactive side just sits flush
+     inside the shared track. */
+  .msg-subtabs {
+    @apply flex shrink-0 gap-1; padding:5px; margin:12px 14px 10px;
+    background: var(--color-paper-deep); border-radius:999px; border:1px solid var(--color-line);
+  }
   @media (min-width:900px) {
-    /* Inside the desktop card, a two-way segmented control stretched
-       edge-to-edge (flex-1 buttons) reads as a giant near-empty bar — cap
-       it to its own content width instead, sitting inside the card's own
-       header strip. (The flex:0 0 auto override lives further down, AFTER
-       .msg-subtab-btn's base rule, so it actually wins the cascade.) */
-    .msg-subtabs { padding:14px 16px; gap:8px; background: var(--color-paper); border-bottom:1px solid var(--color-line); }
+    .msg-subtabs { padding:5px; margin:14px 16px 12px; gap:1px; }
   }
   .msg-subtab-btn {
     @apply relative flex-1 flex items-center justify-center gap-1.5 text-sm font-extrabold rounded-full transition-colors;
-    padding:11px 10px; color: var(--color-ink-soft); background: var(--color-surface); border:1px solid var(--color-line);
+    padding:10px 10px; color: var(--color-ink-soft); background:transparent; border:none;
     /* Fixed line-height + a nowrap/truncating label (below) means this bar
        renders at the SAME height whether its unread badge is hidden or
        showing — without this, the badge appearing eats into the row's
@@ -777,8 +789,8 @@
        line, and the whole bar grows taller right as the badge lights up. */
     line-height:1.2;
   }
-  .msg-subtab-btn.active { @apply text-white; background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800)); border-color:transparent; box-shadow: var(--shadow-btn); }
-  @media (min-width:900px) { .msg-subtab-btn { flex:0 0 auto; padding:9px 16px; } }
+  .msg-subtab-btn.active { @apply text-white; background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800)); box-shadow: var(--shadow-btn); }
+  @media (min-width:900px) { .msg-subtab-btn { flex:0 0 auto; padding:9px 18px; } }
   .msg-subtab-icon { @apply shrink-0; }
   .msg-subtab-label { @apply min-w-0 overflow-hidden whitespace-nowrap text-ellipsis; }
   .msg-tab-badge {
@@ -844,8 +856,17 @@
   }
   .chat-bubble-meta { @apply flex items-center gap-1.5 px-1 text-[.65rem] font-semibold; color: var(--color-ink-faint); }
   .chat-bubble-row.mine .chat-bubble-meta { @apply flex-row-reverse; }
-  .chat-bubble-row .kebab-menu { align-self:center; }
-  .chat-bubble-row .kebab-btn { width:24px; height:24px; }
+  /* The delete kebab rides along in the meta row next to the timestamp
+     instead of claiming its own column beside the avatar (see the comment
+     in renderChatBubbles) — kept small and quiet so it doesn't compete with
+     the time label for attention. */
+  .chat-bubble-meta .kebab-menu { @apply shrink-0; }
+  .chat-bubble-meta .kebab-btn { width:20px; height:20px; color: var(--color-ink-faint); }
+  .chat-bubble-row.mine .chat-bubble-meta .kebab-btn { color: rgba(255,255,255,.75); }
+  /* Delete is only ever offered on your OWN bubbles (mine, right-aligned),
+     so opening upward is all that's needed — the default right-anchored
+     dropdown already stays clear of the screen edge on that side. */
+  .chat-bubble-meta .kebab-dropdown { top:auto; bottom:calc(100% + 4px); }
   .chat-day-divider { @apply self-center text-[.68rem] font-extrabold uppercase tracking-wide rounded-full; padding:4px 12px; color: var(--color-ink-faint); background: var(--color-surface); box-shadow: var(--shadow-card); margin:6px 0; }
   .chat-empty { @apply flex-1 flex flex-col items-center justify-center text-center gap-2.5; color: var(--color-ink-faint); font-size:.88rem; padding:30px; }
   .chat-empty::before {
@@ -889,19 +910,26 @@
     content:""; display:block; width:56px; height:56px; border-radius:50%;
     background: var(--color-forest-100) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23226241' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='7' r='4'/%3E%3Cpath d='M2 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2'/%3E%3Cpath d='M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75'/%3E%3C/svg%3E") no-repeat center/24px;
   }
-  .dm-conv-row { @apply w-full flex items-center gap-3 text-left rounded-2xl bg-surface transition-transform; padding:11px 12px; box-shadow: var(--shadow-card); border:1px solid var(--color-line); }
+  .dm-conv-row {
+    @apply w-full flex items-center gap-3 text-left rounded-2xl bg-surface transition-all;
+    padding:12px 13px; box-shadow: var(--shadow-card); border:1px solid var(--color-line);
+  }
   .dm-conv-row:active { transform:scale(.985); }
-  @media (hover:hover) { .dm-conv-row:hover { box-shadow: var(--shadow-cardhover); border-color: var(--color-forest-200); } }
-  .dm-conv-row .avatar { box-shadow:0 0 0 2.5px var(--color-surface), 0 0 0 4px var(--color-forest-200); }
+  @media (hover:hover) { .dm-conv-row:hover { box-shadow: var(--shadow-cardhover); border-color: var(--color-forest-200); transform:translateY(-1px); } }
+  /* A slightly bigger avatar than the app's usual 40px default — the DM list
+     is a directory of *people*, so the photo carries more of the row's
+     weight than it does in a dense feed. */
+  .dm-conv-row .avatar { width:46px; height:46px; box-shadow:0 0 0 2.5px var(--color-surface), 0 0 0 4px var(--color-forest-200); }
   .dm-conv-info { @apply flex-1 min-w-0; }
-  .dm-conv-info strong { @apply block text-[.9rem]; }
-  .dm-conv-preview { @apply flex items-center gap-1 text-[.78rem] font-medium whitespace-nowrap overflow-hidden text-ellipsis; color: var(--color-ink-faint); max-width:100%; }
+  .dm-conv-info strong { @apply block text-[.92rem] font-extrabold tracking-tight; }
+  .dm-conv-preview { @apply flex items-center gap-1 text-[.79rem] font-medium whitespace-nowrap overflow-hidden text-ellipsis; color: var(--color-ink-faint); max-width:100%; margin-top:2px; }
   .dm-conv-preview.unread { @apply font-bold; color: var(--color-ink); }
-  .dm-conv-meta { @apply flex flex-col items-end gap-1.5 shrink-0; }
-  .dm-conv-time { @apply text-[.68rem] font-semibold; color: var(--color-ink-faint); }
+  .dm-conv-meta { @apply flex flex-col items-end gap-2 shrink-0; }
+  .dm-conv-time { @apply text-[.66rem] font-bold uppercase tracking-wide; color: var(--color-ink-faint); }
   .dm-unread-dot {
-    @apply flex items-center justify-center text-white font-extrabold rounded-full; min-width:19px; height:19px; font-size:.65rem; padding:0 5px;
+    @apply flex items-center justify-center text-white font-extrabold rounded-full; min-width:20px; height:20px; font-size:.66rem; padding:0 5px;
     background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800));
+    box-shadow:0 2px 6px rgba(26,76,48,.35);
   }
   /* A conversation with unread messages gets a soft tinted card + left
      accent bar instead of blending in with already-read rows — the list
@@ -915,8 +943,20 @@
   /* Back icon + avatar/name/presence all on one line — the back button is
      a plain sibling of #dm-thread-header (see the HTML comment above the
      section) so it survives every header re-render untouched. */
-  .dm-thread-header-row { @apply flex items-center gap-1 shrink-0; padding:10px 10px 12px; background: var(--color-paper); border-bottom:1px solid var(--color-line); }
-  @media (min-width:900px) { .dm-thread-header-row { padding:14px 16px; background: var(--color-paper); border-bottom:1px solid var(--color-line); gap:10px; } }
+  .dm-thread-header-row {
+    @apply flex items-center gap-1 shrink-0; padding:10px 10px 12px;
+    background: color-mix(in srgb, var(--color-paper) 92%, transparent);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border-bottom:1px solid var(--color-line);
+  }
+  @media (min-width:900px) {
+    .dm-thread-header-row {
+      padding:14px 16px; gap:10px;
+      background: color-mix(in srgb, var(--color-paper) 92%, transparent);
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      border-bottom:1px solid var(--color-line);
+    }
+  }
   .dm-thread-back-btn {
     @apply flex items-center justify-center shrink-0 rounded-full transition-colors; width:34px; height:34px;
     color: var(--color-ink-soft); background: transparent;
@@ -944,13 +984,18 @@
   }
   .dm-thread-header { @apply flex items-center gap-2.5 min-w-0 flex-1; }
   .dm-thread-header .avatar { width:44px; height:44px; }
-  /* ---- Block/unblock toggle in the thread header row (js/messages.js) ---- */
-  .dm-thread-block-btn {
-    @apply flex items-center justify-center shrink-0 rounded-full transition-colors;
+  /* ---- "More options" trigger in the thread header row (js/messages.js) —
+     currently just Block/Unblock, styled to match the old dedicated button
+     it replaced (same circular footprint) so the header's rhythm doesn't
+     change, but tucked behind a tap instead of sitting out on its own. ---- */
+  .dm-thread-more-menu .kebab-btn {
     width:34px; height:34px; color: var(--color-ink-faint); background: var(--color-paper-deep); border:1px solid var(--color-line);
   }
-  .dm-thread-block-btn:active { transform:scale(.92); }
-  .dm-thread-block-btn.active { color: var(--color-danger-600); background: var(--color-clay-100); border-color: transparent; }
+  .dm-thread-more-menu .kebab-btn:active { transform:scale(.92); }
+  /* A quiet red tint on the trigger itself while you currently have this
+     classmate blocked — the one hint of that state left outside the menu. */
+  .dm-thread-more-menu.is-blocking .kebab-btn { color: var(--color-danger-600); background: var(--color-clay-100); border-color:transparent; }
+  .dm-thread-more-menu .kebab-dropdown { min-width:190px; }
   /* ---- "Blocked" bar — swaps in for the composer (.chat-input-bar) whenever
      either side has blocked the other in this conversation. ---- */
   .dm-blocked-bar {
@@ -2355,15 +2400,25 @@
            avatar/name/presence on every open — never touches or detaches it; its click
            listener is wired once in initMessages() and stays live for the whole session. -->
       <section id="section-dm-thread" class="route-section dm-thread-route">
-        <div class="dm-thread-header-row">
+        <div class="dm-thread-header-row" id="dm-thread-header-row">
           <button type="button" id="dm-thread-back-btn" class="dm-thread-back-btn" aria-label="Back to conversations">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
             <span class="back-label">Back</span>
           </button>
           <div id="dm-thread-header" class="dm-thread-header"></div>
-          <button type="button" id="dm-thread-block-btn" class="dm-thread-block-btn" aria-label="Block this classmate">
-            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="5.6" y1="5.6" x2="18.4" y2="18.4"/></svg>
-          </button>
+          <!-- Block/unblock now lives behind this three-dot menu instead of sitting
+               out as its own icon button — one tap less to see, one deliberate tap
+               to actually reach it, matching every other "more options" menu in
+               the app (see kebabMenuHtml in ui-utils.js, whose markup this mirrors
+               by hand since this trigger isn't tied to a single feed item id). -->
+          <div class="kebab-menu dm-thread-more-menu" id="dm-thread-more-menu">
+            <button type="button" class="kebab-btn" id="dm-thread-more-btn" aria-label="More options" aria-haspopup="true">
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor"><circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/></svg>
+            </button>
+            <div class="kebab-dropdown hidden" id="dm-thread-more-dropdown">
+              <button type="button" class="kebab-item danger" id="dm-thread-block-item" data-kebab-action="block">Block this classmate</button>
+            </div>
+          </div>
         </div>
         <div id="dm-thread-list" class="chat-scroll"></div>
         <form id="dm-thread-form" class="chat-input-bar" autocomplete="off">
