@@ -564,7 +564,15 @@ export function initMessages() {
 
   dmThreadForm?.addEventListener("submit", (e) => { e.preventDefault(); submitDmMessage(); });
   dmThreadInput?.addEventListener("input", () => { dmThreadSendBtn.disabled = !dmThreadInput.value.trim(); });
-  dmThreadBackBtn?.addEventListener("click", () => history.back());
+  // Same reasoning as the shared #topbar-back-btn in app.js: prefer the
+  // ?from= tab baked into the URL over a blind history.back(), since that
+  // stays correct even right after a reload or a fresh deep link, when
+  // there's no real back-stack for history.back() to fall back on.
+  dmThreadBackBtn?.addEventListener("click", () => {
+    const from = history.state?.from;
+    if (from && goToRouteRef) goToRouteRef(from);
+    else history.back();
+  });
 
   subscribeConversations();
 

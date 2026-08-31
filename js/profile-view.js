@@ -14,7 +14,7 @@ import { collection, query, where, getDocs } from "https://www.gstatic.com/fireb
 import { fetchProfile } from "./auth.js";
 import {
   escapeHtml, getCachedProfile, cacheUserProfile, avatarInner, nameWithBadge,
-  isAdminEmail, fullDate, showToast, resetScrollForTabs, friendlyError
+  isAdminEmail, adminBadgeHtml, fullDate, showToast, resetScrollForTabs, friendlyError
 } from "./ui-utils.js";
 import { loadUserResources } from "./resources.js";
 import { renderPost } from "./wall.js";
@@ -127,9 +127,11 @@ function renderProfilePage(profile, uid) {
           <span class="avatar avatar-lg profile-flow-avatar">${avatarInner(profile)}</span>
         </div>
         <h3>${nameWithBadge(profile.name || "Classmate", profile.email)}</h3>
-        ${presenceTextHtml(uid, "presence-text profile-flow-presence")}
-        ${profile.session ? `<div class="profile-role">${escapeHtml(profile.session)}</div>` : ""}
-        ${admin ? `<div class="profile-admin-note">Admin</div>` : ""}
+        <div class="profile-meta-row">
+          <span class="profile-meta-chip">${presenceTextHtml(uid, "presence-text")}</span>
+          ${profile.session ? `<span class="profile-meta-chip chip-session">${escapeHtml(profile.session)}</span>` : ""}
+          ${admin ? `<span class="profile-meta-chip chip-admin" title="Admin · can post notices to the whole department">${adminBadgeHtml()} Admin</span>` : ""}
+        </div>
       </div>
       ${profile.bio ? `<p class="pv-bio profile-own-bio">${escapeHtml(profile.bio)}</p>` : ""}
       <div class="profile-stat-row">

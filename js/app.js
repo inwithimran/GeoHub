@@ -24,7 +24,7 @@ import { openUserProfilePage, loadUserPosts, registerProfilePageRouter, getOpenP
 import { openPostDetailPage, registerPostDetailRouter, teardownPostDetail, getOpenPostId } from "./post-detail.js";
 import {
   escapeHtml, openModal, closeModal, showToast, setBtnLoading, fullDate,
-  avatarInner, nameWithBadge, isAdminEmail, resetScrollForTabs
+  avatarInner, nameWithBadge, isAdminEmail, adminBadgeHtml, resetScrollForTabs
 } from "./ui-utils.js";
 import { uploadImage } from "./cloudinary.js";
 import { isAcceptableImageFile } from "./media-picker.js";
@@ -345,6 +345,44 @@ let currentRoute = "wall";
 // keep their own inline header (back+avatar+name together) since that row
 // already carries real content, not just a lone button.
 const TOPBAR_BACK_ROUTES = new Set(["search", "user-profile", "post-detail", "notices", "reports", "settings"]);
+// Drill-down pages that DO carry a "from" (see buildHash/goToRoute below).
+// Direct Messages threads aren't in TOPBAR_BACK_ROUTES (they get their own
+// inline header, not the shared #topbar-back-btn) but its own Back button
+// still needs to know which tab to return to, so it's included here too.
+const FROM_TRACKED_ROUTES = new Set([...TOPBAR_BACK_ROUTES, "dm-thread"]);
+
+// ============================================================
+// HASH URL <-> ROUTE — every section now gets a real URL (#wall,
+// #post-detail?id=...&from=wall, ...) instead of leaving the
+// address bar untouched. Two things this buys us that plain
+// history.pushState(state, "") couldn't:
+//   1. Reloading the tab (or the PWA itself) lands back on
+//      whichever section/entity the hash points to, instead of
+//      always snapping back to the Wall — see the auth-resolved
+//      handler near the bottom of this file.
+//   2. The shared #topbar-back-btn (and DM thread's own back
+//      button) can read exactly which tab to return to straight
+//      off the URL via ?from=..., rather than depending on the
+//      browser's own back-stack being intact — which it isn't
+//      right after a reload, or when the page was opened fresh
+//      from a shared link/notification.
+// `id` covers whichever single entity a route needs (a classmate's
+// uid, a post id, a DM partner's uid) — each route only ever uses
+// one of these, so a single `id` param covers all three.
+function buildHash(route, id, from) {
+  const params = new URLSearchParams();
+  if (id) params.set("id", id);
+  if (from) params.set("from", from);
+  const qs = params.toString();
+  return qs ? `#${route}?${qs}` : `#${route}`;
+}
+function parseHash(hash) {
+  if (!hash || hash === "#") return null;
+  const [route, qs] = hash.replace(/^#/, "").split("?");
+  if (!route) return null;
+  const params = new URLSearchParams(qs || "");
+  return { route, id: params.get("id") || null, from: params.get("from") || null };
+}
 
 // Each of the 5 bottom-nav tabs (plus Notices/Settings) shares one page-level
 // scroll container (see .content's CSS), so switching between them used to
@@ -370,6 +408,26 @@ let scrollPositions = {}; // route -> last scrollY
 // ============================================================
 function goToRoute(route, { fromPopstate = false, replace = false, state = {} } = {}) {
   if (!routeTitles[route]) return;
+  // Figure out which tab "back" should return to for this route (only
+  // routes in FROM_TRACKED_ROUTES ever show a back button). Resolved here,
+  // once, so it can be baked straight into the hash URL below instead of
+  // living only in memory:
+  //  - Reacting to the browser back/forward button: the address bar has
+  //    already been updated to the entry we're landing ON by the time this
+  //    runs, so trust whatever ?from= is already sitting in THAT hash.
+  //  - Re-opening the same drill-down route for a different entity (e.g.
+  //    tapping a link to another post while already on Post Detail): keep
+  //    the original ?from= rather than recomputing it as "post-detail".
+  //  - A genuinely new navigation into a from-tracked route: wherever we're
+  //    navigating away from right now is the answer.
+  const trackFrom = FROM_TRACKED_ROUTES.has(route);
+  let from = null;
+  if (trackFrom) {
+    if (state.from) from = state.from;
+    else if (fromPopstate || route === currentRoute) from = parseHash(location.hash)?.from || null;
+    else from = currentRoute;
+  }
+  const id = state.profileUid || state.postId || state.dmUid || null;
   // Remember exactly where we're scrolled to on the tab we're leaving,
   // before its section gets hidden, so coming back restores it.
   if (currentRoute !== route && !SCROLL_MEMORY_EXCLUDED_ROUTES.has(currentRoute)) {
@@ -423,11 +481,12 @@ function goToRoute(route, { fromPopstate = false, replace = false, state = {} } 
   if (currentRoute === "dm-thread" && route !== "dm-thread") teardownDmThread();
 
   currentRoute = route;
-  const historyState = { geohubRoute: route, ...state };
+  const historyState = { geohubRoute: route, ...state, from };
+  const hash = buildHash(route, id, from);
   if (replace) {
-    history.replaceState(historyState, "");
+    history.replaceState(historyState, "", hash);
   } else if (!fromPopstate && (route !== history.state?.geohubRoute || route === "user-profile" || route === "post-detail")) {
-    history.pushState(historyState, "");
+    history.pushState(historyState, "", hash);
   }
 }
 registerProfilePageRouter(goToRoute);
@@ -435,6 +494,24 @@ registerNotificationsRouter(goToRoute);
 registerPostDetailRouter(goToRoute);
 registerDmThreadRouter(goToRoute);
 registerSearchRouter(goToRoute);
+
+// Reads the current hash URL and opens whatever it points to, in place of
+// the fixed goToRoute("wall", ...) this app used to always start on. Used
+// right after login/reload (see watchAuthState below) — a plain route just
+// goes through goToRoute itself; an entity route (a classmate's Profile, a
+// Post, a DM thread) goes through its own opener so the real content gets
+// fetched too, not just the empty section shell.
+function restoreRouteFromHash() {
+  const parsed = parseHash(location.hash);
+  if (!parsed || !routeTitles[parsed.route]) {
+    goToRoute("wall", { replace: true });
+    return;
+  }
+  if (parsed.route === "user-profile" && parsed.id) openUserProfilePage(parsed.id, { replace: true });
+  else if (parsed.route === "post-detail" && parsed.id) openPostDetailPage(parsed.id, { replace: true });
+  else if (parsed.route === "dm-thread" && parsed.id) openDmThread(parsed.id, { replace: true });
+  else goToRoute(parsed.route, { replace: true });
+}
 
 document.querySelectorAll(".nav-item[data-route]").forEach(btn => {
   btn.addEventListener("click", () => {
@@ -457,7 +534,17 @@ document.getElementById("topbar-settings-btn").addEventListener("click", () => {
 // on the device/browser back button being the only way out. history.back()
 // (not a fixed goToRoute("wall")) so it always lands wherever the person
 // actually came from.
-document.getElementById("topbar-back-btn")?.addEventListener("click", () => history.back());
+// Prefer navigating straight to the tab recorded in ?from= over a blind
+// history.back(): back() depends on the browser's own back-stack, which
+// is empty right after a reload or when this page was opened fresh from
+// a shared link/notification — ?from= survives both since it's baked
+// into the URL itself (see buildHash/goToRoute above), so the back button
+// reliably lands on the right tab either way.
+document.getElementById("topbar-back-btn")?.addEventListener("click", () => {
+  const from = history.state?.from || parseHash(location.hash)?.from;
+  if (from && routeTitles[from]) goToRoute(from);
+  else history.back();
+});
 
 // Device/browser back button: step back to whichever section is recorded
 // in that history entry (a modal's own popstate handling, in ui-utils.js,
@@ -566,8 +653,11 @@ function renderProfile() {
           </button>
         </div>
         <h3>${nameWithBadge(p.name, p.email)}</h3>
-        <div class="profile-role">${escapeHtml(DEPARTMENT_NAME)}</div>
-        ${admin ? `<div class="profile-admin-note">Admin · can post notices to the whole department</div>` : ""}
+        <div class="profile-meta-row">
+          <span class="profile-meta-chip chip-session">${escapeHtml(DEPARTMENT_NAME)}</span>
+          ${p.session ? `<span class="profile-meta-chip chip-session">${escapeHtml(p.session)}</span>` : ""}
+          ${admin ? `<span class="profile-meta-chip chip-admin" title="Admin · can post notices to the whole department">${adminBadgeHtml()} Admin</span>` : ""}
+        </div>
       </div>
       ${p.bio ? `<p class="pv-bio profile-own-bio">${escapeHtml(p.bio)}</p>` : ""}
       <div class="profile-stat-row">
@@ -936,7 +1026,10 @@ watchAuthState(
       initMessages();
       featuresInitialized = true;
     }
-    goToRoute("wall", { replace: true });
+    // Land on whatever section/entity the hash URL points to, not always
+    // the Wall — so reloading the tab (or a PWA relaunch) keeps you right
+    // where you were, and a shared post/profile link opens straight there.
+    restoreRouteFromHash();
     initPush(); // best-effort: registers this device for background push notifications
 
     // First-time Google sign-ins land without roll/blood/phone — ask for them once.
@@ -952,7 +1045,10 @@ watchAuthState(
     authScreen.classList.remove("hidden");
     // Clear the app's route history so a re-login starts a fresh back-stack
     // instead of carrying over section entries from the previous session.
-    history.replaceState({ geohubAuthScreen: true }, "");
+    // Also strip the hash — otherwise a next login (possibly as a different
+    // student) would try to restore whatever section/entity this session
+    // was last looking at via restoreRouteFromHash().
+    history.replaceState({ geohubAuthScreen: true }, "", location.pathname + location.search);
     scrollPositions = {}; // next login's tabs each start fresh, not at this session's scroll spots
     currentRoute = "wall";
 
