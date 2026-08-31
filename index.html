@@ -406,6 +406,8 @@
   .pw-toggle:active { background: var(--color-forest-100); color: var(--color-forest-700); }
   .pw-toggle .eye-off { @apply hidden; }
   .auth-switch-hint { @apply text-center text-sm mt-1; color: var(--color-ink-soft); }
+  .auth-forgot-row { @apply flex justify-end -mt-2 -mb-1; }
+  .auth-forgot-row .link-btn { @apply text-[.8rem]; }
   .link-btn { @apply font-bold underline; color: var(--color-forest-700); }
 
   /* ---------- Buttons ---------- */
@@ -942,6 +944,19 @@
   }
   .dm-thread-header { @apply flex items-center gap-2.5 min-w-0 flex-1; }
   .dm-thread-header .avatar { width:44px; height:44px; }
+  /* ---- Block/unblock toggle in the thread header row (js/messages.js) ---- */
+  .dm-thread-block-btn {
+    @apply flex items-center justify-center shrink-0 rounded-full transition-colors;
+    width:34px; height:34px; color: var(--color-ink-faint); background: var(--color-paper-deep); border:1px solid var(--color-line);
+  }
+  .dm-thread-block-btn:active { transform:scale(.92); }
+  .dm-thread-block-btn.active { color: var(--color-danger-600); background: var(--color-clay-100); border-color: transparent; }
+  /* ---- "Blocked" bar — swaps in for the composer (.chat-input-bar) whenever
+     either side has blocked the other in this conversation. ---- */
+  .dm-blocked-bar {
+    @apply flex items-center justify-center gap-2 shrink-0 text-center text-[.82rem] font-semibold;
+    padding:14px 16px; background: var(--color-paper-deep); border-top:1px solid var(--color-line); color: var(--color-ink-faint);
+  }
   /* Name + presence chip sit in a plain sibling <div> (see js/messages.js
      renderDmThreadHeader) — targeted here by direct-child selector so the
      two lines stack with one small, exact gap instead of two separate
@@ -2028,6 +2043,9 @@
               </button>
             </div>
           </label>
+          <div class="auth-forgot-row">
+            <button type="button" class="link-btn" id="forgot-password-btn">Forgot password?</button>
+          </div>
           <p id="login-error" class="form-error"></p>
           <button type="submit" class="btn-primary full raised">Log In</button>
 
@@ -2343,6 +2361,9 @@
             <span class="back-label">Back</span>
           </button>
           <div id="dm-thread-header" class="dm-thread-header"></div>
+          <button type="button" id="dm-thread-block-btn" class="dm-thread-block-btn" aria-label="Block this classmate">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="5.6" y1="5.6" x2="18.4" y2="18.4"/></svg>
+          </button>
         </div>
         <div id="dm-thread-list" class="chat-scroll"></div>
         <form id="dm-thread-form" class="chat-input-bar" autocomplete="off">
@@ -2351,6 +2372,13 @@
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
           </button>
         </form>
+        <!-- Swaps in for the composer above whenever either side has blocked
+             the other in this conversation (js/messages.js's paintDmBlockState) —
+             never both shown at once. -->
+        <div id="dm-thread-blocked-bar" class="dm-blocked-bar hidden">
+          <span id="dm-thread-blocked-text"></span>
+          <button type="button" id="dm-thread-unblock-btn" class="link-btn hidden">Unblock</button>
+        </div>
       </section>
 
       <!-- ===== SECTION 4: ROUTINE, DEADLINES & NOTICE BOARD ===== -->

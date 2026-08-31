@@ -213,6 +213,19 @@ service cloud.firestore {
     // both sides always land on the exact same document instead of
     // racing to create duplicate threads for the same pair of students.
     match /conversations/{conversationId} {
+      // A participant may add/remove only THEIR OWN uid to/from
+      // `blockedBy` (js/messages.js's Block/Unblock button) — the other
+      // participant's own entry, if any, must come out of the write
+      // unchanged, and the array may never hold anything but the two
+      // real participants. Missing-field cases (never blocked, on either
+      // side of the write) are treated as an empty list.
+      function blockedByChangeValid() {
+        let before = ("blockedBy" in resource.data) ? resource.data.blockedBy : [];
+        let after = ("blockedBy" in request.resource.data) ? request.resource.data.blockedBy : [];
+        return after.removeAll([request.auth.uid]).hasOnly(before.removeAll([request.auth.uid])) &&
+          before.removeAll([request.auth.uid]).hasOnly(after.removeAll([request.auth.uid])) &&
+          after.hasOnly(resource.data.participants);
+      }
       // Only the two people IN the conversation may ever read/write it —
       // nobody can browse or tamper with someone else's DMs, even another
       // signed-in classmate.
@@ -230,14 +243,17 @@ service cloud.firestore {
         request.resource.data.participants.size() == 2;
       // The participant pair itself is frozen after creation. Beyond
       // that, either participant may only touch the "preview" fields
-      // (last message text/sender/time) and the shared unread-counts map —
+      // (last message text/sender/time), the shared unread-counts map —
       // e.g. opening the thread zeroes only *your own* entry in `unread`,
       // sending a message updates the preview + bumps the other person's
-      // entry. Nothing else on the conversation doc is ever editable.
+      // entry — and their own entry in `blockedBy` (see
+      // blockedByChangeValid() above). Nothing else on the conversation
+      // doc is ever editable.
       allow update: if isSignedIn() &&
         request.auth.uid in resource.data.participants &&
         request.resource.data.participants == resource.data.participants &&
-        onlyChangedFields(["unread", "lastMessageText", "lastMessageAt", "lastSenderUid"]);
+        onlyChangedFields(["unread", "lastMessageText", "lastMessageAt", "lastSenderUid", "blockedBy"]) &&
+        blockedByChangeValid();
       allow delete: if false;
 
       match /messages/{messageId} {
@@ -248,8 +264,17 @@ service cloud.firestore {
           return isSignedIn() &&
             request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
         }
+        // Real enforcement of the Block button: while either participant
+        // has the other blocked (js/messages.js's `blockedBy` on the
+        // parent conversation doc), no new message may be created in
+        // EITHER direction — matches the client, which hides the composer
+        // for both sides the moment blockedBy is non-empty.
+        function isDmBlocked() {
+          let convo = get(/databases/$(database)/documents/conversations/$(conversationId)).data;
+          return ("blockedBy" in convo) && convo.blockedBy.size() > 0;
+        }
         allow read: if isDmParticipant();
-        allow create: if isDmParticipant() && request.resource.data.senderUid == request.auth.uid && textWithinLimit("text", 2000);
+        allow create: if isDmParticipant() && !isDmBlocked() && request.resource.data.senderUid == request.auth.uid && textWithinLimit("text", 2000);
         allow update: if false; // messages are never edited, only sent/deleted
         allow delete: if isOwner(resource.data.senderUid);
       }
