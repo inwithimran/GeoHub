@@ -530,6 +530,7 @@ function subscribeReports() {
     openReports = snap.docs.map(d => ({ id: d.id, ...d.data() }))
       .sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
     setBadgeEl(document.getElementById("admin-reports-badge"), openReportCount);
+    setBadgeEl(document.getElementById("topbar-settings-badge"), openReportCount);
     renderReportsPage();
   }, () => { /* not admin, or offline — page/badge just stay at their last known state */ });
 }

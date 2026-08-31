@@ -24,7 +24,7 @@ import { openUserProfilePage, loadUserPosts, registerProfilePageRouter, getOpenP
 import { openPostDetailPage, registerPostDetailRouter, teardownPostDetail, getOpenPostId } from "./post-detail.js";
 import {
   escapeHtml, openModal, closeModal, showToast, setBtnLoading, fullDate,
-  avatarInner, nameWithBadge, isAdminEmail, adminBadgeHtml, resetScrollForTabs
+  avatarInner, nameWithBadge, isAdminEmail, adminBadgeHtml
 } from "./ui-utils.js";
 import { uploadImage } from "./cloudinary.js";
 import { isAcceptableImageFile } from "./media-picker.js";
@@ -332,6 +332,15 @@ const routeTitles = {
 
 let currentRoute = "wall";
 
+// Remembers, for each from-tracked route, the tab its OWN back button
+// should return to (see goBackToRoute below). This is what lets Back
+// stay correct when a drill-down page is reached from another
+// drill-down page — e.g. Search (opened from Wall) then Notices
+// (opened from Search) — instead of the two swapping "from" back and
+// forth into an infinite loop. See goBackToRoute for why this is
+// needed in addition to the ?from= already baked into the hash.
+let routeFromMap = {};
+
 // Search / Notices / Settings / Reports / a classmate's Profile / Post
 // Detail are all "drill-down" pages (tapped INTO from somewhere else, no
 // persistent nav item of their own) that used to each carry their own
@@ -426,6 +435,9 @@ function goToRoute(route, { fromPopstate = false, replace = false, state = {} } 
     if (state.from) from = state.from;
     else if (fromPopstate || route === currentRoute) from = parseHash(location.hash)?.from || null;
     else from = currentRoute;
+    // Remember this route's own back-destination for goBackToRoute to
+    // reuse later — see the routeFromMap comment above.
+    routeFromMap[route] = from;
   }
   const id = state.profileUid || state.postId || state.dmUid || null;
   // Remember exactly where we're scrolled to on the tab we're leaving,
@@ -489,10 +501,28 @@ function goToRoute(route, { fromPopstate = false, replace = false, state = {} } 
     history.pushState(historyState, "", hash);
   }
 }
+// Used by any page-local "Back" control (the shared #topbar-back-btn
+// below, and DM thread's own back button in messages.js) instead of
+// calling goToRoute(target) directly. goToRoute on its own treats
+// every call as a fresh forward navigation and — when no explicit
+// state.from is given — sets the target's "from" to whichever route
+// is being LEFT. That's correct for a genuine drill (tapping the bell
+// icon while on Search really should make Notices' back button return
+// to Search), but wrong for a Back tap: it would overwrite the
+// target's own already-recorded "from" with the page we're leaving,
+// and going back and forth between two drill-down pages would keep
+// re-pointing them at each other forever. Passing the target's
+// previously-recorded "from" (routeFromMap) as state.from instead
+// preserves it unchanged, so Back always walks toward the original
+// bottom-nav tab instead of looping.
+function goBackToRoute(route) {
+  if (!route || !routeTitles[route]) { history.back(); return; }
+  goToRoute(route, { state: { from: routeFromMap[route] } });
+}
 registerProfilePageRouter(goToRoute);
 registerNotificationsRouter(goToRoute);
 registerPostDetailRouter(goToRoute);
-registerDmThreadRouter(goToRoute);
+registerDmThreadRouter(goToRoute, goBackToRoute);
 registerSearchRouter(goToRoute);
 
 // Reads the current hash URL and opens whatever it points to, in place of
@@ -542,7 +572,7 @@ document.getElementById("topbar-settings-btn").addEventListener("click", () => {
 // reliably lands on the right tab either way.
 document.getElementById("topbar-back-btn")?.addEventListener("click", () => {
   const from = history.state?.from || parseHash(location.hash)?.from;
-  if (from && routeTitles[from]) goToRoute(from);
+  if (from && routeTitles[from]) goBackToRoute(from);
   else history.back();
 });
 
@@ -696,7 +726,6 @@ function renderProfile() {
   const profileCardEl = document.getElementById("profile-card");
   const tabBtns = profileCardEl.querySelectorAll(".profile-tab-btn");
   const tabPanels = profileCardEl.querySelectorAll(".profile-tab-panel");
-  const tabsEl = profileCardEl.querySelector(".profile-tabs");
   let ownPostsLoaded = false;
   let ownNotesLoaded = false;
   tabBtns.forEach(btn => {
@@ -708,7 +737,6 @@ function renderProfile() {
         b.tabIndex = active ? 0 : -1;
       });
       tabPanels.forEach(panel => panel.classList.toggle("active", panel.dataset.tabPanel === btn.dataset.tab));
-      resetScrollForTabs(tabsEl); // each tab starts at its own top, instead of inheriting the previous tab's scroll position
       if (btn.dataset.tab === "posts" && !ownPostsLoaded) {
         ownPostsLoaded = true;
         loadUserPosts(p.uid, document.getElementById("own-profile-posts-list"));

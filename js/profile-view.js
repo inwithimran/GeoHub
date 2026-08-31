@@ -14,7 +14,7 @@ import { collection, query, where, getDocs } from "https://www.gstatic.com/fireb
 import { fetchProfile } from "./auth.js";
 import {
   escapeHtml, getCachedProfile, cacheUserProfile, avatarInner, nameWithBadge,
-  isAdminEmail, adminBadgeHtml, fullDate, showToast, resetScrollForTabs, friendlyError
+  isAdminEmail, adminBadgeHtml, fullDate, showToast, friendlyError
 } from "./ui-utils.js";
 import { loadUserResources } from "./resources.js";
 import { renderPost } from "./wall.js";
@@ -175,7 +175,6 @@ function renderProfilePage(profile, uid) {
 
   const tabBtns = cardEl.querySelectorAll(".profile-tab-btn");
   const tabPanels = cardEl.querySelectorAll(".profile-tab-panel");
-  const tabsEl = cardEl.querySelector(".profile-tabs");
   let postsLoaded = false;
   let notesLoaded = false;
   tabBtns.forEach(btn => {
@@ -187,7 +186,6 @@ function renderProfilePage(profile, uid) {
         b.tabIndex = active ? 0 : -1;
       });
       tabPanels.forEach(panel => panel.classList.toggle("active", panel.dataset.tabPanel === btn.dataset.tab));
-      resetScrollForTabs(tabsEl); // each tab starts at its own top, instead of inheriting the previous tab's scroll position
       if (btn.dataset.tab === "posts" && !postsLoaded) {
         postsLoaded = true;
         loadUserPosts(uid, cardEl.querySelector("#user-profile-posts-list"));

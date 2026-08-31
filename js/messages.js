@@ -65,7 +65,8 @@ const dmThreadSendBtn = document.getElementById("dm-thread-send-btn");
 const dmThreadBackBtn = document.getElementById("dm-thread-back-btn");
 
 let goToRouteRef = null;
-export function registerDmThreadRouter(goToRoute) { goToRouteRef = goToRoute; }
+let goBackToRouteRef = null;
+export function registerDmThreadRouter(goToRoute, goBackToRoute) { goToRouteRef = goToRoute; goBackToRouteRef = goBackToRoute; }
 
 /** Deterministic conversation id for a pair of students — order-independent. */
 function dmConversationId(uidA, uidB) {
@@ -168,12 +169,12 @@ function renderChatBubbles(listEl, docs, { emptyText, showNames = true }) {
     html += `
       <div class="chat-bubble-row ${mine ? "mine" : ""}" data-msg-id="${escapeHtml(m.id)}">
         ${grouped ? `<span style="width:26px" aria-hidden="true"></span>` : `<span class="avatar" data-author="${escapeHtml(uid || "")}">${avatarInner(profile)}</span>`}
+        ${kebab}
         <div class="chat-bubble-group">
           ${!mine && !grouped && showNames ? `<span class="chat-bubble-name">${nameWithBadge(profile.name || "Classmate", profile.email)}</span>` : ""}
           <div class="chat-bubble">${richTextHtml(m.text || "", [])}</div>
           <div class="chat-bubble-meta"><span>${timeLabel}</span></div>
         </div>
-        ${kebab}
       </div>`;
   });
 
@@ -570,7 +571,10 @@ export function initMessages() {
   // there's no real back-stack for history.back() to fall back on.
   dmThreadBackBtn?.addEventListener("click", () => {
     const from = history.state?.from;
-    if (from && goToRouteRef) goToRouteRef(from);
+    // goBackToRouteRef (not goToRouteRef) so the target tab's own
+    // recorded "from" is preserved instead of being overwritten with
+    // "dm-thread" — see goBackToRoute's comment in app.js.
+    if (from && goBackToRouteRef) goBackToRouteRef(from);
     else history.back();
   });
 
