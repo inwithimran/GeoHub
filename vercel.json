@@ -1,3 +1,9 @@
 {
-  "cleanUrls": true
+  "cleanUrls": true,
+  "crons": [
+    {
+      "path": "/api/deadline-reminders",
+      "schedule": "0 3 * * *"
+    }
+  ]
 }

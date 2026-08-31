@@ -520,7 +520,7 @@
   .kebab-btn { @apply flex items-center justify-center rounded-full transition-colors; width:30px; height:30px; color: var(--color-ink-faint); }
   .kebab-btn:active { background: var(--color-paper-deep); }
   .kebab-dropdown {
-    @apply absolute right-0 z-10 flex flex-col overflow-hidden rounded-2xl bg-surface;
+    @apply absolute right-0 z-20 flex flex-col overflow-hidden rounded-2xl bg-surface;
     top:calc(100% + 4px); min-width:150px; box-shadow: var(--shadow-cardhover); border:1px solid var(--color-line);
   }
   .kebab-item { @apply w-full text-left text-[.85rem] font-semibold; padding:11px 15px; color: var(--color-ink); }
@@ -989,12 +989,16 @@
   .mention-chip, .hashtag-chip { @apply font-bold; color: var(--color-forest-700); }
   .mention-chip:hover, .mention-chip:active, .hashtag-chip:hover, .hashtag-chip:active { @apply underline; }
   .mention-dropdown {
-    @apply absolute left-0 right-0 z-20 flex flex-col rounded-2xl bg-surface overflow-hidden;
-    top: 100%; margin-top:4px; box-shadow: var(--shadow-cardhover); border:1px solid var(--color-line); max-height:220px; overflow-y:auto;
+    /* top/left/width are set inline in JS, anchored to the field itself
+       rather than to whatever container happens to hold it — see the
+       `reposition()` comment in wireMentionAutocomplete. */
+    @apply absolute z-20 flex flex-col rounded-2xl bg-surface overflow-hidden;
+    box-shadow: var(--shadow-cardhover); border:1px solid var(--color-line); max-height:220px; overflow-y:auto;
   }
   .mention-dropdown.hidden { @apply hidden; }
-  .mention-option { @apply flex items-center gap-2 text-left text-sm font-semibold w-full; padding:8px 12px; color: var(--color-ink); }
-  .mention-option:hover, .mention-option:active { background: var(--color-paper-deep); }
+  .mention-option { @apply flex items-center gap-2 text-left text-sm font-semibold w-full transition-colors; padding:9px 12px; color: var(--color-ink); }
+  .mention-option:hover, .mention-option:active, .mention-option.active { background: var(--color-paper-deep); }
+  .mention-option.active { color: var(--color-forest-700); }
 
   /* ---- Poll builder (composer) ---- */
   .composer-poll-toggle {
@@ -1002,18 +1006,39 @@
     background: var(--color-paper-deep); padding:7px 14px;
   }
   .composer-poll-toggle.active { @apply text-white; background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800)); }
-  .poll-builder { @apply flex flex-col gap-2 mt-2; }
-  .poll-builder.hidden { @apply hidden; }
-  .poll-option-input {
-    @apply w-full text-sm rounded-xl; padding:9px 12px; background: var(--color-paper-deep); border:1px solid var(--color-line); color: var(--color-ink);
+  .poll-builder {
+    @apply flex flex-col gap-2.5 mt-2 rounded-2xl;
+    padding:12px; background: var(--color-paper-deep); border:1px solid var(--color-line);
   }
+  .poll-builder.hidden { @apply hidden; }
+  .poll-builder-options { @apply flex flex-col gap-2; }
+  .poll-option-row { @apply flex items-center gap-2; }
+  .poll-option-index {
+    @apply flex items-center justify-center shrink-0 rounded-full text-[.72rem] font-extrabold;
+    width:22px; height:22px; background: var(--color-forest-100); color: var(--color-forest-700);
+  }
+  .poll-option-input {
+    @apply w-full text-sm rounded-xl; padding:9px 12px; background: var(--color-surface); border:1px solid var(--color-line); color: var(--color-ink);
+  }
+  .poll-option-input:focus { outline:none; border-color: var(--color-forest-600); }
+  .poll-option-remove-btn {
+    @apply flex items-center justify-center shrink-0 rounded-full transition-colors; width:28px; height:28px; color: var(--color-ink-faint);
+  }
+  .poll-option-remove-btn:hover, .poll-option-remove-btn:active { background: var(--color-danger-100); color: var(--color-danger-600); }
+  .poll-option-remove-btn.is-disabled { @apply invisible pointer-events-none; }
   .poll-add-option-btn { @apply self-start text-sm font-bold; color: var(--color-forest-700); }
+  .poll-add-option-btn.is-disabled { @apply opacity-40 pointer-events-none; }
 
   /* ---- Poll (rendered on a post) ---- */
   .poll-block { @apply flex flex-col gap-2 mt-1 mb-2.5; }
   .poll-option {
+    /* z-index:0 (alongside position:relative) gives each option its OWN
+       stacking context, so its internal z-10 label/pct spans (below) stay
+       trapped inside it instead of leaking out to compete with unrelated
+       z-10 elements elsewhere on the card — like the post's kebab-dropdown
+       menu, which they'd otherwise sometimes paint on top of. */
     @apply relative w-full flex items-center justify-between text-left text-[.87rem] font-semibold rounded-xl overflow-hidden;
-    padding:10px 12px; background: var(--color-paper-deep); border:1px solid var(--color-line); color: var(--color-ink);
+    padding:10px 12px; background: var(--color-paper-deep); border:1px solid var(--color-line); color: var(--color-ink); z-index:0;
   }
   .poll-option-fill { @apply absolute left-0 top-0 bottom-0 z-0; background: var(--color-forest-100); transition: width .3s ease; }
   .poll-option.voted { border-color: var(--color-forest-500); }
@@ -1080,7 +1105,7 @@
     border:2px solid var(--color-surface); transform: rotate(-4deg);
   }
   .resource-row-info { @apply flex-1 min-w-0; }
-  .resource-row-info h4 { @apply text-[.92rem] font-bold whitespace-nowrap overflow-hidden text-ellipsis; margin:2px 0; }
+  .resource-row-info h4 { @apply text-[.92rem] font-bold leading-snug break-words; margin:2px 0; }
   .res-meta { @apply text-xs; color: var(--color-ink-faint); }
   .res-cat { @apply text-[.66rem] font-extrabold uppercase tracking-wide rounded-md; background: var(--color-gold-50); color: var(--color-gold-600); padding:2px 7px; }
   a.res-link {
@@ -1090,6 +1115,71 @@
   }
   a.res-link svg { @apply shrink-0; }
   a.res-link:active { transform:scale(.94); }
+
+  /* ---------- Notes & Sheet Hub — "Save for later" bookmark toggle ---------- */
+  .bookmark-toggle-btn {
+    @apply flex items-center justify-center rounded-full shrink-0 transition-colors;
+    width:34px; height:34px; color: var(--color-ink-faint); background: var(--color-paper-deep); border:1px solid var(--color-line);
+  }
+  .bookmark-toggle-btn.active { color: var(--color-gold-600); background: var(--color-gold-50); border-color: rgba(156,117,38,.3); }
+  .bookmark-toggle-btn:active { transform:scale(.9); }
+
+  /* ---------- Notes & Sheet Hub — Link/Upload source toggle (Add Resource modal) ---------- */
+  .res-source-toggle { @apply flex gap-2 -mt-1; }
+  .res-source-btn {
+    @apply flex-1 text-center text-[.82rem] font-bold rounded-full transition-colors;
+    padding:9px 10px; background: var(--color-paper-deep); color: var(--color-ink-soft); border:1px solid var(--color-line);
+  }
+  .res-source-btn.active { @apply text-white border-transparent; background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800)); }
+  .res-file-trigger { @apply flex items-center justify-center gap-2; }
+
+  /* ---------- Deadline tracker ("Upcoming Deadlines", on the Routine page) ---------- */
+  .deadlines-header-row { @apply flex items-center justify-between; }
+  .deadline-add-btn {
+    @apply inline-flex items-center gap-1.5 text-[.74rem] font-extrabold rounded-full text-white transition-transform;
+    padding:6px 12px 6px 10px; background: linear-gradient(135deg, var(--color-clay-500), var(--color-clay-600));
+    box-shadow: 0 6px 14px rgba(162,75,35,.3);
+  }
+  .deadline-add-btn:active { transform:scale(.94); }
+  .deadline-row {
+    @apply relative flex items-center gap-3 bg-surface shadow-[var(--shadow-card)] rounded-2xl cursor-pointer transition-shadow;
+    padding:13px 14px; border:1px solid var(--color-line);
+  }
+  @media (hover:hover) { .deadline-row:hover { box-shadow: var(--shadow-cardhover); } }
+  .deadline-row.overdue { opacity:.68; }
+  .deadline-row-icon {
+    @apply w-[40px] h-[40px] rounded-[10px] flex items-center justify-center text-[1.1rem] shrink-0;
+    background: var(--color-forest-50); border:1px solid var(--color-forest-100);
+  }
+  .deadline-row-info { @apply flex-1 min-w-0; }
+  .deadline-row-info h4 { @apply text-[.9rem] font-bold whitespace-nowrap overflow-hidden text-ellipsis; margin:2px 0; }
+  .deadline-type-chip {
+    @apply inline-flex text-[.64rem] font-extrabold uppercase tracking-wide rounded-md;
+    background: var(--color-forest-50); color: var(--color-forest-700); padding:2px 7px;
+  }
+  .deadline-due-badge {
+    @apply shrink-0 text-[.72rem] font-extrabold rounded-full text-white text-center;
+    padding:6px 11px; background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800)); white-space:nowrap;
+  }
+  .deadline-due-badge.overdue { background: linear-gradient(135deg, var(--color-danger-500), var(--color-danger-600)); }
+
+  /* ---------- Global search ---------- */
+  .search-result-section-title { @apply text-xs font-extrabold uppercase tracking-wider pl-0.5; color: var(--color-ink-faint); margin:14px 0 6px; }
+  .search-result-section-title:first-child { margin-top:2px; }
+  .search-result-row {
+    @apply flex items-center gap-3 w-full text-left bg-surface transition-colors rounded-[14px] shadow-[var(--shadow-card)];
+    padding:12px 14px; border:1px solid var(--color-line); cursor:pointer; margin-bottom:8px;
+  }
+  @media (hover:hover) { .search-result-row:hover { box-shadow: var(--shadow-cardhover); } }
+  .search-result-row:active { background: var(--color-paper-deep); }
+  .search-result-icon {
+    @apply w-9 h-9 rounded-full flex items-center justify-center text-[.95rem] shrink-0;
+    background: var(--color-gold-50); color: var(--color-gold-600);
+  }
+  .search-result-info { @apply flex-1 min-w-0; }
+  .search-result-info strong { @apply block text-[.88rem] whitespace-nowrap overflow-hidden text-ellipsis; }
+  .search-result-info strong.search-result-title-full { @apply whitespace-normal break-words leading-snug; }
+  .search-result-info small { @apply block text-[.72rem] mt-0.5; color: var(--color-ink-faint); }
 
   /* ---------- Classmate directory / User card ("contact index card") ---------- */
   .search-bar { @apply flex items-center gap-2.5 rounded-full bg-surface shadow-[var(--shadow-card)]; padding:0 16px; color: var(--color-ink-faint); border:1px solid var(--color-line); }
@@ -1212,6 +1302,28 @@
   .routine-slot:last-child { @apply border-b-0; }
   .routine-slot span:first-child { @apply font-bold shrink-0; color: var(--color-ink); font-family: var(--font-mono); }
   .routine-slot span:last-child { @apply text-right; }
+
+  /* ---------- Admin — Weekly Routine editor (modal) ---------- */
+  .routine-editor-day { @apply rounded-2xl bg-surface mb-3; padding:12px 12px 4px; border:1px solid var(--color-line); }
+  .routine-editor-day-head { @apply flex items-center justify-between mb-2 px-0.5; }
+  .routine-editor-day-head h4 { @apply text-[.74rem] font-extrabold uppercase tracking-wide; color: var(--color-forest-700); }
+  .routine-editor-add-slot-btn {
+    @apply inline-flex items-center gap-1 text-[.7rem] font-extrabold rounded-full;
+    padding:5px 10px 5px 8px; color: var(--color-forest-700); background: var(--color-forest-50);
+  }
+  .routine-editor-add-slot-btn:active { background: var(--color-forest-100); }
+  .routine-editor-slot-row { @apply flex items-center gap-1.5 mb-2; }
+  .routine-editor-input {
+    @apply border-0 border-b-[1.5px] rounded-t-[8px] rounded-b-[3px] px-2.5 py-2.5 text-[.82rem] w-full min-w-0 transition-colors;
+    border-color: var(--color-line); background: var(--color-paper-deep); color: var(--color-ink);
+  }
+  .routine-editor-input:focus { outline:none; border-bottom-width:2px; border-color: var(--color-forest-600); background: var(--color-forest-50); }
+  .routine-editor-input.rt-time { flex:0 0 84px; }
+  .routine-editor-input.rt-room { flex:0 0 60px; }
+  .routine-editor-input.rt-subject { flex:1 1 auto; }
+  .routine-editor-remove-btn { @apply flex items-center justify-center rounded-full shrink-0; width:32px; height:32px; color: var(--color-danger-600); }
+  .routine-editor-remove-btn:active { background: var(--color-danger-100); }
+  .routine-editor-hint { @apply text-[.78rem] leading-snug; color: var(--color-ink-faint); margin:-6px 0 4px; }
 
   /* ---------- Profile — "field ID card" hero + notebook details ---------- */
   .profile-flow { @apply relative; }
@@ -1928,6 +2040,13 @@
         </div>
       </div>
       <div class="topbar-actions">
+        <button type="button" class="topbar-notif-btn" id="topbar-search-btn" aria-label="Search">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </button>
+        <button type="button" class="topbar-notif-btn hidden" id="topbar-reports-btn" aria-label="Reported Posts">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="3"/></svg>
+          <span class="notif-badge hidden" id="topbar-reports-badge">0</span>
+        </button>
         <button type="button" class="topbar-notif-btn" id="topbar-notif-btn" aria-label="Notifications">
           <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
           <span class="notif-badge hidden" id="topbar-notif-badge">0</span>
@@ -2008,6 +2127,17 @@
         </div>
       </section>
 
+      <!-- ===== SECTION 3A: GLOBAL SEARCH (own page, reached via the topbar search icon) ===== -->
+      <section id="section-search" class="route-section">
+        <div class="search-bar">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="global-search-input" placeholder="Search posts, resources, notices, #hashtags…" />
+        </div>
+        <div id="global-search-results">
+          <p class="empty-state">Search across the Student Wall, Notes &amp; Sheets, and Notice Board.</p>
+        </div>
+      </section>
+
       <!-- ===== SECTION 3B: MESSAGES — Direct Messages (conversation list, shown first) + Class Chat (open room) =====
            The two inboxes are deliberately styled a little differently (icons here,
            plus the Class Chat header's "everyone" badge below) so it's obvious at a
@@ -2017,11 +2147,11 @@
         <div class="msg-subtabs" role="tablist">
           <button type="button" class="msg-subtab-btn active" data-msgtab="dm" role="tab" aria-selected="true" id="msg-subtab-dm">
             <svg class="msg-subtab-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="3.4"/><path d="M2.5 20v-1.2A5.3 5.3 0 0 1 7.8 13.5h2.4"/><path d="M14 15.5l2.7 2.7 4.3-4.7"/></svg>
-            Direct Messages <span id="dm-total-unread-badge" class="msg-tab-badge hidden">0</span>
+            Private Messages <span id="dm-total-unread-badge" class="msg-tab-badge hidden">0</span>
           </button>
           <button type="button" class="msg-subtab-btn" data-msgtab="class" role="tab" aria-selected="false" id="msg-subtab-class">
             <svg class="msg-subtab-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20l1.4-3.7A7.6 7.6 0 1 1 8 19.4z"/></svg>
-            Class Chat
+            Department Chat <span id="class-chat-unread-badge" class="msg-tab-badge hidden">0</span>
           </button>
         </div>
 
@@ -2032,22 +2162,25 @@
           </div>
         </div>
 
-        <!-- ---- Class Chat: one open live chat, everyone can read + post ---- -->
+        <!-- ---- Department Chat: one open live chat, everyone can read + post ---- -->
         <div class="msg-subtab-panel" data-msgtab-panel="class">
           <div class="chat-header chat-header-class">
+            <button type="button" id="class-chat-back-btn" class="dm-thread-back-btn" aria-label="Back to Private Messages">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+            </button>
             <span class="chat-header-class-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
             </span>
             <div>
-              <strong>Class Chat <span class="chat-header-class-tag">Everyone</span></strong>
+              <strong>Department Chat <span class="chat-header-class-tag">Everyone</span></strong>
               <span id="class-chat-online-count" class="chat-header-sub"></span>
             </div>
           </div>
           <div id="class-chat-list" class="chat-scroll">
-            <p class="empty-state">Loading class chat…</p>
+            <p class="empty-state">Loading Department Chat…</p>
           </div>
           <form id="class-chat-form" class="chat-input-bar" autocomplete="off">
-            <input type="text" id="class-chat-input" placeholder="Message the class…" maxlength="1000" />
+            <input type="text" id="class-chat-input" placeholder="Message the department…" maxlength="1000" />
             <button type="submit" id="class-chat-send-btn" class="chat-send-btn" aria-label="Send" disabled>
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
             </button>
@@ -2076,9 +2209,26 @@
         </form>
       </section>
 
-      <!-- ===== SECTION 4: ROUTINE & NOTICE BOARD ===== -->
+      <!-- ===== SECTION 4: ROUTINE, DEADLINES & NOTICE BOARD ===== -->
       <section id="section-routine" class="route-section">
-        <h3 class="section-heading">Weekly Class Routine</h3>
+        <div class="deadlines-header-row">
+          <h3 class="section-heading">Upcoming Deadlines</h3>
+          <button type="button" id="add-deadline-btn" class="deadline-add-btn hidden">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add
+          </button>
+        </div>
+        <div id="deadline-list" class="list-block">
+          <p class="empty-state">No upcoming deadlines posted yet.</p>
+        </div>
+
+        <div class="deadlines-header-row" style="margin-top:10px;">
+          <h3 class="section-heading" style="margin:0;">Weekly Class Routine</h3>
+          <button type="button" id="edit-routine-btn" class="deadline-add-btn hidden">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            Edit
+          </button>
+        </div>
         <div id="routine-table" class="list-block">
           <p class="empty-state">Routine has not been published yet.</p>
         </div>
@@ -2136,6 +2286,20 @@
             </button>
           </div>
           <div id="notification-list"><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div><div class="skeleton-row" aria-hidden="true"><div class="skeleton-avatar"></div><div class="skeleton-head-lines"><div class="skeleton-line sk-70"></div><div class="skeleton-line sk-40"></div></div></div></div>
+        </div>
+      </section>
+
+      <!-- ===== SECTION 8B: REPORTS — admin-only, reached via the topbar flag
+           icon (see topbar-reports-btn). Replaces the old "Reported Posts"
+           button-inside-a-modal that used to live in the Notice tab: this is
+           its own full page now, live-updating, so an admin doesn't need to
+           dig into Notices to find it. ===== -->
+      <section id="section-reports" class="route-section">
+        <div class="notif-panel-head">
+          <span class="notif-panel-head-title">Reported Posts</span>
+        </div>
+        <div id="reports-page-list" class="flat-list">
+          <p class="empty-state">Loading reports…</p>
         </div>
       </section>
 

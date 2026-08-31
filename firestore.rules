@@ -111,6 +111,18 @@ service cloud.firestore {
       match /readState/{kind} {
         allow read, write: if isOwner(uid);
       }
+
+      // "Save for later" bookmarks (js/resources.js) — a student's own
+      // private shortlist of resources from the Notes & Sheet Hub. One doc
+      // per saved resource, keyed by the resource's own id, holding a small
+      // denormalized copy of its title/category/link/etc. so the Saved list
+      // renders without depending on that resource still being on the
+      // currently-loaded page of the main Hub. Owner-only, same as
+      // everything else about a student's own account — nobody else can
+      // see or tamper with what someone has bookmarked.
+      match /bookmarks/{resId} {
+        allow read, write: if isOwner(uid);
+      }
     }
 
     // ---- Activity feed (Notices & Notifications -> "Notification" tab) ----
@@ -187,6 +199,14 @@ service cloud.firestore {
       allow delete: if isOwner(resource.data.authorUid) || isAdmin();
     }
 
+    // ---- Messages: Class Chat read-tracking (powers its own unread
+    // badge, same idea as `conversations.unread` for DMs) — one tiny doc
+    // per student holding only "when did I last look at Class Chat".
+    // Owner-only both ways; nobody needs to read anyone else's. ----
+    match /classChatReads/{uid} {
+      allow read, write: if isOwner(uid);
+    }
+
     // ---- Messages: Direct Messages (1:1 inbox) ----
     // Conversation id is the two participant uids, sorted and joined with
     // "_" (see js/messages.js's dmConversationId()) — deterministic, so
@@ -255,6 +275,19 @@ service cloud.firestore {
     match /routine/{docId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
+    }
+
+    // ---- Assignment / Quiz / Exam deadline tracker ----
+    // Same trust model as notices/routine: only the CR/admin posts official
+    // deadlines, everyone signed in can read them. `remindedAt` is only ever
+    // stamped by the Vercel cron job (api/deadline-reminders.js) via the
+    // Admin SDK, which bypasses these rules entirely — students/admins never
+    // write it from the client, so no special-case is needed here for it.
+    match /deadlines/{deadlineId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() && textWithinLimit("title", 200) && textWithinLimit("notes", 1000);
+      allow update: if isAdmin() && textWithinLimit("title", 200) && textWithinLimit("notes", 1000);
+      allow delete: if isAdmin();
     }
 
     // ---- Reports (Wall posts a student flags for the admin/CR to review) ----
