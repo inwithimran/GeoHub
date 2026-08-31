@@ -22,14 +22,13 @@ import { presenceTextHtml } from "./presence.js";
 import { openDmThread } from "./messages.js";
 
 const cardEl = document.getElementById("user-profile-card");
-const backBtn = document.getElementById("user-profile-back-btn");
 
 // app.js hands us its router (goToRoute) so this page participates in the
 // normal section/back-button history exactly like the 5 main sections do.
+// (The page's own Back button now lives in the shared app bar —
+// #topbar-back-btn in app.js — rather than on this page.)
 let goToRouteRef = null;
 export function registerProfilePageRouter(goToRoute) { goToRouteRef = goToRoute; }
-
-backBtn?.addEventListener("click", () => history.back());
 
 let currentUid = null;
 /** The uid currently open on this page (null if the page isn't open). Lets app.js's

@@ -36,11 +36,11 @@ import { triggerPush } from "./push-trigger.js";
 import { logActivity } from "./routine.js";
 
 const bodyEl = document.getElementById("post-detail-body");
-const backBtn = document.getElementById("post-detail-back-btn");
-backBtn?.addEventListener("click", () => history.back());
 
 // app.js hands us its router (goToRoute) so this page participates in the
 // normal section/back-button history, same pattern as profile-view.js.
+// (The page's own Back button now lives in the shared app bar —
+// #topbar-back-btn in app.js — rather than on this page.)
 let goToRouteRef = null;
 export function registerPostDetailRouter(goToRoute) { goToRouteRef = goToRoute; }
 

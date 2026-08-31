@@ -332,6 +332,20 @@ const routeTitles = {
 
 let currentRoute = "wall";
 
+// Search / Notices / Settings / Reports / a classmate's Profile / Post
+// Detail are all "drill-down" pages (tapped INTO from somewhere else, no
+// persistent nav item of their own) that used to each carry their own
+// page-local "Back" pill as a second header row under the app bar. That
+// pill sat alone with nothing else on its row, which read as an orphaned
+// floating element rather than a real navigation control. It's replaced
+// by a single shared back button INSIDE the app bar itself (#topbar-back-btn,
+// swapped in for the brand mark) — the standard native/Android app-bar
+// pattern of one bar carrying either the brand or a back arrow, never both,
+// and never a bar of its own underneath. Direct Messages and Class Chat
+// keep their own inline header (back+avatar+name together) since that row
+// already carries real content, not just a lone button.
+const TOPBAR_BACK_ROUTES = new Set(["search", "user-profile", "post-detail", "notices", "reports", "settings"]);
+
 // Each of the 5 bottom-nav tabs (plus Notices/Settings) shares one page-level
 // scroll container (see .content's CSS), so switching between them used to
 // always snap back to the top — annoying if you were scrolled deep into the
@@ -383,6 +397,11 @@ function goToRoute(route, { fromPopstate = false, replace = false, state = {} } 
   document.getElementById("app-shell")?.classList.toggle("chat-mode", route === "dm-thread" || (route === "message" && isClassChatSubtabActive()));
   document.getElementById("topbar-title").textContent = routeTitles[route] || "GeoHub";
   document.getElementById("topbar-subtitle").textContent = route === "user-profile" ? "Classmate Profile" : route === "dm-thread" ? "Private Message" : route === "settings" ? "App preferences & account" : route === "reports" ? "Admin only" : "Geography & Environment";
+  // Swap the app bar's brand mark for a back arrow on drill-down pages —
+  // see TOPBAR_BACK_ROUTES above.
+  const showTopbarBack = TOPBAR_BACK_ROUTES.has(route);
+  document.getElementById("topbar-back-btn")?.classList.toggle("hidden", !showTopbarBack);
+  document.getElementById("topbar-left")?.classList.toggle("has-back", showTopbarBack);
 
   if (route === "profile") renderProfile();
   if (route === "settings") renderSettingsPage();
@@ -431,17 +450,14 @@ document.getElementById("topbar-search-btn").addEventListener("click", () => {
 document.getElementById("topbar-settings-btn").addEventListener("click", () => {
   if (currentRoute !== "settings") goToRoute("settings");
 });
-// Search / Notices / Settings / Reports are all reached the same way as
-// Post Detail, a classmate's Profile, and a DM thread: tapped INTO from
-// somewhere else, no persistent nav item of their own — so, same as
-// those three, they get their own on-screen Back button rather than
-// relying on the device/browser back button being the only way out.
-// history.back() (not a fixed goToRoute("wall")) so it always lands
-// wherever the person actually came from.
-document.getElementById("search-back-btn")?.addEventListener("click", () => history.back());
-document.getElementById("notices-back-btn")?.addEventListener("click", () => history.back());
-document.getElementById("settings-back-btn")?.addEventListener("click", () => history.back());
-document.getElementById("reports-back-btn")?.addEventListener("click", () => history.back());
+// Search / Notices / Settings / Reports / a classmate's Profile / Post
+// Detail are all reached the same way: tapped INTO from somewhere else, no
+// persistent nav item of their own — so they get an on-screen Back button
+// (the shared #topbar-back-btn, see TOPBAR_BACK_ROUTES) rather than relying
+// on the device/browser back button being the only way out. history.back()
+// (not a fixed goToRoute("wall")) so it always lands wherever the person
+// actually came from.
+document.getElementById("topbar-back-btn")?.addEventListener("click", () => history.back());
 
 // Device/browser back button: step back to whichever section is recorded
 // in that history entry (a modal's own popstate handling, in ui-utils.js,
