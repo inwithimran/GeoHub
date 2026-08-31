@@ -29,7 +29,7 @@ import { currentProfile } from "./auth.js";
 import {
   escapeHtml, showToast, friendlyError, avatarInner, nameWithBadge,
   getCachedProfile, ensureProfileLoaded, subscribeToProfileUpdates,
-  richTextHtml, wireRichTextClicks, kebabMenuHtml, wireKebabMenus, confirmDialog,
+  richTextHtml, wireRichTextClicks, wireKebabMenus, confirmDialog,
   timeAgo
 } from "./ui-utils.js";
 import { authorProfile } from "./wall.js";
@@ -199,35 +199,140 @@ function renderChatBubbles(listEl, docs, { emptyText, showNames = true }) {
     const profile = authorProfile(uid, m.authorName);
     const timeLabel = new Date(ms).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
     const canDelete = mine; // an admin could be added here too, but a chat message is low-stakes — owner-only keeps this simple
-    const kebab = canDelete ? kebabMenuHtml(m.id, [{ action: "delete", label: "Delete message", danger: true }]) : "";
 
-    // The kebab lives INSIDE the meta row (next to the timestamp), not as its
-    // own slot alongside the avatar — an own message used to reserve a whole
-    // extra avatar-width column for it, which made every one of your own
-    // bubbles sit visibly narrower/shifted compared to bubbles you received.
-    // Tucking it into the meta line keeps the leading avatar column the same
-    // width on both sides, so mine/theirs line up exactly the same way.
+    // No visible three-dot on the bubble itself — press-and-hold on the
+    // bubble (see wireMessageLongPress below) pops the Copy/Delete menu
+    // instead, the same gesture Messenger/WhatsApp use, so the message
+    // list itself stays clean of a permanent extra icon on every row.
+    // The raw text for Copy is looked up from messageTextCache by id
+    // rather than round-tripped through a data-attribute — escapeHtml()
+    // only escapes what's safe inside HTML *content*, not inside a quoted
+    // attribute, so a message containing a literal `"` would otherwise
+    // break out of the attribute.
+    messageTextCache.set(m.id, m.text || "");
     html += `
-      <div class="chat-bubble-row ${mine ? "mine" : ""}" data-msg-id="${escapeHtml(m.id)}">
+      <div class="chat-bubble-row ${mine ? "mine" : ""}" data-msg-id="${escapeHtml(m.id)}" data-can-delete="${canDelete ? "1" : "0"}">
         ${grouped ? `<span style="width:26px" aria-hidden="true"></span>` : `<span class="avatar" data-author="${escapeHtml(uid || "")}">${avatarInner(profile)}</span>`}
         <div class="chat-bubble-group">
           ${!mine && !grouped && showNames ? `<span class="chat-bubble-name">${nameWithBadge(profile.name || "Classmate", profile.email)}</span>` : ""}
           <div class="chat-bubble">${richTextHtml(m.text || "", [])}</div>
-          <div class="chat-bubble-meta"><span>${timeLabel}</span>${kebab}</div>
+          <div class="chat-bubble-meta"><span>${timeLabel}</span></div>
         </div>
       </div>`;
   });
 
   listEl.innerHTML = html;
   wireRichTextClicks(listEl);
-  wireKebabMenus(listEl, {
-    delete: (msgId) => confirmDialog({
-      title: "Delete this message?",
-      text: "This can't be undone.",
-      onConfirm: () => listEl.dataset.deleteHandler === "dm"
-        ? deleteDmMessage(listEl.dataset.conversationId, msgId)
-        : deleteClassChatMessage(msgId)
-    })
+  wireMessageLongPress(listEl);
+}
+
+// ============================================================
+// PRESS-AND-HOLD MESSAGE ACTIONS (Copy / Delete) — Messenger-style: no
+// permanent icon sitting on every bubble, just hold a message down to pop
+// a small menu next to it. Shared by Class Chat and DM thread bubbles.
+// ============================================================
+const LONG_PRESS_MS = 420;
+const LONG_PRESS_MOVE_TOLERANCE = 10; // px of finger drift before it's treated as a scroll, not a hold
+const messageTextCache = new Map(); // msgId -> raw text, refreshed on every render; see the comment above for why this exists instead of a data-attribute
+
+function closeMessageActionMenu() {
+  document.querySelector(".msg-action-backdrop")?.remove();
+}
+document.addEventListener("scroll", closeMessageActionMenu, true);
+
+/** Wire press-and-hold on every not-yet-wired bubble under `listEl`. Re-safe to call on every re-render. */
+function wireMessageLongPress(listEl) {
+  listEl.querySelectorAll(".chat-bubble-row").forEach((row) => {
+    const bubble = row.querySelector(".chat-bubble");
+    if (!bubble || bubble.dataset.longpressWired) return;
+    bubble.dataset.longpressWired = "1";
+
+    let pressTimer = null;
+    let startX = 0, startY = 0;
+
+    const cancelPress = () => clearTimeout(pressTimer);
+    const startPress = (e) => {
+      startX = e.clientX; startY = e.clientY;
+      pressTimer = setTimeout(() => openMessageActionMenu(row), LONG_PRESS_MS);
+    };
+    const trackMove = (e) => {
+      if (Math.abs(e.clientX - startX) > LONG_PRESS_MOVE_TOLERANCE || Math.abs(e.clientY - startY) > LONG_PRESS_MOVE_TOLERANCE) {
+        cancelPress(); // finger is scrolling the list, not holding the bubble
+      }
+    };
+
+    bubble.addEventListener("pointerdown", startPress);
+    bubble.addEventListener("pointerup", cancelPress);
+    bubble.addEventListener("pointerleave", cancelPress);
+    bubble.addEventListener("pointercancel", cancelPress);
+    bubble.addEventListener("pointermove", trackMove);
+    // Same reasoning as the reaction long-press fix on the Wall: suppress the
+    // phone's own text-selection/"Copy" callout so it can't fight this hold
+    // gesture for the same press.
+    bubble.addEventListener("contextmenu", (e) => e.preventDefault());
+  });
+}
+
+/** Pops the small Copy/Delete menu next to `row`'s bubble, clamped to stay on-screen either above or below it. */
+function openMessageActionMenu(row) {
+  closeMessageActionMenu();
+  const text = messageTextCache.get(row.dataset.msgId) || "";
+  const canDelete = row.dataset.canDelete === "1";
+  const mine = row.classList.contains("mine");
+
+  const backdrop = document.createElement("div");
+  backdrop.className = "msg-action-backdrop";
+  backdrop.addEventListener("click", closeMessageActionMenu);
+
+  const menu = document.createElement("div");
+  menu.className = "msg-action-menu";
+  menu.innerHTML = `
+    <button type="button" class="msg-action-item" data-action="copy">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      Copy
+    </button>
+    ${canDelete ? `<button type="button" class="msg-action-item danger" data-action="delete">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+      Delete
+    </button>` : ""}
+  `;
+  backdrop.appendChild(menu);
+  document.body.appendChild(backdrop);
+
+  // Anchor the menu to the bubble's own on-screen position, then clamp it
+  // inside the viewport — measuring only works once it's actually in the DOM.
+  const rowRect = row.getBoundingClientRect();
+  const menuRect = menu.getBoundingClientRect();
+  const gap = 8;
+  let left = mine ? rowRect.right - menuRect.width : rowRect.left;
+  left = Math.min(Math.max(left, 8), window.innerWidth - menuRect.width - 8);
+  let top = rowRect.top - menuRect.height - gap; // prefer opening above the bubble
+  if (top < 8) top = Math.min(rowRect.bottom + gap, window.innerHeight - menuRect.height - 8); // not enough room above — open below instead
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+
+  menu.querySelectorAll(".msg-action-item").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const action = btn.dataset.action;
+      closeMessageActionMenu();
+      if (action === "copy") {
+        navigator.clipboard?.writeText(text)
+          .then(() => showToast("Message copied"))
+          .catch(() => showToast("Couldn't copy that message."));
+      } else if (action === "delete") {
+        confirmDialog({
+          title: "Delete this message?",
+          text: "This can't be undone.",
+          onConfirm: () => {
+            const listEl = row.closest(".chat-scroll");
+            const msgId = row.dataset.msgId;
+            if (listEl?.dataset.deleteHandler === "dm") deleteDmMessage(listEl.dataset.conversationId, msgId);
+            else deleteClassChatMessage(msgId);
+          }
+        });
+      }
+    });
   });
 }
 
