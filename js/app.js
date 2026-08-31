@@ -54,8 +54,50 @@ if ("scrollRestoration" in history) history.scrollRestoration = "manual";
 // ---------- Element references ----------
 const loadingScreen = document.getElementById("loading-screen");
 const loadingLabel = document.getElementById("loading-label");
+const loadingBarFill = document.querySelector(".loading-bar-fill");
 const authScreen = document.getElementById("auth-screen");
 const appShell = document.getElementById("app-shell");
+
+// ============================================================
+// LOADING PROGRESS — a real, determinate readout instead of a
+// decorative bar that sweeps back and forth regardless of what has
+// actually loaded. Each stage below is tied to a genuine milestone:
+// the script executing, the DOM parsed, every page resource finished
+// downloading, and Firebase resolving whether someone's signed in.
+// The bar only ever moves forward and always reaches exactly 100%
+// right before the overlay is dismissed, so "fully filled" really
+// does mean "done loading" — and because the stages are real events
+// rather than a fixed timer, a fast/cached visit fires through all of
+// them almost immediately instead of being held to a fake pace.
+// ============================================================
+let loadingProgress = 0;
+function setLoadingProgress(pct) {
+  loadingProgress = Math.max(loadingProgress, pct); // never animate backwards
+  if (loadingBarFill) loadingBarFill.style.width = loadingProgress + "%";
+}
+/** Back to an initial sliver — used each time the overlay is freshly shown (startup, and again on logout). */
+function resetLoadingProgress() {
+  loadingProgress = 0;
+  if (loadingBarFill) {
+    loadingBarFill.style.transition = "none";
+    loadingBarFill.style.width = "6%";
+    void loadingBarFill.offsetWidth; // force the reset to apply before re-enabling the transition
+    loadingBarFill.style.transition = "";
+    loadingProgress = 6;
+  }
+}
+resetLoadingProgress();
+setLoadingProgress(15); // this script is parsed and running
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => setLoadingProgress(35), { once: true });
+} else {
+  setLoadingProgress(35);
+}
+if (document.readyState === "complete") {
+  setLoadingProgress(60); // every page resource (styles, scripts, icons) has already finished downloading
+} else {
+  window.addEventListener("load", () => setLoadingProgress(60), { once: true });
+}
 
 // ============================================================
 // OFFLINE BANNER — a dropped connection used to only show up as
@@ -81,8 +123,11 @@ function setLoadingLabel(text) {
   if (loadingLabel) loadingLabel.textContent = text;
 }
 
-/** How long the loading overlay stays up before it's allowed to dismiss. */
-const LOADING_MIN_DISPLAY_MS = 700;
+/** Just enough time for the bar's final jump to 100% to visibly render and
+ *  fade out smoothly — NOT an artificial hold. A fast/warm load reaches
+ *  100% (and this timer) almost immediately; a slow one is however long
+ *  the real milestones above actually take, this only pads the very end. */
+const LOADING_MIN_DISPLAY_MS = 300;
 
 /**
  * Bring the loading overlay up. Shown INSTANTLY (transition disabled for a
@@ -92,6 +137,12 @@ const LOADING_MIN_DISPLAY_MS = 700;
  * for a moment before it becomes opaque.
  */
 function showLoadingScreen(text) {
+  // Only reset the progress bar if the overlay was actually dismissed
+  // before this call (e.g. re-showing it for a fresh logout) — the very
+  // first login continues the SAME sequence already tracked above
+  // (script → DOM → page load → this call), so it should keep climbing
+  // from wherever it already is instead of snapping back down.
+  if (loadingScreen.classList.contains("hidden")) resetLoadingProgress();
   setLoadingLabel(text);
   loadingScreen.classList.add("no-transition");
   loadingScreen.classList.remove("hidden");
@@ -380,6 +431,17 @@ document.getElementById("topbar-search-btn").addEventListener("click", () => {
 document.getElementById("topbar-settings-btn").addEventListener("click", () => {
   if (currentRoute !== "settings") goToRoute("settings");
 });
+// Search / Notices / Settings / Reports are all reached the same way as
+// Post Detail, a classmate's Profile, and a DM thread: tapped INTO from
+// somewhere else, no persistent nav item of their own — so, same as
+// those three, they get their own on-screen Back button rather than
+// relying on the device/browser back button being the only way out.
+// history.back() (not a fixed goToRoute("wall")) so it always lands
+// wherever the person actually came from.
+document.getElementById("search-back-btn")?.addEventListener("click", () => history.back());
+document.getElementById("notices-back-btn")?.addEventListener("click", () => history.back());
+document.getElementById("settings-back-btn")?.addEventListener("click", () => history.back());
+document.getElementById("reports-back-btn")?.addEventListener("click", () => history.back());
 
 // Device/browser back button: step back to whichever section is recorded
 // in that history entry (a modal's own popstate handling, in ui-utils.js,
@@ -839,6 +901,7 @@ watchAuthState(
     // overlay up for a beat longer so the jump from the auth screen into
     // the Wall feels like one deliberate transition instead of an abrupt cut.
     showLoadingScreen("Loading GeoHub");
+    setLoadingProgress(85); // Firebase has resolved who's signed in
     authScreen.classList.add("hidden");
     appShell.classList.remove("hidden");
 
@@ -865,6 +928,7 @@ watchAuthState(
       openProfileDetailsModal(true);
     }
 
+    setLoadingProgress(100); // the shell is routed and rendering — genuinely ready
     setTimeout(hideLoadingScreen, LOADING_MIN_DISPLAY_MS);
   },
   () => {
@@ -898,7 +962,10 @@ watchAuthState(
     if (loggingOut) {
       // A user-initiated logout: keep the "Logging out" overlay up for a
       // beat so it reads as a deliberate transition, mirroring the login flow.
+      // This isn't tracking real page-load milestones (there's nothing left
+      // to load), so it just fills determinately over that same beat.
       showLoadingScreen("Logging out");
+      setLoadingProgress(100);
       setTimeout(() => {
         hideLoadingScreen();
         setLoadingLabel("Loading GeoHub");
@@ -906,7 +973,10 @@ watchAuthState(
       }, LOADING_MIN_DISPLAY_MS);
     } else {
       // First page load with no existing session — the overlay is already
-      // showing from startup, so just dismiss it right away.
+      // showing from startup, so just fill the rest of the way and dismiss
+      // right away (no session to fetch, so there's genuinely nothing left
+      // to wait on).
+      setLoadingProgress(100);
       hideLoadingScreen();
     }
   }
