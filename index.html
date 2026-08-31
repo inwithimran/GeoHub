@@ -581,6 +581,31 @@
   .kebab-item { @apply w-full text-left text-[.85rem] font-semibold; padding:11px 15px; color: var(--color-ink); }
   .kebab-item:active { background: var(--color-paper-deep); }
   .kebab-item.danger { color: var(--color-danger-600); }
+
+  /* ---------- Press-and-hold message actions (Copy/Delete) — messages.js's
+     openMessageActionMenu. A fixed-position popup anchored to the held
+     bubble, over a soft dimmed backdrop that closes it on tap — the same
+     "hold a message, a small menu appears" gesture as Messenger/WhatsApp,
+     used instead of a permanent three-dot icon sitting on every bubble. ---------- */
+  .msg-action-backdrop {
+    position:fixed; inset:0; z-index:60; background: rgba(15,20,15,.28);
+    animation: msg-action-fade .12s ease-out;
+  }
+  @keyframes msg-action-fade { from { opacity:0; } to { opacity:1; } }
+  .msg-action-menu {
+    position:fixed; z-index:61; display:flex; flex-direction:column; overflow:hidden;
+    min-width:160px; border-radius:16px; background: var(--color-surface);
+    box-shadow: var(--shadow-cardhover); border:1px solid var(--color-line);
+    animation: msg-action-pop .13s cubic-bezier(.2,.8,.3,1.3);
+  }
+  @keyframes msg-action-pop { from { opacity:0; transform:scale(.92); } to { opacity:1; transform:scale(1); } }
+  .msg-action-item {
+    @apply flex items-center gap-2.5 w-full text-left text-[.87rem] font-semibold;
+    padding:12px 15px; color: var(--color-ink);
+  }
+  .msg-action-item:active { background: var(--color-paper-deep); }
+  .msg-action-item.danger { color: var(--color-danger-600); }
+  .msg-action-item + .msg-action-item { border-top:1px solid var(--color-line); }
   .content { @apply mx-auto w-full overflow-x-hidden; grid-row:2; max-width:760px; padding:16px 14px 96px; }
   .route-section { @apply flex flex-col gap-3.5 min-w-0; }
   .route-section:not(.hidden) { @apply animate-fade-up; }
@@ -845,28 +870,25 @@
   .chat-bubble-row.mine .chat-bubble-group { @apply items-end; }
   .chat-bubble-name { @apply text-[.7rem] font-extrabold pl-1; color: var(--color-forest-700); }
   .chat-bubble {
-    @apply relative text-[.87rem] leading-snug rounded-[18px] break-words; padding:9px 13px;
+    @apply relative text-[.87rem] leading-snug rounded-[18px] break-words transition-transform; padding:9px 13px;
     background: var(--color-surface); color: var(--color-ink); border:1px solid var(--color-line); border-bottom-left-radius:5px;
     box-shadow: var(--shadow-card);
+    /* No native text-selection/callout here — a press-and-hold on the bubble
+       is our own Copy/Delete gesture (see wireMessageLongPress in
+       js/messages.js); without this, the phone's own text-selection bubble
+       pops up at the same time and fights it for the same press. */
+    -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
   }
   .chat-bubble-row.mine .chat-bubble {
     @apply text-white; background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800));
     border-color:transparent; border-bottom-left-radius:18px; border-bottom-right-radius:5px;
     box-shadow: 0 4px 14px rgba(26,76,48,.24);
   }
+  /* Tiny "settle" on press so holding a bubble down actually feels like it's
+     doing something in the moment before the Copy/Delete menu appears. */
+  .chat-bubble:active { transform:scale(.97); }
   .chat-bubble-meta { @apply flex items-center gap-1.5 px-1 text-[.65rem] font-semibold; color: var(--color-ink-faint); }
   .chat-bubble-row.mine .chat-bubble-meta { @apply flex-row-reverse; }
-  /* The delete kebab rides along in the meta row next to the timestamp
-     instead of claiming its own column beside the avatar (see the comment
-     in renderChatBubbles) — kept small and quiet so it doesn't compete with
-     the time label for attention. */
-  .chat-bubble-meta .kebab-menu { @apply shrink-0; }
-  .chat-bubble-meta .kebab-btn { width:20px; height:20px; color: var(--color-ink-faint); }
-  .chat-bubble-row.mine .chat-bubble-meta .kebab-btn { color: rgba(255,255,255,.75); }
-  /* Delete is only ever offered on your OWN bubbles (mine, right-aligned),
-     so opening upward is all that's needed — the default right-anchored
-     dropdown already stays clear of the screen edge on that side. */
-  .chat-bubble-meta .kebab-dropdown { top:auto; bottom:calc(100% + 4px); }
   .chat-day-divider { @apply self-center text-[.68rem] font-extrabold uppercase tracking-wide rounded-full; padding:4px 12px; color: var(--color-ink-faint); background: var(--color-surface); box-shadow: var(--shadow-card); margin:6px 0; }
   .chat-empty { @apply flex-1 flex flex-col items-center justify-center text-center gap-2.5; color: var(--color-ink-faint); font-size:.88rem; padding:30px; }
   .chat-empty::before {
