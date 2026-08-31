@@ -22,7 +22,8 @@
 import { auth, db } from "./firebase-config.js";
 import {
   collection, doc, query, where, orderBy, limitToLast, onSnapshot,
-  addDoc, updateDoc, setDoc, getDoc, deleteDoc, serverTimestamp, increment
+  addDoc, updateDoc, setDoc, getDoc, deleteDoc, serverTimestamp, increment,
+  arrayUnion, arrayRemove
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { currentProfile } from "./auth.js";
 import {
@@ -63,6 +64,10 @@ const dmThreadForm = document.getElementById("dm-thread-form");
 const dmThreadInput = document.getElementById("dm-thread-input");
 const dmThreadSendBtn = document.getElementById("dm-thread-send-btn");
 const dmThreadBackBtn = document.getElementById("dm-thread-back-btn");
+const dmThreadBlockBtn = document.getElementById("dm-thread-block-btn");
+const dmThreadBlockedBar = document.getElementById("dm-thread-blocked-bar");
+const dmThreadBlockedText = document.getElementById("dm-thread-blocked-text");
+const dmThreadUnblockBtn = document.getElementById("dm-thread-unblock-btn");
 
 let goToRouteRef = null;
 let goBackToRouteRef = null;
@@ -71,6 +76,35 @@ export function registerDmThreadRouter(goToRoute, goBackToRoute) { goToRouteRef 
 /** Deterministic conversation id for a pair of students — order-independent. */
 function dmConversationId(uidA, uidB) {
   return [uidA, uidB].sort().join("_");
+}
+
+// ============================================================
+// BLOCK / UNBLOCK — a student can stop a specific classmate's DMs by
+// adding their own uid to that ONE conversation's `blockedBy` array
+// (see firestore.rules — a message can't be created while the
+// conversation's blockedBy list is non-empty, and either participant
+// may only ever add/remove THEIR OWN uid). Scoped to that one
+// conversation on purpose: blocking someone doesn't touch the Wall,
+// Class Chat, or anything else they can see.
+// ============================================================
+/** One-time read of the block state between the signed-in student and `otherUid` —
+ *  never creates the conversation doc, so just viewing a profile can't spawn one. */
+export async function getBlockState(otherUid) {
+  const myUid = auth.currentUser?.uid;
+  if (!myUid || !otherUid) return { blockedByMe: false, blockedByThem: false };
+  const snap = await getDoc(doc(db, "conversations", dmConversationId(myUid, otherUid)));
+  const blockedBy = snap.exists() ? (snap.data().blockedBy || []) : [];
+  return { blockedByMe: blockedBy.includes(myUid), blockedByThem: blockedBy.includes(otherUid) };
+}
+
+/** Block or unblock `otherUid` from the signed-in student's own side. */
+export async function setDmBlocked(otherUid, blocked) {
+  const myUid = auth.currentUser?.uid;
+  if (!myUid || !otherUid) return;
+  const conversationId = await ensureConversation(otherUid);
+  await updateDoc(doc(db, "conversations", conversationId), {
+    blockedBy: blocked ? arrayUnion(myUid) : arrayRemove(myUid)
+  });
 }
 
 // ============================================================
@@ -426,6 +460,7 @@ function markConversationRead(conversationId) {
 let currentDmUid = null;
 let currentDmConversationId = null;
 let unsubscribeDmMessages = null;
+let unsubscribeDmConversation = null;
 let dmThreadAtBottom = true;
 
 /** The classmate uid whose thread is currently open (null if the page isn't open) — mirrors getOpenProfileUid()/getOpenPostId(). */
@@ -434,13 +469,38 @@ export function getOpenDmUid() { return currentDmUid; }
 /** Call whenever navigating away from the thread page. */
 export function teardownDmThread() {
   if (unsubscribeDmMessages) unsubscribeDmMessages();
+  if (unsubscribeDmConversation) unsubscribeDmConversation();
   unsubscribeDmMessages = null;
+  unsubscribeDmConversation = null;
   currentDmUid = null;
   currentDmConversationId = null;
 }
 
 function dmThreadSkeletonHtml() {
   return `<div class="chat-empty" aria-hidden="true">Loading conversation…</div>`;
+}
+
+/** Reflects the conversation's live `blockedBy` array in the thread UI: the
+ *  composer is swapped for a bar (either "You've blocked them" + Unblock,
+ *  or a plain "can't message" notice if they've blocked you instead), and
+ *  the header's block-toggle button lights up when you're the blocker. */
+function paintDmBlockState(otherUid, blockedBy) {
+  const myUid = auth.currentUser?.uid;
+  const blockedByMe = blockedBy.includes(myUid);
+  const blockedByThem = blockedBy.includes(otherUid);
+  const blocked = blockedByMe || blockedByThem;
+
+  dmThreadForm?.classList.toggle("hidden", blocked);
+  dmThreadBlockedBar?.classList.toggle("hidden", !blocked);
+  if (blocked && dmThreadBlockedText) {
+    dmThreadBlockedText.textContent = blockedByMe
+      ? "You've blocked this classmate."
+      : "You can't message this classmate right now.";
+  }
+  dmThreadUnblockBtn?.classList.toggle("hidden", !blockedByMe);
+
+  dmThreadBlockBtn?.classList.toggle("active", blockedByMe);
+  dmThreadBlockBtn?.setAttribute("aria-label", blockedByMe ? "Unblock this classmate" : "Block this classmate");
 }
 
 function renderDmThreadHeader(uid) {
@@ -473,6 +533,12 @@ export async function openDmThread(uid, { fromPopstate = false, replace = false 
   if (goToRouteRef) goToRouteRef("dm-thread", { fromPopstate, replace, state: { dmUid: uid } });
   dmThreadListEl.innerHTML = dmThreadSkeletonHtml();
   dmThreadAtBottom = true;
+  // Reset to the ordinary composer until the conversation doc's real
+  // blockedBy state comes back — avoids flashing the "blocked" bar for
+  // a conversation that was never blocked in the first place.
+  dmThreadForm?.classList.remove("hidden");
+  dmThreadBlockedBar?.classList.add("hidden");
+  dmThreadBlockBtn?.classList.remove("active");
 
   if (!getCachedProfile(uid)) ensureProfileLoaded(uid);
   renderDmThreadHeader(uid);
@@ -489,6 +555,11 @@ export async function openDmThread(uid, { fromPopstate = false, replace = false 
   if (uid !== currentDmUid) return; // superseded by a newer navigation while awaiting the conversation doc
   currentDmConversationId = conversationId;
   markConversationRead(conversationId);
+
+  unsubscribeDmConversation = onSnapshot(doc(db, "conversations", conversationId), (snap) => {
+    if (conversationId !== currentDmConversationId) return;
+    paintDmBlockState(uid, snap.data()?.blockedBy || []);
+  });
 
   const q = query(collection(db, "conversations", conversationId, "messages"), orderBy("createdAt", "asc"));
   unsubscribeDmMessages = onSnapshot(q, (snap) => {
@@ -520,6 +591,7 @@ async function submitDmMessage() {
   const conversationId = currentDmConversationId;
   const otherUid = currentDmUid;
   if (!text || !conversationId || !otherUid || dmThreadSendBtn.disabled) return;
+  if (dmThreadForm?.classList.contains("hidden")) return; // blocked — composer shouldn't even be reachable
   dmThreadInput.value = "";
   dmThreadSendBtn.disabled = true;
   dmThreadAtBottom = true;
@@ -565,6 +637,33 @@ export function initMessages() {
 
   dmThreadForm?.addEventListener("submit", (e) => { e.preventDefault(); submitDmMessage(); });
   dmThreadInput?.addEventListener("input", () => { dmThreadSendBtn.disabled = !dmThreadInput.value.trim(); });
+  // Block/unblock this classmate for DMs — blocking asks for a quick
+  // confirmation (it silences someone), unblocking doesn't need one.
+  dmThreadBlockBtn?.addEventListener("click", () => {
+    const otherUid = currentDmUid;
+    if (!otherUid) return;
+    const alreadyBlocked = dmThreadBlockBtn.classList.contains("active");
+    if (alreadyBlocked) {
+      setDmBlocked(otherUid, false).catch((err) => {
+        const { message, technical } = friendlyError(err, "Couldn't unblock this classmate.");
+        showToast(message, { details: technical });
+      });
+      return;
+    }
+    const name = getCachedProfile(otherUid)?.name || "this classmate";
+    confirmDialog({
+      title: "Block this classmate?",
+      text: `${name} won't be able to send you messages until you unblock them.`,
+      confirmLabel: "Block",
+      onConfirm: () => setDmBlocked(otherUid, true)
+    });
+  });
+  dmThreadUnblockBtn?.addEventListener("click", () => {
+    if (currentDmUid) setDmBlocked(currentDmUid, false).catch((err) => {
+      const { message, technical } = friendlyError(err, "Couldn't unblock this classmate.");
+      showToast(message, { details: technical });
+    });
+  });
   // Same reasoning as the shared #topbar-back-btn in app.js: prefer the
   // ?from= tab baked into the URL over a blind history.back(), since that
   // stays correct even right after a reload or a fresh deep link, when

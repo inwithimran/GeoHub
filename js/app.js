@@ -249,6 +249,34 @@ loginForm.addEventListener("submit", async (e) => {
   }
 });
 
+// ============================================================
+// FORGOT PASSWORD — reachable straight from the Log In tab, since
+// someone who's actually locked out (forgotten password) can't sign
+// in first to reach the same reset action tucked inside Settings.
+// Reuses whatever's already typed into the Email field above it.
+// ============================================================
+const forgotPasswordBtn = document.getElementById("forgot-password-btn");
+forgotPasswordBtn.addEventListener("click", async () => {
+  const errorEl = document.getElementById("login-error");
+  const emailInput = document.getElementById("login-email");
+  const email = emailInput.value.trim();
+  errorEl.textContent = "";
+  if (!email) {
+    errorEl.textContent = "Enter your email above first, then tap \u201cForgot password?\u201d.";
+    emailInput.focus();
+    return;
+  }
+  setBtnLoading(forgotPasswordBtn, true, "Sending…");
+  try {
+    await sendPasswordResetEmail(auth, email);
+    showToast(`Password reset link sent to ${email}.`);
+  } catch (err) {
+    errorEl.textContent = friendlyAuthError(err);
+  } finally {
+    setBtnLoading(forgotPasswordBtn, false);
+  }
+});
+
 /** A slightly-stronger-than-Firebase-default password rule: 8+ chars, at least one letter and one number. */
 function passwordStrengthError(password) {
   if (password.length < 8) return "Password must be at least 8 characters.";

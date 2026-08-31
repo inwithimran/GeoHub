@@ -14,12 +14,12 @@ import { collection, query, where, getDocs } from "https://www.gstatic.com/fireb
 import { fetchProfile } from "./auth.js";
 import {
   escapeHtml, getCachedProfile, cacheUserProfile, avatarInner, nameWithBadge,
-  isAdminEmail, adminBadgeHtml, fullDate, showToast, friendlyError
+  isAdminEmail, adminBadgeHtml, fullDate, showToast, friendlyError, confirmDialog
 } from "./ui-utils.js";
 import { loadUserResources } from "./resources.js";
 import { renderPost } from "./wall.js";
 import { presenceTextHtml } from "./presence.js";
-import { openDmThread } from "./messages.js";
+import { openDmThread, getBlockState, setDmBlocked } from "./messages.js";
 
 const cardEl = document.getElementById("user-profile-card");
 
@@ -158,6 +158,9 @@ function renderProfilePage(profile, uid) {
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h16a1 1 0 0 1 1 1V16a1 1 0 0 1-1 1H8l-4.5 4V6.5a1 1 0 0 1 1-1z"/></svg>
             Message
           </button>
+          <button type="button" id="user-profile-block-btn" class="dm-thread-block-btn" aria-label="Block this classmate">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="5.6" y1="5.6" x2="18.4" y2="18.4"/></svg>
+          </button>
         </div>
       </div>
 
@@ -172,6 +175,40 @@ function renderProfilePage(profile, uid) {
   `;
 
   cardEl.querySelector("#user-profile-message-btn")?.addEventListener("click", () => openDmThread(uid));
+
+  // ---- Block/unblock (see js/messages.js — DM-only, scoped to this one
+  // classmate's conversation). Starts in its default (not-blocked) state
+  // while the real status loads, same "avoid flashing the wrong state"
+  // approach as the DM thread header's own version of this button. ----
+  const blockBtn = cardEl.querySelector("#user-profile-block-btn");
+  if (blockBtn) {
+    getBlockState(uid).then(({ blockedByMe }) => {
+      if (cardEl.querySelector("#user-profile-block-btn") !== blockBtn) return; // page navigated away/re-rendered meanwhile
+      blockBtn.classList.toggle("active", blockedByMe);
+      blockBtn.setAttribute("aria-label", blockedByMe ? "Unblock this classmate" : "Block this classmate");
+    });
+    blockBtn.addEventListener("click", () => {
+      const alreadyBlocked = blockBtn.classList.contains("active");
+      if (alreadyBlocked) {
+        setDmBlocked(uid, false)
+          .then(() => { blockBtn.classList.remove("active"); blockBtn.setAttribute("aria-label", "Block this classmate"); })
+          .catch((err) => {
+            const { message, technical } = friendlyError(err, "Couldn't unblock this classmate.");
+            showToast(message, { details: technical });
+          });
+        return;
+      }
+      confirmDialog({
+        title: "Block this classmate?",
+        text: `${profile.name || "This classmate"} won't be able to send you messages until you unblock them.`,
+        confirmLabel: "Block",
+        onConfirm: () => setDmBlocked(uid, true).then(() => {
+          blockBtn.classList.add("active");
+          blockBtn.setAttribute("aria-label", "Unblock this classmate");
+        })
+      });
+    });
+  }
 
   const tabBtns = cardEl.querySelectorAll(".profile-tab-btn");
   const tabPanels = cardEl.querySelectorAll(".profile-tab-panel");
