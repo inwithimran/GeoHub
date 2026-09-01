@@ -44,6 +44,134 @@ const unsubscribeProfileUpdates = subscribeToProfileUpdates((uid) => {
 
 const COMMENT_TEXT_LIMIT = 500;
 
+const COMMENT_LONG_PRESS_MS = 420;
+const COMMENT_LONG_PRESS_MOVE_TOLERANCE = 10;
+const commentDataCache = new Map();
+
+function closeCommentActionMenu() {
+  document.querySelector(".msg-action-backdrop")?.remove();
+}
+document.addEventListener("scroll", closeCommentActionMenu, true);
+
+function wireCommentLongPress(commentsEl, handlers) {
+  commentsEl.querySelectorAll(".comment-item:not(.comment-item-pending)").forEach((item) => {
+    const body = item.querySelector(".comment-body");
+    if (!body || body.dataset.longpressWired) return;
+    body.dataset.longpressWired = "1";
+
+    let pressTimer = null;
+    let startX = 0, startY = 0;
+
+    const cancelPress = () => clearTimeout(pressTimer);
+    const startPress = (e) => {
+      startX = e.clientX; startY = e.clientY;
+      pressTimer = setTimeout(() => openCommentActionMenu(item, handlers), COMMENT_LONG_PRESS_MS);
+    };
+    const trackMove = (e) => {
+      if (Math.abs(e.clientX - startX) > COMMENT_LONG_PRESS_MOVE_TOLERANCE || Math.abs(e.clientY - startY) > COMMENT_LONG_PRESS_MOVE_TOLERANCE) {
+        cancelPress();
+      }
+    };
+
+    body.addEventListener("pointerdown", startPress);
+    body.addEventListener("pointerup", cancelPress);
+    body.addEventListener("pointerleave", cancelPress);
+    body.addEventListener("pointercancel", cancelPress);
+    body.addEventListener("pointermove", trackMove);
+    body.addEventListener("contextmenu", (e) => e.preventDefault());
+  });
+}
+
+function openCommentActionMenu(item, handlers) {
+  closeCommentActionMenu();
+  const commentId = item.dataset.commentId;
+  const canEdit = item.dataset.canEdit === "1";
+  const canDelete = item.dataset.canDelete === "1";
+  const isOwn = item.dataset.ownLabel === "1";
+  const cached = commentDataCache.get(commentId) || { text: "" };
+
+  const backdrop = document.createElement("div");
+  backdrop.className = "msg-action-backdrop";
+  backdrop.addEventListener("click", closeCommentActionMenu);
+
+  const menu = document.createElement("div");
+  menu.className = "msg-action-menu";
+  menu.innerHTML = `
+    <button type="button" class="msg-action-item" data-action="copy">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      Copy
+    </button>
+    ${canEdit ? `<button type="button" class="msg-action-item" data-action="edit">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      Edit Comment
+    </button>` : ""}
+    ${canDelete ? `<button type="button" class="msg-action-item danger" data-action="delete">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+      ${isOwn ? "Delete Comment" : "Remove Comment"}
+    </button>` : ""}
+  `;
+  backdrop.appendChild(menu);
+  document.body.appendChild(backdrop);
+
+  const itemRect = item.getBoundingClientRect();
+  const menuRect = menu.getBoundingClientRect();
+  const gap = 8;
+  let left = itemRect.left + 38;
+  left = Math.min(Math.max(left, 8), window.innerWidth - menuRect.width - 8);
+  let top = itemRect.top - menuRect.height - gap;
+  if (top < 8) top = Math.min(itemRect.bottom + gap, window.innerHeight - menuRect.height - 8);
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+
+  menu.querySelectorAll(".msg-action-item").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const action = btn.dataset.action;
+      closeCommentActionMenu();
+      if (action === "copy") {
+        navigator.clipboard?.writeText(cached.text || "")
+          .then(() => showToast("Comment copied"))
+          .catch(() => showToast("Couldn't copy that comment."));
+      } else if (action === "edit") {
+        handlers.edit(commentId);
+      } else if (action === "delete") {
+        handlers.delete(commentId);
+      }
+    });
+  });
+}
+
+function wireReplyToggles(commentsEl) {
+  commentsEl.querySelectorAll(".comment-replies-toggle").forEach((btn) => {
+    if (btn.dataset.toggleWired) return;
+    btn.dataset.toggleWired = "1";
+    const repliesEl = btn.nextElementSibling;
+    if (!repliesEl || !repliesEl.classList.contains("comment-replies")) return;
+
+    btn.addEventListener("click", () => {
+      const labelEl = btn.querySelector(".comment-replies-toggle-label");
+      const isOpen = !repliesEl.classList.contains("hidden");
+      if (isOpen) {
+        repliesEl.classList.add("hidden");
+        btn.classList.remove("is-expanded");
+        if (labelEl) labelEl.textContent = btn.dataset.label;
+        return;
+      }
+      if (btn.dataset.loading === "1") return;
+      btn.dataset.loading = "1";
+      btn.disabled = true;
+      if (labelEl) labelEl.innerHTML = `<span class="btn-spinner dark" aria-hidden="true"></span>`;
+      setTimeout(() => {
+        repliesEl.classList.remove("hidden");
+        btn.classList.add("is-expanded");
+        if (labelEl) labelEl.textContent = "Hide replies";
+        btn.disabled = false;
+        btn.dataset.loading = "0";
+      }, 420);
+    });
+  });
+}
+
 export function openPostDetailPage(postId, { fromPopstate = false, replace = false, focusComment = false } = {}) {
   if (!postId || !bodyEl) return;
   teardownPostDetail();
@@ -160,6 +288,12 @@ function renderPostDetail(postId, post, comments, container, { focusComment, com
     ? { id: prevReplyChip.dataset.id, name: prevReplyChip.dataset.name }
     : null;
 
+  const prevExpandedReplies = new Set(
+    [...container.querySelectorAll(".comment-replies:not(.hidden)")]
+      .map(el => el.dataset.repliesFor)
+      .filter(Boolean)
+  );
+
   if (commentsLoaded) setCommentCountCache(postId, comments.length);
 
   const topLevelComments = comments.filter(c => !c.replyTo);
@@ -185,9 +319,24 @@ function renderPostDetail(postId, post, comments, container, { focusComment, com
   const commentThreadHtml = (c) => {
     const replies = repliesByParent.get(c.id) || [];
     const pendingReplies = pendingByParent.get(c.id) || [];
-    const repliesHtml = replies.map(r => replyItemHtml(r, uid, isOwnPost, c)).join("")
-      + pendingReplies.map(pendingCommentItemHtml).join("");
-    return commentItemHtml(c, uid, isOwnPost) + (repliesHtml ? `<div class="comment-replies">${repliesHtml}</div>` : "");
+    const pendingHtml = pendingReplies.map(pendingCommentItemHtml).join("");
+
+    if (!replies.length) {
+      // No loaded replies yet — just a reply being sent right now, if any. Show it inline,
+      // there's nothing to collapse behind "View reply" yet.
+      return commentItemHtml(c, uid, isOwnPost)
+        + (pendingHtml ? `<div class="comment-replies" data-replies-for="${c.id}">${pendingHtml}</div>` : "");
+    }
+
+    const repliesHtml = replies.map(r => replyItemHtml(r, uid, isOwnPost, c)).join("") + pendingHtml;
+    const forceOpen = prevExpandedReplies.has(c.id) || pendingReplies.length > 0;
+    const label = replies.length === 1 ? "View 1 reply" : `View ${replies.length} replies`;
+    return commentItemHtml(c, uid, isOwnPost) + `
+      <button type="button" class="comment-replies-toggle ${forceOpen ? "is-expanded" : ""}" data-parent-id="${c.id}" data-label="${escapeHtml(label)}">
+        <span class="comment-replies-toggle-line" aria-hidden="true"></span>
+        <span class="comment-replies-toggle-label">${forceOpen ? "Hide replies" : escapeHtml(label)}</span>
+      </button>
+      <div class="comment-replies ${forceOpen ? "" : "hidden"}" data-replies-for="${c.id}">${repliesHtml}</div>`;
   };
   const orphanRepliesHtml = orphanReplies.map((c) => {
     const tag = c.replyTo ? `<div class="reply-context">↳ Replying to ${escapeHtml(c.replyTo.authorName || "")} (original comment removed)</div>` : "";
@@ -310,7 +459,7 @@ function renderPostDetail(postId, post, comments, container, { focusComment, com
     const countBtn = commentsEl.querySelector(`.comment-reaction-count[data-id="${c.id}"]`);
     if (countBtn) countBtn.addEventListener("click", () => openReactionsModal(c.reactions || {}));
   });
-  wireKebabMenus(commentsEl, {
+  wireCommentLongPress(commentsEl, {
     edit: (commentId) => {
       const c = comments.find(x => x.id === commentId);
       openEditCommentModal(postId, commentId, c ? c.text : "", c ? c.mentions || [] : []);
@@ -322,8 +471,9 @@ function renderPostDetail(postId, post, comments, container, { focusComment, com
       onConfirm: () => deleteDoc(doc(db, "posts", postId, "comments", commentId))
     })
   });
+  wireReplyToggles(commentsEl);
 
-  const { getMentions } = wireMentions(input);
+  const { getMentions, addMention } = wireMentions(input);
   const sendBtn = commentsEl.querySelector(".comment-send-btn");
 
   const replyChip = commentsEl.querySelector(".reply-target-chip");
@@ -338,7 +488,16 @@ function renderPostDetail(postId, post, comments, container, { focusComment, com
   commentsEl.querySelectorAll(".comment-reply-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       setReplyTarget(btn.dataset.id, btn.dataset.name);
+      const mentionName = btn.dataset.name;
+      const mentionUid = btn.dataset.authorUid;
+      if (mentionName && mentionUid && mentionUid !== auth.currentUser.uid) {
+        addMention(mentionUid, mentionName);
+        const mentionText = `@${mentionName} `;
+        if (!input.value.startsWith(mentionText)) input.value = mentionText + input.value;
+        input.dispatchEvent(new Event("input"));
+      }
       focusCommentInput(container);
+      requestAnimationFrame(() => input.setSelectionRange(input.value.length, input.value.length));
     });
   });
 
@@ -366,21 +525,18 @@ function commentItemHtml(c, uid, isPostOwner, contextTag = "") {
   const author = authorProfile(c.authorUid, c.authorName);
   const isOwnComment = c.authorUid === uid;
   const canDelete = isOwnComment || isPostOwner;
-  const kebabActions = [];
-  if (isOwnComment) kebabActions.push({ action: "edit", label: "Edit Comment" });
-  if (canDelete) kebabActions.push({ action: "delete", label: isOwnComment ? "Delete Comment" : "Remove Comment", danger: true });
+  commentDataCache.set(c.id, { text: c.text || "", mentions: c.mentions || [] });
   const reactions = c.reactions || {};
   const reactionCount = Object.keys(reactions).length;
   const myReaction = reactions[uid] || null;
   return `
-    <div class="comment-item">
+    <div class="comment-item" data-comment-id="${c.id}" data-can-edit="${isOwnComment ? "1" : "0"}" data-can-delete="${canDelete ? "1" : "0"}" data-own-label="${isOwnComment ? "1" : "0"}">
       <span class="avatar-presence-wrap">
         <button type="button" class="avatar avatar-sm avatar-btn" data-author="${c.authorUid}" aria-label="View ${escapeHtml(author.name || c.authorName || "classmate")}’s profile">${avatarInner(author)}</button>
         ${avatarPresenceDotHtml(c.authorUid)}
       </span>
       <div class="comment-col">
-        <div class="comment-body ${kebabActions.length ? "has-kebab" : ""}">
-          ${kebabActions.length ? kebabMenuHtml(c.id, kebabActions) : ""}
+        <div class="comment-body">
           ${contextTag}
           <button type="button" class="comment-author" data-author="${c.authorUid}">${nameWithBadge(c.authorName, c.authorEmail)}</button>
           <p>${richTextHtml(c.text, c.mentions)}</p>
@@ -395,7 +551,7 @@ function commentItemHtml(c, uid, isPostOwner, contextTag = "") {
               ${REACTION_EMOJIS.map(e => `<button type="button" class="reaction-option" data-emoji="${e}">${e}</button>`).join("")}
             </div>
           </div>
-          <button type="button" class="comment-reply-btn" data-id="${c.id}" data-name="${escapeHtml(c.authorName || "Classmate")}">Reply</button>
+          <button type="button" class="comment-reply-btn" data-id="${c.id}" data-name="${escapeHtml(c.authorName || "Classmate")}" data-author-uid="${c.authorUid || ""}">Reply</button>
           <small>${timeAgo(c.createdAt)}${c.editedAt ? " · edited" : ""}</small>
         </div>
       </div>
@@ -406,22 +562,19 @@ function replyItemHtml(c, uid, isPostOwner, parentComment) {
   const author = authorProfile(c.authorUid, c.authorName);
   const isOwnComment = c.authorUid === uid;
   const canDelete = isOwnComment || isPostOwner;
-  const kebabActions = [];
-  if (isOwnComment) kebabActions.push({ action: "edit", label: "Edit Comment" });
-  if (canDelete) kebabActions.push({ action: "delete", label: isOwnComment ? "Delete Comment" : "Remove Comment", danger: true });
+  commentDataCache.set(c.id, { text: c.text || "", mentions: c.mentions || [] });
   const reactions = c.reactions || {};
   const reactionCount = Object.keys(reactions).length;
   const myReaction = reactions[uid] || null;
   const showReplyTag = c.replyTo && c.replyTo.authorUid && parentComment && c.replyTo.authorUid !== parentComment.authorUid;
   return `
-    <div class="comment-item comment-item-reply">
+    <div class="comment-item comment-item-reply" data-comment-id="${c.id}" data-can-edit="${isOwnComment ? "1" : "0"}" data-can-delete="${canDelete ? "1" : "0"}" data-own-label="${isOwnComment ? "1" : "0"}">
       <span class="avatar-presence-wrap">
         <button type="button" class="avatar avatar-xs avatar-btn" data-author="${c.authorUid}" aria-label="View ${escapeHtml(author.name || c.authorName || "classmate")}’s profile">${avatarInner(author)}</button>
         ${avatarPresenceDotHtml(c.authorUid)}
       </span>
       <div class="comment-col">
-        <div class="comment-body ${kebabActions.length ? "has-kebab" : ""}">
-          ${kebabActions.length ? kebabMenuHtml(c.id, kebabActions) : ""}
+        <div class="comment-body">
           ${showReplyTag ? `<div class="reply-context">↳ Replying to ${escapeHtml(c.replyTo.authorName || "")}</div>` : ""}
           <button type="button" class="comment-author" data-author="${c.authorUid}">${nameWithBadge(c.authorName, c.authorEmail)}</button>
           <p>${richTextHtml(c.text, c.mentions)}</p>
@@ -436,7 +589,7 @@ function replyItemHtml(c, uid, isPostOwner, parentComment) {
               ${REACTION_EMOJIS.map(e => `<button type="button" class="reaction-option" data-emoji="${e}">${e}</button>`).join("")}
             </div>
           </div>
-          <button type="button" class="comment-reply-btn" data-id="${c.replyTo.id}" data-name="${escapeHtml(c.authorName || "Classmate")}">Reply</button>
+          <button type="button" class="comment-reply-btn" data-id="${c.replyTo.id}" data-name="${escapeHtml(c.authorName || "Classmate")}" data-author-uid="${c.authorUid || ""}">Reply</button>
           <small>${timeAgo(c.createdAt)}${c.editedAt ? " · edited" : ""}</small>
         </div>
       </div>

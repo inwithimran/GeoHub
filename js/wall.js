@@ -101,7 +101,8 @@ export function wireMentions(fieldEl, initial = []) {
     (candidate) => picked.set(candidate.name, { uid: candidate.uid, name: candidate.name })
   );
   return {
-    getMentions: () => [...picked.values()].filter((m) => fieldEl.value.includes(`@${m.name}`))
+    getMentions: () => [...picked.values()].filter((m) => fieldEl.value.includes(`@${m.name}`)),
+    addMention: (uid, name) => { if (uid && name) picked.set(name, { uid, name }); }
   };
 }
 
