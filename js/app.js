@@ -1201,5 +1201,13 @@ watchAuthState(
       setLoadingProgress(100);
       hideLoadingScreen();
     }
+  },
+  (message) => {
+    // Same-email-different-uid collision caught in watchAuthState (see
+    // js/auth.js) — the person's already been signed out again at this
+    // point, so this just surfaces why instead of silently landing them
+    // on a fresh blank profile. onLogout() above still runs its own
+    // firebase-side callback right after this and restores the auth screen.
+    showToast(message, { duration: 6000 });
   }
 );

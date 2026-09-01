@@ -13,7 +13,8 @@ import {
   fetchSignInMethodsForEmail
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
-  doc, setDoc, updateDoc, getDoc, serverTimestamp
+  doc, setDoc, updateDoc, getDoc, serverTimestamp,
+  collection, query, where, limit, getDocs
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 // ============================================================
@@ -244,11 +245,38 @@ async function fetchOwnContact(uid) {
 }
 
 /**
+ * Best-effort lookup: is there ALREADY a users/{uid} doc for this email,
+ * under some OTHER uid? Used right before we'd otherwise conclude "this is
+ * a brand-new student" and create a blank starter profile (see below) — a
+ * false positive there used to silently create a second, empty profile and
+ * make the person's real one look "lost" (e.g. after clearing browser data
+ * and picking a different Google account than usual from a multi-account
+ * chooser). NOTE: only catches this when the OTHER profile's email field
+ * is visible (i.e. that student hasn't hidden their email) — Firestore
+ * rules don't allow querying across other students' private contact info,
+ * so this is a safety net, not a guarantee.
+ */
+async function findProfileByEmail(email, excludeUid) {
+  if (!email) return null;
+  try {
+    const snap = await getDocs(query(collection(db, "users"), where("email", "==", email), limit(5)));
+    const match = snap.docs.find(d => d.id !== excludeUid);
+    return match ? { uid: match.id, ...match.data() } : null;
+  } catch {
+    return null; // best-effort only — never block sign-in over this check failing
+  }
+}
+
+/**
  * Subscribe to Firebase's auth-state changes.
- * Calls onLogin(user, profile) or onLogout() as appropriate.
+ * Calls onLogin(user, profile) or onLogout() as appropriate; onConflict(message),
+ * if provided, is called (instead of onLogin) when a same-email-different-uid
+ * collision is caught (see findProfileByEmail above) — the person is signed
+ * out again so they land back on the auth screen with an explanation, rather
+ * than silently getting a second blank profile.
  * This is the single source of truth for whether the app shell shows.
  */
-export function watchAuthState(onLogin, onLogout) {
+export function watchAuthState(onLogin, onLogout, onConflict) {
   onAuthStateChanged(auth, async (user) => {
     if (user) {
       let profile = await fetchProfile(user.uid);
@@ -258,6 +286,18 @@ export function watchAuthState(onLogin, onLogout) {
       // there's a single, race-free place this happens.
       const isGoogleUser = user.providerData.some(p => p.providerId === "google.com");
       if (!profile && isGoogleUser) {
+        const existingElsewhere = await findProfileByEmail(user.email, user.uid);
+        if (existingElsewhere) {
+          await signOut(auth);
+          if (onConflict) {
+            onConflict(
+              `A GeoHub profile for ${user.email} already exists under a different sign-in. ` +
+              `You may have picked a different Google account than the one you used before. ` +
+              `Please try "Continue with Google" again and make sure to choose the right account.`
+            );
+          }
+          return;
+        }
         profile = {
           uid: user.uid,
           name: user.displayName || "New Student",
