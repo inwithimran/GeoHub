@@ -27,8 +27,8 @@ import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getAdminApp, verifyCaller, requirePost, sendError, ApiError, enforceRateLimit } from "./_lib/adminApp.js";
 import { requiredText, validateImages, validateMentions, validatePoll, deriveHashtags } from "./_lib/validators.js";
 
-const POST_TEXT_LIMIT = 3000; // mirrors js/wall.js's POST_TEXT_LIMIT + firestore.rules' textWithinLimit("text", 3000)
-const MIN_MS_BETWEEN_POSTS = 5000; // a real student writing separate posts is never this fast
+const POST_TEXT_LIMIT = 3000;
+const MIN_MS_BETWEEN_POSTS = 5000;
 
 export default async function handler(req, res) {
   try {
@@ -58,6 +58,7 @@ export default async function handler(req, res) {
       images,
       likes: [],
       reactions: {},
+      commentCount: 0,
       pinned: false,
       hashtags,
       mentions,

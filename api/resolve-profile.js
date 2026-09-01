@@ -90,12 +90,6 @@ export default async function handler(req, res) {
 
     if (snap.exists) {
       const profile = snap.data();
-      // Merge in the real, unmasked phone/email from the private subdoc —
-      // same reason js/auth.js used to do this client-side: a student who's
-      // hidden their number should still see their real number in their own
-      // "Edit Profile" form. Admin SDK reads bypass security rules, so this
-      // is safe here even though a regular signed-in client couldn't read
-      // another student's private/contact doc.
       const contactSnap = await userRef.collection("private").doc("contact").get();
       if (contactSnap.exists) {
         const contact = contactSnap.data();
@@ -106,17 +100,9 @@ export default async function handler(req, res) {
     }
 
     if (!isGoogleUser) {
-      // email/password signUp() writes users/{uid} synchronously before the
-      // client ever gets here, so a missing doc for a password account means
-      // something genuinely went wrong (e.g. the write failed) — surface it
-      // instead of guessing.
       return res.status(409).json({ error: "No profile record found for this account." });
     }
 
-    // Same-email-different-uid guard, done authoritatively (Admin SDK reads
-    // bypass Firestore security rules entirely, so — unlike the old client-side
-    // findProfileByEmail() — this also catches the case where the other
-    // profile's email happens to be hidden/masked).
     const dupSnap = await db.collection("users").where("email", "==", email).limit(5).get();
     const dup = dupSnap.docs.find((d) => d.id !== uid);
     if (dup) {
@@ -129,10 +115,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // Genuinely brand-new — create the starter profile. The transaction
-    // re-checks existence right before writing, so two near-simultaneous
-    // calls for the same new uid (e.g. a double-click, or a retry) can
-    // never race into creating it twice.
     const profile = await db.runTransaction(async (tx) => {
       const freshSnap = await tx.get(userRef);
       if (freshSnap.exists) return freshSnap.data();

@@ -30,13 +30,8 @@ import { initializeApp, cert, getApps } from "firebase-admin/app";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 
-// A deadline counts as "due tomorrow" if its due date falls this far from
-// now. Since this only runs once a day, the window is a full day wide
-// (not just "exactly 24h from now") so a deadline never slips through the
-// gap between two runs just because the cron fired a few minutes early or
-// late, or because someone added the deadline partway through the window.
-const REMINDER_WINDOW_START_MS = 20 * 60 * 60 * 1000;  // 20h from now
-const REMINDER_WINDOW_END_MS = 32 * 60 * 60 * 1000;    // 32h from now
+const REMINDER_WINDOW_START_MS = 20 * 60 * 60 * 1000;
+const REMINDER_WINDOW_END_MS = 32 * 60 * 60 * 1000;
 
 function getAdminApp() {
   if (getApps().length) return getApps()[0];
@@ -47,7 +42,6 @@ function getAdminApp() {
   return initializeApp({ credential: cert(serviceAccount) });
 }
 
-/** Every { uid, token } pair registered for push, across every student. */
 async function collectAllTokens(db) {
   const usersSnap = await db.collection("users").get();
   const pairs = [];
@@ -60,7 +54,6 @@ async function collectAllTokens(db) {
   return pairs;
 }
 
-/** Sends to every pair in chunks of 500 (FCM's multicast limit), pruning dead tokens as it goes. Mirrors sendToTokens() in send-push.js. */
 async function sendToTokens(messaging, db, pairs, data = {}) {
   if (!pairs.length) return { sent: 0, pruned: 0 };
   let sent = 0;
@@ -69,7 +62,7 @@ async function sendToTokens(messaging, db, pairs, data = {}) {
     const chunk = pairs.slice(i, i + 500);
     const res = await messaging.sendEachForMulticast({
       tokens: chunk.map((p) => p.token),
-      data, // data-only — see the comment on this same pattern in send-push.js
+      data,
       webpush: { fcmOptions: { link: data.url || "/" } }
     });
     sent += res.successCount;
@@ -90,7 +83,6 @@ function truncate(text = "", max = 120) {
 }
 
 export default async function handler(req, res) {
-  // ---- Optional shared-secret check (see setup note above) ----
   if (process.env.CRON_SECRET) {
     const authHeader = req.headers.authorization || "";
     if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -107,11 +99,6 @@ export default async function handler(req, res) {
     const windowStart = Timestamp.fromMillis(now + REMINDER_WINDOW_START_MS);
     const windowEnd = Timestamp.fromMillis(now + REMINDER_WINDOW_END_MS);
 
-    // A range query on a single field (dueAt) needs no composite index —
-    // same reasoning as the range/equality queries elsewhere in this app
-    // (see routine.js's big comment on this). remindedAt is filtered
-    // client-side below rather than added as a second `where`, for the
-    // same "avoid needing a manually-created composite index" reason.
     const snap = await db.collection("deadlines")
       .where("dueAt", ">=", windowStart)
       .where("dueAt", "<=", windowEnd)

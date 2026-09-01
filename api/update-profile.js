@@ -26,14 +26,13 @@ import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getAdminApp, verifyCaller, requirePost, sendError, ApiError } from "./_lib/adminApp.js";
 import { requiredText, optionalText, enumOrEmpty, isOwnCloudinaryUrl } from "./_lib/validators.js";
 
-const ADMIN_EMAILS = ["in.with.imran@gmail.com"]; // keep in sync with js/firebase-config.js and firestore.rules
+const ADMIN_EMAILS = ["in.with.imran@gmail.com"];
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const GENDERS = ["male", "female", "other"];
 const YEARS = ["1st Year", "2nd Year", "3rd Year", "4th Year", "Honours Completed"];
 const PHONE_RE = /^[0-9+\-\s()]{6,20}$/;
 const NAME_CHANGE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** Same masking rule as js/auth.js's visibleContactMirror(): the admin's email is never masked; phone is blanked entirely when hidden (rules can't hide individual fields, so blank is the only real option). */
 function visibleContactMirror({ phone, email, hidePhone, hideEmail }) {
   return {
     email: (ADMIN_EMAILS.includes(email) || !hideEmail) ? (email || "") : "",
@@ -51,7 +50,6 @@ export default async function handler(req, res) {
 
     const body = req.body || {};
 
-    // ---- Validate every field up front — nothing partially-invalid ever reaches the transaction ----
     const roll = requiredText(body.roll, "Class roll", 30);
     const bloodGroup = enumOrEmpty(body.blood, "Blood group", BLOOD_GROUPS);
     const gender = enumOrEmpty(body.gender, "Gender", GENDERS);
@@ -71,8 +69,6 @@ export default async function handler(req, res) {
       if (!isOwnCloudinaryUrl(body.photoURL, "geohub/avatars")) throw new ApiError(400, "Invalid profile photo.");
       photoURL = body.photoURL;
     }
-    // name is optional (unset means "leave it as-is") and, when present, may
-    // still be rejected below by the cooldown check — required-if-present.
     const rawName = typeof body.name === "string" ? body.name.trim() : undefined;
     if (rawName !== undefined && rawName.length > 60) throw new ApiError(400, "Name is too long (max 60 characters).");
 
@@ -100,10 +96,6 @@ export default async function handler(req, res) {
       if (gender) updates.gender = gender;
       if (photoURL) updates.photoURL = photoURL;
 
-      // ---- Name change cooldown — the real, authoritative check (mirrors
-      // firestore.rules' nameChangeAllowed(), enforced here too since this
-      // route now bypasses rules via the Admin SDK). A no-op edit (unset,
-      // or unchanged after trimming) never touches nameChangedAt. ----
       if (rawName && rawName !== (current.name || "")) {
         const lastChangeMs = current.nameChangedAt?.toMillis ? current.nameChangedAt.toMillis() : 0;
         if (lastChangeMs && Date.now() - lastChangeMs < NAME_CHANGE_COOLDOWN_MS) {

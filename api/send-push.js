@@ -37,11 +37,8 @@ import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 import { getAuth } from "firebase-admin/auth";
 
-const ADMIN_EMAILS = ["in.with.imran@gmail.com"]; // keep in sync with js/firebase-config.js and firestore.rules
-const MIN_MS_BETWEEN_PUSHES = 5000; // per-user cooldown, guards against simple spam
-// How recently the referenced document must have been created for this
-// request to count as "reporting something that just happened", rather
-// than replaying an old id to re-send a notification repeatedly.
+const ADMIN_EMAILS = ["in.with.imran@gmail.com"];
+const MIN_MS_BETWEEN_PUSHES = 5000;
 const MAX_CLAIM_AGE_MS = 2 * 60 * 1000;
 
 function getAdminApp() {
@@ -53,7 +50,6 @@ function getAdminApp() {
   return initializeApp({ credential: cert(serviceAccount) });
 }
 
-/** Every { uid, token } pair registered for push, across every student except `excludeUid`. */
 async function collectAllTokens(db, excludeUid) {
   const usersSnap = await db.collection("users").get();
   const pairs = [];
@@ -67,14 +63,12 @@ async function collectAllTokens(db, excludeUid) {
   return pairs;
 }
 
-/** Only the given student's own registered devices (used for "X commented on your post"). */
 async function collectTokensFor(db, uid, excludeUid) {
   if (!uid || uid === excludeUid) return [];
   const tokensSnap = await db.collection("users").doc(uid).collection("fcmTokens").get();
   return tokensSnap.docs.filter((d) => !d.data().revoked).map((d) => ({ uid, token: d.id }));
 }
 
-/** Every admin's registered devices (used for "new report" — never the whole department). */
 async function collectAdminTokens(db, excludeUid) {
   if (!ADMIN_EMAILS.length) return [];
   const adminsSnap = await db.collection("users").where("email", "in", ADMIN_EMAILS).get();
@@ -89,7 +83,6 @@ async function collectAdminTokens(db, excludeUid) {
   return pairs;
 }
 
-/** Sends to every pair in chunks of 500 (FCM's multicast limit), pruning dead tokens as it goes. */
 async function sendToTokens(messaging, db, pairs, data = {}) {
   if (!pairs.length) return { sent: 0, pruned: 0 };
   let sent = 0;
@@ -98,13 +91,6 @@ async function sendToTokens(messaging, db, pairs, data = {}) {
     const chunk = pairs.slice(i, i + 500);
     const res = await messaging.sendEachForMulticast({
       tokens: chunk.map((p) => p.token),
-      // Data-only message — deliberately no top-level `notification` field.
-      // When a push includes a `notification` payload, the browser/OS shows
-      // it automatically in the background AND the service worker's
-      // onBackgroundMessage handler fires and calls showNotification() itself
-      // — two notifications for one push. Sending data-only means nothing is
-      // shown automatically, so the service worker's single explicit call
-      // (see firebase-messaging-sw.js) is the only one that ever displays.
       data,
       webpush: { fcmOptions: { link: data.url || "/" } }
     });
@@ -125,7 +111,6 @@ function truncate(text = "", max = 120) {
   return text.length > max ? text.slice(0, max) + "…" : text;
 }
 
-/** Builds the { title, body } shown in the notification, per activity type. */
 function buildNotification(type, { text, actorName, urgent }) {
   const name = actorName || "Someone";
   switch (type) {
@@ -158,26 +143,15 @@ function buildNotification(type, { text, actorName, urgent }) {
   }
 }
 
-/** True if this Firestore Timestamp is recent enough to count as "just happened". */
 function isRecent(timestamp) {
   if (!timestamp || typeof timestamp.toMillis !== "function") return false;
   return Date.now() - timestamp.toMillis() < MAX_CLAIM_AGE_MS;
 }
 
-/**
- * Confirms the payload actually describes something that just happened in
- * Firestore, and that the caller is the right person to be reporting it.
- * Throws a { status, message } on any mismatch — see the catch block in
- * the handler, which turns that into the HTTP response.
- */
 async function verifyClaim(db, callerUid, callerEmail, payload) {
   const { type, targetUid, postId, resourceId, noticeId, reportId, deadlineId, conversationId, messageId } = payload;
 
   if (type === "deadline") {
-    // Same trust model as "notice": only the CR/admin may trigger this
-    // push (postDeadline() in deadlines.js can't succeed for anyone else
-    // anyway — see firestore.rules — so there's nothing else to verify
-    // per-id beyond "does this deadline exist and was it just created").
     if (!ADMIN_EMAILS.includes(callerEmail || "")) {
       throw { status: 403, message: "Only the class admin can send a deadline push." };
     }
@@ -191,12 +165,6 @@ async function verifyClaim(db, callerUid, callerEmail, payload) {
   }
 
   if (type === "routine") {
-    // Same trust model as "notice"/"deadline": only the CR/admin may ever
-    // trigger this push (saveRoutine() in routine.js can't succeed for
-    // anyone else anyway — see firestore.rules). The routine lives at a
-    // single fixed doc (routine/weekly) rather than one-per-edit, so
-    // recency is checked against its `updatedAt` field (stamped on every
-    // save) instead of a fresh document id.
     if (!ADMIN_EMAILS.includes(callerEmail || "")) {
       throw { status: 403, message: "Only the class admin can send a routine push." };
     }
@@ -208,10 +176,6 @@ async function verifyClaim(db, callerUid, callerEmail, payload) {
   }
 
   if (type === "notice") {
-    // Only the admin/CR may ever trigger a department-wide "notice" push —
-    // this is the one type with no per-notice ownership check below it,
-    // since postNotice() in routine.js can't run for a non-admin anyway
-    // (blocked by firestore.rules), so there's nothing to verify per-id.
     if (!ADMIN_EMAILS.includes(callerEmail || "")) {
       throw { status: 403, message: "Only the class admin can send a notice push." };
     }
@@ -257,15 +221,6 @@ async function verifyClaim(db, callerUid, callerEmail, payload) {
     const postSnap = await db.collection("posts").doc(postId).get();
     if (!postSnap.exists) throw { status: 400, message: "That post doesn't exist." };
     if (postSnap.get("authorUid") !== targetUid) throw { status: 400, message: "targetUid doesn't match the post's author." };
-    // Find a recent comment on this post by the caller — good enough proof
-    // without requiring the client to also thread the commentId through.
-    // A where()+orderBy() combo on different fields needs a composite
-    // Firestore index; until that index is manually created in the console
-    // this call throws "failed-precondition" and every "commented on your
-    // post" push silently fails (triggerPush() swallows the error client-
-    // side). Dropping orderBy avoids that entirely — a single-field
-    // equality filter needs no composite index, and scanning a handful of
-    // the caller's own comments on one post for a recent one is plenty.
     const commentsSnap = await db.collection("posts").doc(postId).collection("comments")
       .where("authorUid", "==", callerUid).limit(20).get();
     const hasRecentComment = commentsSnap.docs.some((d) => isRecent(d.get("createdAt")));
@@ -280,16 +235,12 @@ async function verifyClaim(db, callerUid, callerEmail, payload) {
     const postSnap = await db.collection("posts").doc(postId).get();
     if (!postSnap.exists) throw { status: 400, message: "That post doesn't exist." };
 
-    // The mention can be in the post itself...
     const postMentions = postSnap.get("mentions") || [];
     const isPostMention = postSnap.get("authorUid") === callerUid &&
       isRecent(postSnap.get("createdAt")) &&
       postMentions.some((m) => m && m.uid === targetUid);
     if (isPostMention) return;
 
-    // ...or in a recent comment by the caller on that post. Same
-    // no-orderBy, scan-a-few-recent-ones approach as the "comment" case
-    // above, for the same composite-index reason.
     const commentsSnap = await db.collection("posts").doc(postId).collection("comments")
       .where("authorUid", "==", callerUid).limit(20).get();
     const isCommentMention = commentsSnap.docs.some((d) =>
@@ -299,9 +250,6 @@ async function verifyClaim(db, callerUid, callerEmail, payload) {
   }
 
   if (type === "report") {
-    // Only the admin(s) ever get this push, so the claim just has to prove
-    // the caller really filed the report they're claiming to have — same
-    // "reporting something that just happened" shape as every other type.
     if (!reportId) throw { status: 400, message: "Missing reportId." };
     const snap = await db.collection("reports").doc(reportId).get();
     if (!snap.exists) throw { status: 400, message: "That report doesn't exist." };
@@ -311,9 +259,6 @@ async function verifyClaim(db, callerUid, callerEmail, payload) {
   }
 
   if (type === "classChat") {
-    // Same "reporting something that just happened" shape as "post" — one
-    // shared room, so the check is just "did the caller really just post
-    // this message" (broadcasts to everyone else, same as "post").
     if (!messageId) throw { status: 400, message: "Missing messageId." };
     const snap = await db.collection("classChat").doc(messageId).get();
     if (!snap.exists) throw { status: 400, message: "That message doesn't exist." };
@@ -323,10 +268,6 @@ async function verifyClaim(db, callerUid, callerEmail, payload) {
   }
 
   if (type === "dm") {
-    // A DM push only ever goes to the other participant, never the whole
-    // department — so this has to confirm both that the caller is really
-    // in that conversation AND that targetUid is the other person on it,
-    // on top of the usual "did this message really just get sent" check.
     if (!conversationId || !messageId || !targetUid) {
       throw { status: 400, message: "Missing conversationId, messageId or targetUid." };
     }
@@ -347,7 +288,6 @@ async function verifyClaim(db, callerUid, callerEmail, payload) {
   throw { status: 400, message: `Unknown type '${type}'.` };
 }
 
-/** Rejects (silently, from the caller's point of view — this is best-effort push, not a user-facing action) if this uid pushed too recently. */
 async function checkAndBumpRateLimit(db, uid) {
   const ref = db.collection("pushRateLimits").doc(uid);
   return db.runTransaction(async (tx) => {
@@ -367,7 +307,6 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  // ---- Only a signed-in student may trigger a send ----
   const authHeader = req.headers.authorization || "";
   const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
   if (!idToken) return res.status(401).json({ error: "Missing Authorization bearer token." });
@@ -383,7 +322,6 @@ export default async function handler(req, res) {
 
     const db = getFirestore(app);
 
-    // ---- Prove the claim before sending anything (see verifyClaim above) ----
     try {
       await verifyClaim(db, callerUid, callerEmail, { type, targetUid, postId, resourceId, noticeId, reportId, deadlineId, conversationId, messageId });
     } catch (claimErr) {
@@ -391,25 +329,18 @@ export default async function handler(req, res) {
       return res.status(status).json({ error: claimErr.message || "Couldn't verify this request." });
     }
 
-    // ---- Simple per-user cooldown so even a legitimate flurry of actions can't spam pushes ----
     const allowed = await checkAndBumpRateLimit(db, callerUid);
     if (!allowed) return res.status(429).json({ ok: false, error: "Please wait a few seconds before triggering another notification." });
 
     const messaging = getMessaging(app);
     const { title, body } = buildNotification(type, { text, actorName, urgent });
 
-    // A new comment, like, mention, or DM only notifies one specific
-    // student (the post's author, whoever got @mentioned, or the other
-    // side of the conversation); a new report only notifies the admin(s);
-    // everything else — including a new Class Chat message — broadcasts
-    // to the whole department.
     const pairs = (type === "comment" || type === "like" || type === "mention" || type === "dm")
       ? await collectTokensFor(db, targetUid, callerUid)
       : type === "report"
         ? await collectAdminTokens(db, callerUid)
         : await collectAllTokens(db, callerUid);
 
-    // FCM data payloads only allow string values, hence the explicit casts.
     const result = await sendToTokens(messaging, db, pairs, { url: "/", type: String(type), title, body });
     return res.status(200).json({ ok: true, ...result });
   } catch (err) {

@@ -17,8 +17,8 @@ import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getAdminApp, verifyCaller, requirePost, sendError, ApiError, enforceRateLimit } from "./_lib/adminApp.js";
 import { requiredText, validateMentions } from "./_lib/validators.js";
 
-const COMMENT_TEXT_LIMIT = 500; // mirrors js/post-detail.js's COMMENT_TEXT_LIMIT + firestore.rules' textWithinLimit("text", 500)
-const MIN_MS_BETWEEN_COMMENTS = 2000; // comments are shorter/faster than posts, so a tighter but still generous window
+const COMMENT_TEXT_LIMIT = 500;
+const MIN_MS_BETWEEN_COMMENTS = 2000;
 
 export default async function handler(req, res) {
   try {
@@ -44,7 +44,9 @@ export default async function handler(req, res) {
     const text = requiredText(body.text, "Comment", COMMENT_TEXT_LIMIT);
     const mentions = await validateMentions(db, body.mentions, uid, 20);
 
-    const commentRef = await db.collection("posts").doc(postId).collection("comments").add({
+    const commentRef = db.collection("posts").doc(postId).collection("comments").doc();
+    const batch = db.batch();
+    batch.set(commentRef, {
       authorUid: uid,
       authorName: author.name || "",
       authorEmail: author.email || decoded.email || "",
@@ -52,6 +54,8 @@ export default async function handler(req, res) {
       mentions,
       createdAt: FieldValue.serverTimestamp()
     });
+    batch.update(postSnap.ref, { commentCount: FieldValue.increment(1) });
+    await batch.commit();
 
     return res.status(200).json({ id: commentRef.id, postAuthorUid: postSnap.get("authorUid") || null });
   } catch (err) {
