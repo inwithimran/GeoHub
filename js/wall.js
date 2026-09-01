@@ -703,6 +703,94 @@ export async function openReactionsModal(reactions) {
     }));
 }
 
+export function paintCommentReactionButton(btnEl, countEl, comment) {
+  const uid = auth.currentUser.uid;
+  const reactions = comment.reactions || {};
+  const mine = reactions[uid] || null;
+  btnEl.classList.toggle("liked", !!mine);
+  btnEl.setAttribute("aria-pressed", String(!!mine));
+  const iconEl = btnEl.querySelector(".reaction-icon");
+  if (iconEl) iconEl.innerHTML = mine || OUTLINE_LEAF_SVG;
+  const label = btnEl.querySelectorAll(":scope > span")[1];
+  if (label) label.textContent = mine ? "Reacted" : "Like";
+  const total = Object.keys(reactions).length;
+  if (countEl) {
+    countEl.classList.toggle("hidden", total === 0);
+    countEl.innerHTML = reactionSummaryHtml(reactions);
+  }
+}
+
+export function wireCommentReactionControl(root, postId, commentId, comment) {
+  const btn = root.querySelector(`.comment-reaction-btn[data-id="${commentId}"]`);
+  if (!btn) return;
+  const control = btn.closest(".comment-reaction-control");
+  const picker = control.querySelector(".reaction-picker");
+  const countEl = root.querySelector(`.comment-reaction-count[data-id="${commentId}"]`);
+  let pressTimer = null;
+  let longPressed = false;
+
+  const startPress = () => {
+    longPressed = false;
+    pressTimer = setTimeout(() => {
+      longPressed = true;
+      closeAllReactionPickers();
+      picker.classList.remove("hidden");
+    }, 380);
+  };
+  const cancelPress = () => clearTimeout(pressTimer);
+
+  btn.addEventListener("pointerdown", startPress);
+  btn.addEventListener("pointerup", cancelPress);
+  btn.addEventListener("pointerleave", cancelPress);
+  btn.addEventListener("contextmenu", (e) => e.preventDefault());
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (longPressed) { longPressed = false; return; }
+    const mine = (comment.reactions || {})[auth.currentUser.uid] || null;
+    reactToComment(postId, commentId, comment, mine ? null : DEFAULT_REACTION, btn, countEl);
+  });
+  picker.querySelectorAll(".reaction-option").forEach((opt) => {
+    opt.addEventListener("click", (e) => {
+      e.stopPropagation();
+      picker.classList.add("hidden");
+      reactToComment(postId, commentId, comment, opt.dataset.emoji, btn, countEl);
+    });
+  });
+  paintCommentReactionButton(btn, countEl, comment);
+}
+
+export async function reactToComment(postId, commentId, comment, emoji, btnEl, countEl) {
+  const uid = auth.currentUser.uid;
+  const current = (comment.reactions || {})[uid] || null;
+  const next = (emoji && emoji !== current) ? emoji : null;
+  const authorUid = comment.authorUid;
+  const text = comment.text || "";
+
+  comment.reactions = { ...(comment.reactions || {}) };
+  if (next) comment.reactions[uid] = next; else delete comment.reactions[uid];
+  paintCommentReactionButton(btnEl, countEl, comment);
+
+  btnEl.disabled = true;
+  btnEl.classList.add("like-pop");
+  const ref = doc(db, "posts", postId, "comments", commentId);
+  try {
+    await updateDoc(ref, { [`reactions.${uid}`]: next ? next : deleteField() });
+    if (next && !current && authorUid && authorUid !== uid) {
+      logActivity({ type: "comment-like", text, targetUid: authorUid, postId });
+      triggerPush({ type: "comment-like", text, actorName: currentProfile.name, targetUid: authorUid, postId, commentId });
+    }
+  } catch (err) {
+    comment.reactions = { ...(comment.reactions || {}) };
+    if (current) comment.reactions[uid] = current; else delete comment.reactions[uid];
+    paintCommentReactionButton(btnEl, countEl, comment);
+    const { message, technical } = friendlyError(err, "Couldn't update your reaction.");
+    showToast(message, { details: technical });
+  } finally {
+    btnEl.disabled = false;
+    setTimeout(() => btnEl.classList.remove("like-pop"), 260);
+  }
+}
+
 export async function togglePinPost(postId, wasPinned) {
   try {
     await updateDoc(doc(db, "posts", postId), {

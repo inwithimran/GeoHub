@@ -123,7 +123,7 @@ function mergedActivity() {
 }
 
 function visibleToMe(a) {
-  if (a.type === "comment" || a.type === "like" || a.type === "mention") {
+  if (a.type === "comment" || a.type === "reply" || a.type === "like" || a.type === "comment-like" || a.type === "mention") {
     return a.targetUid === auth.currentUser?.uid;
   }
   if (a.actorUid === auth.currentUser?.uid) return false;
@@ -584,7 +584,9 @@ function activityLine(a) {
     case "post": return `shared a new post on the Student Wall${quoted}`;
     case "resource": return `shared a new resource in Notes &amp; Sheets${a.text ? `: <strong>${escapeHtml(truncate(a.text, 70))}</strong>` : ""}`;
     case "comment": return `commented on your post${quoted}`;
+    case "reply": return `replied to your comment${quoted}`;
     case "like": return `reacted to your post`;
+    case "comment-like": return `reacted to your comment${quoted}`;
     case "mention": return `mentioned you${quoted}`;
     case "notice": return `posted a new notice${quoted}`;
     case "routine": return `updated the weekly class routine${quoted}`;
@@ -652,6 +654,8 @@ async function openActivityDestination(a) {
     case "post":
     case "like":
     case "comment":
+    case "reply":
+    case "comment-like":
     case "mention": {
       if (!a.postId) return; 
       const { openPostDetailPage } = await import("./post-detail.js");

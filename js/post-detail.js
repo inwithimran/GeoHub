@@ -15,7 +15,7 @@ import {
   authorProfile, openEditPostModal, deletePost, wireMentions,
   openReactionsModal, wireReactionControl, paintReactionButton, REACTION_EMOJIS,
   pollHtml, wirePoll, togglePinPost, setCommentCountCache, paintCommentCountBtn,
-  updateStatsRowVisibility, commentCountLabel
+  updateStatsRowVisibility, commentCountLabel, wireCommentReactionControl
 } from "./wall.js";
 import { openUserProfilePage } from "./profile-view.js";
 import { avatarPresenceDotHtml } from "./presence.js";
@@ -155,14 +155,51 @@ function renderPostDetail(postId, post, comments, container, { focusComment, com
   const selEnd = prevInput ? prevInput.selectionEnd : null;
   const prevScrollY = window.scrollY;
 
+  const prevReplyChip = container.querySelector(".reply-target-chip");
+  const replyTarget = prevReplyChip && !prevReplyChip.classList.contains("hidden")
+    ? { id: prevReplyChip.dataset.id, name: prevReplyChip.dataset.name }
+    : null;
+
   if (commentsLoaded) setCommentCountCache(postId, comments.length);
+
+  const topLevelComments = comments.filter(c => !c.replyTo);
+  const topLevelIds = new Set(topLevelComments.map(c => c.id));
+  const repliesByParent = new Map();
+  comments.filter(c => c.replyTo).forEach(c => {
+    const pid = c.replyTo.id;
+    if (!repliesByParent.has(pid)) repliesByParent.set(pid, []);
+    repliesByParent.get(pid).push(c);
+  });
+  const orphanReplies = [];
+  [...repliesByParent.keys()].filter(pid => !topLevelIds.has(pid)).forEach((pid) => {
+    orphanReplies.push(...repliesByParent.get(pid));
+    repliesByParent.delete(pid);
+  });
+  const pendingTopLevel = pendingComments.filter(p => !p.replyTo);
+  const pendingByParent = new Map();
+  pendingComments.filter(p => p.replyTo).forEach(p => {
+    const pid = p.replyTo.id;
+    if (!pendingByParent.has(pid)) pendingByParent.set(pid, []);
+    pendingByParent.get(pid).push(p);
+  });
+  const commentThreadHtml = (c) => {
+    const replies = repliesByParent.get(c.id) || [];
+    const pendingReplies = pendingByParent.get(c.id) || [];
+    const repliesHtml = replies.map(r => replyItemHtml(r, uid, isOwnPost, c)).join("")
+      + pendingReplies.map(pendingCommentItemHtml).join("");
+    return commentItemHtml(c, uid, isOwnPost) + (repliesHtml ? `<div class="comment-replies">${repliesHtml}</div>` : "");
+  };
+  const orphanRepliesHtml = orphanReplies.map((c) => {
+    const tag = c.replyTo ? `<div class="reply-context">↳ Replying to ${escapeHtml(c.replyTo.authorName || "")} (original comment removed)</div>` : "";
+    return commentItemHtml(c, uid, isOwnPost, tag);
+  }).join("");
 
   const commentsHtml = !commentsLoaded
     ? commentSkeletonHtml()
     : (comments.length
-        ? comments.map(c => commentItemHtml(c, uid, isOwnPost)).join("")
+        ? topLevelComments.map(commentThreadHtml).join("") + orphanRepliesHtml
         : `<p class="empty-state" style="padding:10px 0;">No comments yet — be the first to reply.</p>`)
-      + pendingComments.map(pendingCommentItemHtml).join("");
+      + pendingTopLevel.map(pendingCommentItemHtml).join("");
 
   let kebabActions = [];
   if (isOwnPost) kebabActions.push({ action: "edit", label: "Edit Post" });
@@ -208,6 +245,10 @@ function renderPostDetail(postId, post, comments, container, { focusComment, com
     </article>
     <div class="comments-block">
       ${commentsHtml}
+      <div class="reply-target-chip ${replyTarget ? "" : "hidden"}" data-id="${replyTarget ? replyTarget.id : ""}" data-name="${replyTarget ? escapeHtml(replyTarget.name) : ""}">
+        Replying to <strong>${replyTarget ? escapeHtml(replyTarget.name) : ""}</strong>
+        <button type="button" class="reply-target-cancel" aria-label="Cancel reply">✕</button>
+      </div>
       <div class="comment-input-row">
         <div class="avatar avatar-sm">${avatarInner(currentProfile || {})}</div>
         <input type="text" placeholder="Write a comment… (@mention a classmate)" maxlength="${COMMENT_TEXT_LIMIT}" />
@@ -264,6 +305,11 @@ function renderPostDetail(postId, post, comments, container, { focusComment, com
   commentsEl.querySelectorAll("[data-author]").forEach(b =>
     b.addEventListener("click", () => openUserProfilePage(b.dataset.author)));
   wireRichTextClicks(commentsEl);
+  comments.forEach((c) => {
+    wireCommentReactionControl(commentsEl, postId, c.id, c);
+    const countBtn = commentsEl.querySelector(`.comment-reaction-count[data-id="${c.id}"]`);
+    if (countBtn) countBtn.addEventListener("click", () => openReactionsModal(c.reactions || {}));
+  });
   wireKebabMenus(commentsEl, {
     edit: (commentId) => {
       const c = comments.find(x => x.id === commentId);
@@ -279,9 +325,33 @@ function renderPostDetail(postId, post, comments, container, { focusComment, com
 
   const { getMentions } = wireMentions(input);
   const sendBtn = commentsEl.querySelector(".comment-send-btn");
-  sendBtn.addEventListener("click", () => submitComment(postId, commentsEl, sendBtn, post.authorUid, getMentions));
+
+  const replyChip = commentsEl.querySelector(".reply-target-chip");
+  const replyChipNameEl = replyChip.querySelector("strong");
+  const setReplyTarget = (id, name) => {
+    replyChip.dataset.id = id || "";
+    replyChip.dataset.name = name || "";
+    replyChip.classList.toggle("hidden", !id);
+    if (replyChipNameEl) replyChipNameEl.textContent = name || "";
+  };
+  replyChip.querySelector(".reply-target-cancel").addEventListener("click", () => setReplyTarget(null, null));
+  commentsEl.querySelectorAll(".comment-reply-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setReplyTarget(btn.dataset.id, btn.dataset.name);
+      focusCommentInput(container);
+    });
+  });
+
+  const doSubmit = () => {
+    const replying = !replyChip.classList.contains("hidden")
+      ? { id: replyChip.dataset.id, authorName: replyChip.dataset.name }
+      : null;
+    submitComment(postId, commentsEl, sendBtn, post.authorUid, getMentions, replying);
+    setReplyTarget(null, null);
+  };
+  sendBtn.addEventListener("click", doSubmit);
   input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") submitComment(postId, commentsEl, sendBtn, post.authorUid, getMentions);
+    if (e.key === "Enter") doSubmit();
   });
 
   if (focusComment) focusCommentInput(container);
@@ -292,13 +362,16 @@ function reactionsOfPost(post) {
 }
 
 
-function commentItemHtml(c, uid, isPostOwner) {
+function commentItemHtml(c, uid, isPostOwner, contextTag = "") {
   const author = authorProfile(c.authorUid, c.authorName);
   const isOwnComment = c.authorUid === uid;
   const canDelete = isOwnComment || isPostOwner;
   const kebabActions = [];
   if (isOwnComment) kebabActions.push({ action: "edit", label: "Edit Comment" });
   if (canDelete) kebabActions.push({ action: "delete", label: isOwnComment ? "Delete Comment" : "Remove Comment", danger: true });
+  const reactions = c.reactions || {};
+  const reactionCount = Object.keys(reactions).length;
+  const myReaction = reactions[uid] || null;
   return `
     <div class="comment-item">
       <span class="avatar-presence-wrap">
@@ -306,24 +379,83 @@ function commentItemHtml(c, uid, isPostOwner) {
         ${avatarPresenceDotHtml(c.authorUid)}
       </span>
       <div class="comment-body">
+        ${contextTag}
         <button type="button" class="comment-author" data-author="${c.authorUid}">${nameWithBadge(c.authorName, c.authorEmail)}</button>
         <p>${richTextHtml(c.text, c.mentions)}</p>
-        <small>${timeAgo(c.createdAt)}${c.editedAt ? " · edited" : ""}</small>
+        <div class="comment-foot">
+          <div class="comment-reaction-control">
+            <button type="button" class="comment-reaction-btn ${myReaction ? "liked" : ""}" data-id="${c.id}" aria-pressed="${!!myReaction}">
+              <span class="reaction-icon" aria-hidden="true">${myReaction || ""}</span><span>${myReaction ? "Reacted" : "Like"}</span>
+            </button>
+            <div class="reaction-picker hidden">
+              ${REACTION_EMOJIS.map(e => `<button type="button" class="reaction-option" data-emoji="${e}">${e}</button>`).join("")}
+            </div>
+          </div>
+          <button type="button" class="comment-reaction-count ${reactionCount ? "" : "hidden"}" data-id="${c.id}">
+            ${reactionCount ? reactionCount : ""}
+          </button>
+          <button type="button" class="comment-reply-btn" data-id="${c.id}" data-name="${escapeHtml(c.authorName || "Classmate")}">Reply</button>
+          <small>${timeAgo(c.createdAt)}${c.editedAt ? " · edited" : ""}</small>
+        </div>
+      </div>
+      ${kebabActions.length ? kebabMenuHtml(c.id, kebabActions) : ""}
+    </div>`;
+}
+
+function replyItemHtml(c, uid, isPostOwner, parentComment) {
+  const author = authorProfile(c.authorUid, c.authorName);
+  const isOwnComment = c.authorUid === uid;
+  const canDelete = isOwnComment || isPostOwner;
+  const kebabActions = [];
+  if (isOwnComment) kebabActions.push({ action: "edit", label: "Edit Comment" });
+  if (canDelete) kebabActions.push({ action: "delete", label: isOwnComment ? "Delete Comment" : "Remove Comment", danger: true });
+  const reactions = c.reactions || {};
+  const reactionCount = Object.keys(reactions).length;
+  const myReaction = reactions[uid] || null;
+  const showReplyTag = c.replyTo && c.replyTo.authorUid && parentComment && c.replyTo.authorUid !== parentComment.authorUid;
+  return `
+    <div class="comment-item comment-item-reply">
+      <span class="avatar-presence-wrap">
+        <button type="button" class="avatar avatar-xs avatar-btn" data-author="${c.authorUid}" aria-label="View ${escapeHtml(author.name || c.authorName || "classmate")}’s profile">${avatarInner(author)}</button>
+        ${avatarPresenceDotHtml(c.authorUid)}
+      </span>
+      <div class="comment-body">
+        ${showReplyTag ? `<div class="reply-context">↳ Replying to ${escapeHtml(c.replyTo.authorName || "")}</div>` : ""}
+        <button type="button" class="comment-author" data-author="${c.authorUid}">${nameWithBadge(c.authorName, c.authorEmail)}</button>
+        <p>${richTextHtml(c.text, c.mentions)}</p>
+        <div class="comment-foot">
+          <div class="comment-reaction-control">
+            <button type="button" class="comment-reaction-btn ${myReaction ? "liked" : ""}" data-id="${c.id}" aria-pressed="${!!myReaction}">
+              <span class="reaction-icon" aria-hidden="true">${myReaction || ""}</span><span>${myReaction ? "Reacted" : "Like"}</span>
+            </button>
+            <div class="reaction-picker hidden">
+              ${REACTION_EMOJIS.map(e => `<button type="button" class="reaction-option" data-emoji="${e}">${e}</button>`).join("")}
+            </div>
+          </div>
+          <button type="button" class="comment-reaction-count ${reactionCount ? "" : "hidden"}" data-id="${c.id}">
+            ${reactionCount ? reactionCount : ""}
+          </button>
+          <button type="button" class="comment-reply-btn" data-id="${c.replyTo.id}" data-name="${escapeHtml(c.authorName || "Classmate")}">Reply</button>
+          <small>${timeAgo(c.createdAt)}${c.editedAt ? " · edited" : ""}</small>
+        </div>
       </div>
       ${kebabActions.length ? kebabMenuHtml(c.id, kebabActions) : ""}
     </div>`;
 }
 
 function pendingCommentItemHtml(p) {
+  const replyTag = p.replyTo ? `<div class="reply-context">↳ Replying to ${escapeHtml(p.replyTo.authorName || "")}</div>` : "";
   return `
-    <div class="comment-item comment-item-pending">
+    <div class="comment-item comment-item-pending${p.replyTo ? " comment-item-reply" : ""}">
       <span class="avatar-presence-wrap">
-        <span class="avatar avatar-sm">${avatarInner(currentProfile || {})}</span>
+        <span class="avatar ${p.replyTo ? "avatar-xs" : "avatar-sm"}">${avatarInner(currentProfile || {})}</span>
       </span>
       <div class="comment-body comment-body-pending">
+        ${replyTag}
+        <span class="comment-author">${nameWithBadge(currentProfile ? currentProfile.name : "You", currentProfile ? currentProfile.email : "")}</span>
         <p>${escapeHtml(p.text)}</p>
-        <div class="comment-sending-dots" aria-label="Sending comment">
-          <span></span><span></span><span></span>
+        <div class="comment-foot" aria-label="Sending comment">
+          <span class="skeleton-line comment-pending-skel"></span>
         </div>
       </div>
     </div>`;
@@ -348,12 +480,13 @@ function focusCommentInput(container) {
   input.focus();
 }
 
-async function submitComment(postId, commentsEl, sendBtn, postAuthorUid, getMentions) {
+async function submitComment(postId, commentsEl, sendBtn, postAuthorUid, getMentions, replyTarget) {
   if (sendBtn.disabled) return; 
   const input = commentsEl.querySelector(".comment-input-row input");
   const text = input.value.trim();
   if (!text) return;
   const mentions = getMentions ? getMentions() : [];
+  const replyTo = replyTarget && replyTarget.id ? { id: replyTarget.id, authorName: replyTarget.authorName } : null;
   
   input.value = "";
   input.dispatchEvent(new Event("input")); 
@@ -361,7 +494,7 @@ async function submitComment(postId, commentsEl, sendBtn, postAuthorUid, getMent
   sendBtn.classList.add("is-loading");
 
   const tempId = `pending-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  pendingComments.push({ tempId, text });
+  pendingComments.push({ tempId, text, replyTo });
   if (postId === currentPostId && rerenderRef) rerenderRef();
 
   const liveSendBtn = () => bodyEl?.querySelector(".comment-send-btn");
@@ -369,10 +502,15 @@ async function submitComment(postId, commentsEl, sendBtn, postAuthorUid, getMent
   if (liveSendBtnNow) { liveSendBtnNow.disabled = true; liveSendBtnNow.classList.add("is-loading"); }
 
   try {
-    await callApi("create-comment", { postId, text, mentions });
+    const result = await callApi("create-comment", { postId, text, mentions, replyTo: replyTo ? { id: replyTo.id } : undefined });
     if (postAuthorUid && postAuthorUid !== auth.currentUser.uid) {
       logActivity({ type: "comment", text, targetUid: postAuthorUid, postId });
       triggerPush({ type: "comment", text, actorName: currentProfile.name, targetUid: postAuthorUid, postId });
+    }
+    if (replyTo && result && result.replyTargetUid &&
+        result.replyTargetUid !== auth.currentUser.uid && result.replyTargetUid !== postAuthorUid) {
+      logActivity({ type: "reply", text, targetUid: result.replyTargetUid, postId });
+      triggerPush({ type: "reply", text, actorName: currentProfile.name, targetUid: result.replyTargetUid, postId, commentId: result.id });
     }
     mentions.forEach((m) => {
       if (!m.uid || m.uid === auth.currentUser.uid) return;
@@ -382,6 +520,14 @@ async function submitComment(postId, commentsEl, sendBtn, postAuthorUid, getMent
   } catch (err) {
     const liveInput = bodyEl?.querySelector(".comment-input-row input");
     if (liveInput) { liveInput.value = text; liveInput.dispatchEvent(new Event("input")); }
+    const liveChip = bodyEl?.querySelector(".reply-target-chip");
+    if (liveChip && replyTo) {
+      liveChip.dataset.id = replyTo.id;
+      liveChip.dataset.name = replyTo.authorName || "";
+      liveChip.classList.remove("hidden");
+      const nameEl = liveChip.querySelector("strong");
+      if (nameEl) nameEl.textContent = replyTo.authorName || "";
+    }
     const { message, technical } = friendlyError(err, "Couldn't send your comment.");
     showToast(message, { details: technical });
   } finally {
