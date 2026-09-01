@@ -697,13 +697,29 @@
      so the badge isn't cut off by the avatar's own overflow:hidden
      circle, then drop the badge right after it. On Profile pages the
      avatar wrapper is .profile-flow-avatar-wrap instead (see below),
-     which needs its own explicit stacking-order fix — see that rule. */
+     which needs its own explicit stacking-order fix — see that rule.
+
+     Positioning rule used everywhere below: `right:0; bottom:0;` with
+     `box-sizing:border-box`, on avatar boxes whose rendered size is
+     never inflated by a real border (the photo ring is a box-shadow,
+     which doesn't add to layout size) — so the badge's own box always
+     sits at *exactly* the avatar's bottom-right corner, no matter the
+     browser. Whole-pixel sizes and border-widths only (no .5px) for the
+     same reason: a fractional border/offset gets rounded to the nearest
+     device pixel differently by different rendering engines, which is
+     what made the badge look shifted a pixel or two in some browsers and
+     not others. And the transition list below intentionally excludes
+     `width`/`border-radius` — animating to/from an `auto` width (the
+     text pill growing in) isn't defined consistently across browsers,
+     so transitioning it was itself a source of the inconsistency; only
+     opacity/transform/background animate now, and width/radius apply
+     instantly. */
   .avatar-presence-wrap { @apply relative inline-flex shrink-0 align-top; }
   .avatar-presence-badge {
-    @apply absolute rounded-full pointer-events-none flex items-center justify-center; right:1px; bottom:1px; width:13px; height:13px;
-    background: var(--color-ink-faint); border:2.5px solid var(--color-surface);
+    @apply absolute rounded-full pointer-events-none flex items-center justify-center; right:0; bottom:0; width:14px; height:14px; box-sizing:border-box;
+    background: var(--color-ink-faint); border:2px solid var(--color-surface);
     opacity:0; transform:scale(.5); color:#fff; font-size:0; font-weight:800; line-height:1; white-space:nowrap;
-    transition: opacity .2s, transform .2s, background .2s, width .15s ease, border-radius .15s ease;
+    transition: opacity .2s, transform .2s, background .2s;
   }
   .avatar-presence-badge.online {
     opacity:1; transform:scale(1); background: var(--color-forest-500);
@@ -714,14 +730,17 @@
      thread's own "Active 5m ago" line, an inbox row's own message
      timestamp) and keeps small avatars (comments, post authors) from
      getting a chunk of the photo covered by a text badge. Only badges
-     opted into `.avatar-presence-badge-timed` (currently just the
-     Profile page's big photo — see profile-view.js) show this pill. */
+     opted into `.avatar-presence-badge-timed` (Directory rows, the DM
+     inbox list, and the Profile page's big photo — see the respective
+     .js files) show this pill. Height is even (14px) so border-radius
+     can be exactly half (7px) for a true stadium shape at any width,
+     rather than an approximated value that can round oddly per browser. */
   .avatar-presence-badge-timed.has-label {
-    opacity:1; transform:scale(1); width:auto; min-width:19px; height:14px; padding:0 4px;
+    opacity:1; transform:scale(1); width:auto; min-width:20px; height:14px; padding:0 4px; box-sizing:border-box;
     border-radius:7px; background: color-mix(in srgb, var(--color-ink-faint) 85%, black 12%);
-    font-size:.56rem;
+    font-size:.56rem; right:0; bottom:0;
   }
-  .avatar-presence-wrap:has(.avatar-sm) .avatar-presence-badge { width:11px; height:11px; border-width:2px; }
+  .avatar-presence-wrap:has(.avatar-sm) .avatar-presence-badge { width:10px; height:10px; border-width:2px; }
   .section-heading { @apply text-xs font-extrabold uppercase tracking-wider pl-0.5; color: var(--color-ink-faint); margin:4px 0 -4px; }
 
   /* ---------- "Online Now" strip (js/directory.js) — a horizontal row of
@@ -1573,19 +1592,19 @@
      .profile-flow-avatar's z-[1] below) — without it the badge has
      z-index:auto and the avatar's own positive z-index paints on top of
      it, hiding the dot behind the photo entirely.
-     right/bottom are a small POSITIVE inset (not a negative one) so the
-     badge sits tucked onto the photo's own edge — mostly overlapping the
-     circle with just its border ring poking past it — instead of
-     floating half outside the photo's boundary. */
+     Same `right:0; bottom:0` + border-box + whole-pixel-only approach as
+     the generic badge above, and for the same reason: fractional values
+     here (the old 3px/1px offsets, 9.5px radius) rounded to the nearest
+     device pixel differently per browser, which is what made the badge
+     look shifted in some browsers and not others. Height is even (20px)
+     so border-radius can be exactly half (10px) — a true stadium shape
+     at any text width, not an approximation. */
   .profile-flow-avatar-wrap .avatar-presence-badge {
-    @apply z-[2]; right:3px; bottom:3px; width:16px; height:16px; border-width:3px;
+    @apply z-[2]; right:0; bottom:0; width:16px; height:16px; border-width:3px; box-sizing:border-box;
   }
   .profile-flow-avatar-wrap .avatar-presence-badge-timed.has-label {
-    width:auto; height:19px; min-width:30px; padding:0 7px; border-radius:9.5px; font-size:.72rem;
-    /* Re-center the taller/wider pill on the same corner point the plain
-       dot uses above, so text length (e.g. "58m" vs "5m") never shifts
-       which corner of the photo it's anchored to. */
-    right:1px; bottom:1px;
+    width:auto; height:20px; min-width:30px; padding:0 7px; border-radius:10px; font-size:.72rem; box-sizing:border-box;
+    right:0; bottom:0;
   }
   .profile-flow-avatar {
     @apply relative z-[1]; width:96px; height:96px; border:4px solid var(--color-paper);
