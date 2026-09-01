@@ -25,8 +25,6 @@ export function getAdminApp() {
   return initializeApp({ credential: cert(serviceAccount) });
 }
 
-// Small typed error every handler below can throw and catch uniformly —
-// `status` becomes the HTTP status code, `message` is what the client sees.
 export class ApiError extends Error {
   constructor(status, message) {
     super(message);
@@ -34,12 +32,6 @@ export class ApiError extends Error {
   }
 }
 
-/**
- * Verifies the `Authorization: Bearer <idToken>` header on an incoming
- * request. Every write-validation route calls this FIRST — nothing below
- * it runs for a request that isn't genuinely from a signed-in student.
- * Returns the decoded token (uid, email, firebase.sign_in_provider, ...).
- */
 export async function verifyCaller(req) {
   const authHeader = req.headers.authorization || "";
   const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
@@ -51,7 +43,6 @@ export async function verifyCaller(req) {
   }
 }
 
-/** Only POST is ever used by these routes — one-line guard shared by all of them. */
 export function requirePost(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -70,14 +61,8 @@ export function requirePost(req, res) {
 // is the real guard, since a client-side check can always be
 // bypassed by calling the endpoint directly.
 // ============================================================
-const DEFAULT_MIN_MS_BETWEEN_WRITES = 3000; // ~1 create per 3s per uid per endpoint — plenty for a real student, tight enough to stop a scripted flood
+const DEFAULT_MIN_MS_BETWEEN_WRITES = 3000;
 
-/**
- * Throws ApiError(429) if `uid` already hit this endpoint (`key`) within
- * `minMs`; otherwise stamps "now" and lets the caller through. Call this
- * right after verifyCaller() and before any Firestore write, so a
- * request that's about to be rejected doesn't pay for reads/writes first.
- */
 export async function enforceRateLimit(db, uid, key, minMs = DEFAULT_MIN_MS_BETWEEN_WRITES) {
   const ref = db.collection("apiRateLimits").doc(`${uid}_${key}`);
   const allowed = await db.runTransaction(async (tx) => {
@@ -94,7 +79,6 @@ export async function enforceRateLimit(db, uid, key, minMs = DEFAULT_MIN_MS_BETW
   }
 }
 
-/** Uniform error response, used by every route's top-level catch block. */
 export function sendError(res, err) {
   const status = err instanceof ApiError ? err.status : 500;
   if (status === 500) console.error(err);
