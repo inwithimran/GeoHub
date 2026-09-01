@@ -544,6 +544,12 @@
   .avatar-presence-wrap:has(.avatar-sm) .avatar-presence-badge {
     width:10px; height:10px; border-width:2px; left:26px; top:26px;
   }
+  .avatar-presence-wrap:has(.avatar-xs) .avatar-presence-badge {
+    width:8px; height:8px; border-width:1.5px; left:21px; top:21px;
+  }
+  .avatar-presence-wrap:has(.avatar-xs) .avatar-presence-badge-timed.has-label {
+    left:21px; top:21px;
+  }
   .section-heading { @apply text-xs font-extrabold uppercase tracking-wider pl-0.5; color: var(--color-ink-faint); margin:4px 0 -4px; }
 
   .directory-online-section { @apply flex flex-col gap-2; margin:2px 0 2px; }
@@ -1000,6 +1006,16 @@
   .comment-reply-btn:hover, .comment-reply-btn:active { color: var(--color-forest-700); }
   .comment-foot small { @apply text-[.68rem] font-semibold shrink-0; color: var(--color-ink-faint); font-family:var(--font-mono); }
   .comment-replies { @apply flex flex-col gap-4 mt-4; margin-left:38px; padding-left:12px; border-left:2px dashed var(--color-line); }
+  .comment-replies-toggle + .comment-replies { margin-top:10px; }
+  .comment-replies-toggle {
+    @apply flex items-center gap-1.5 border-0 bg-transparent cursor-pointer;
+    margin:2px 0 0 38px; padding:6px 2px; font-size:.78rem; font-weight:800; color: var(--color-ink-faint);
+  }
+  @media (hover:hover) { .comment-replies-toggle:hover:not([disabled]) { color: var(--color-forest-700); } }
+  .comment-replies-toggle[disabled] { cursor:default; opacity:.8; }
+  .comment-replies-toggle-line { width:18px; height:1px; flex-shrink:0; background: var(--color-line); display:inline-block; }
+  .comment-replies-toggle.is-expanded .comment-replies-toggle-line { background: var(--color-forest-300); }
+  .comment-replies-toggle .btn-spinner { width:12px; height:12px; border-width:1.5px; }
   .avatar-xs { @apply w-[24px] h-[24px] rounded-full overflow-hidden shrink-0 relative block; box-shadow:0 0 0 2px var(--color-surface), 0 0 0 3px var(--color-forest-100); }
   .reply-context { @apply block text-[.68rem] font-bold; color: var(--color-ink-faint); margin-bottom:2px; }
   .reply-target-chip { @apply flex items-center gap-2 text-[.78rem] font-semibold rounded-full mb-1.5; padding:7px 12px; background: var(--color-paper-deep); color: var(--color-ink-soft); }
