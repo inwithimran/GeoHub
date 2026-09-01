@@ -1615,26 +1615,30 @@
      it, hiding the dot behind the photo entirely.
      Same `border-box` + whole-pixel-only approach as the generic badge
      above; the offline pill just scales up (taller, wider padding,
-     bigger font) to stay legible against a 96px photo, and sits pulled
-     out further (`right:-4px; bottom:-2px`) so it reads the same
-     "tucked onto the corner" way the smaller list/inbox version does
-     rather than sinking flush into the photo edge. Border is toned down
-     to a faded green (color-mix at 55%) rather than the full-strength
-     green used on the small list/inbox badge — at this larger size a
-     solid-green outline read as too heavy/loud against the big photo,
-     so it's softened while the fill and text stay the same green. The
-     online (non-timed) dot's own white ring is also a notch thinner
-     here (2px, not 3px) for the same "don't compete with the photo"
-     reason. Positioning is `right:-2px; bottom:-2px` (pulled *outward*,
-     not flush) because .profile-flow-avatar draws its own decorative
-     gold ring via `box-shadow: 0 0 0 3px gold-500` below — that ring is
-     3px of pure box-shadow with no layout footprint, so a badge placed
-     flush at the wrap's own `0;0` corner sits *inside* that ring instead
-     of on it. Pulling the badge out to roughly match the ring's own
-     offset is what actually lands the green dot on top of the gold
-     border rather than tucked in front of the photo. */
+     bigger font) to stay legible against a 96px photo. Border is toned
+     down to a faded green (color-mix at 55%) rather than the
+     full-strength green used on the small list/inbox badge — at this
+     larger size a solid-green outline read as too heavy/loud against
+     the big photo, so it's softened while the fill and text stay the
+     same green. The online (non-timed) dot's own white ring is also a
+     notch thinner here (2px, not 3px) for the same reason.
+     On positioning: `right`/`bottom` place the badge relative to
+     .profile-flow-avatar-wrap's own *square* 96x96 box, but the photo
+     inside it is a circle — and a circle's corner (along the diagonal)
+     sits well inside that square's corner. At this size the gap between
+     "square corner" and "circle's gold ring" is big enough that `0;0`,
+     or worse a *negative* offset, overshoots past the ring entirely and
+     leaves the badge floating with visible daylight between it and the
+     photo (confirmed by rendering it standalone and comparing against
+     the smaller 40px avatar badges, which sit right on their own ring
+     at a flush `0;0` — that reference only works there because the
+     square/circle gap is small enough at 40px to not matter). `right:6px;
+     bottom:6px` (i.e. pulled *inward*, toward the circle) is what
+     actually lands the dot sitting on the gold ring at 96px — re-verify
+     against a render (not just by eye in devtools at one zoom level) if
+     this avatar size or the ring's box-shadow spread ever changes. */
   .profile-flow-avatar-wrap .avatar-presence-badge {
-    @apply z-[2]; right:-2px; bottom:-2px; width:16px; height:16px; border-width:2px; box-sizing:border-box;
+    @apply z-[2]; right:6px; bottom:6px; width:16px; height:16px; border-width:2px; box-sizing:border-box;
   }
   .profile-flow-avatar-wrap .avatar-presence-badge-timed.has-label {
     width:auto; min-width:34px; height:22px; padding:0 7px; font-size:.68rem; letter-spacing:-.2px; box-sizing:border-box;
