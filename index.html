@@ -715,14 +715,48 @@
      opacity/transform/background animate now, and width/radius apply
      instantly. */
   .avatar-presence-wrap { @apply relative inline-flex shrink-0 align-top; }
+  /* POSITIONING — anchor-point technique (same fix as the Profile page's
+     .profile-flow-avatar-wrap override below, now applied everywhere else
+     this badge is used: Directory rows, the DM conversation list, Wall/
+     comments, and Post-detail). The old approach positioned with
+     `right:_;bottom:_`, which anchors the badge's own *edge* — fine only
+     if every badge sharing that spot is the same size. The plain online
+     dot (14px, fixed) and the offline elapsed-time pill (auto-width: "5m"
+     vs "23h" vs "125h" are all different widths) do NOT share a size, so
+     anchoring by a growing box's edge means its *center* — and therefore
+     how it visually sits against the round avatar's ring — silently
+     moved depending on the label's length. Fix: pick ONE fixed point per
+     avatar size and center *every* badge on that exact point with
+     `transform: translate(-50%,-50%)`, regardless of the badge's own
+     width/height. That point was found the same way as the Profile page's
+     (not guessed): for each avatar size, the existing `right:0;bottom:0`
+     dot position — already deliberately tuned so the badge's own box
+     sits at exactly the avatar's bottom-right corner, see the box-sizing/
+     whole-pixel reasoning that used to live in this comment — was
+     rendered with the real CSS in a headless browser and its on-screen
+     center read off in pixels via getBoundingClientRect(), then verified
+     against the ring visually. That measured center becomes the anchor:
+       • default 40px .avatar (Directory rows, Wall post author, Post-
+         detail post author) → left:33px; top:33px — set below, shared
+         by every context that doesn't override avatar size, since it's
+         the same avatar box in each case.
+       • .dm-conv-row's 46px .avatar (DM conversation list) → left:39px;
+         top:39px — see override further down.
+       • avatar-sm 30px (Post-detail comments, 10px dot) → left:25px;
+         top:25px — folded into the existing `:has(.avatar-sm)` override
+         below (no pill is ever shown at this size, so only the dot needs
+         it — see the `label` docs in presence.js).
+     Whole-pixel anchor values only (no .5px), for the same cross-browser
+     rounding reason as before. */
   .avatar-presence-badge {
-    @apply absolute rounded-full pointer-events-none flex items-center justify-center; right:0; bottom:0; width:14px; height:14px; box-sizing:border-box;
+    @apply absolute rounded-full pointer-events-none flex items-center justify-center;
+    left:33px; top:33px; right:auto; bottom:auto; width:14px; height:14px; box-sizing:border-box;
     background: var(--color-ink-faint); border:2px solid var(--color-surface);
-    opacity:0; transform:scale(.5); color:#fff; font-size:0; font-weight:800; line-height:1; white-space:nowrap;
+    opacity:0; transform:translate(-50%,-50%) scale(.5); color:#fff; font-size:0; font-weight:800; line-height:1; white-space:nowrap;
     transition: opacity .2s, transform .2s, background .2s;
   }
   .avatar-presence-badge.online {
-    opacity:1; transform:scale(1); background: var(--color-forest-500);
+    opacity:1; transform:translate(-50%,-50%) scale(1); background: var(--color-forest-500);
     box-shadow:0 0 0 2px color-mix(in srgb, var(--color-forest-500) 22%, transparent);
   }
   /* Offline: hidden (opacity:0 above) for every plain badge — no elapsed-
@@ -741,27 +775,33 @@
      what made the old version cramped. `rounded-full` on a non-square
      box still renders as a pill (fully round ends), so this stays a
      stable shape at any label length without needing JS to measure text.
-     `right:-6px; bottom:-2px` (whole-pixel, not fractional) sits the
-     pill mostly *outside* the avatar's own edge — same reasoning as the
-     plain dot's `right:0;bottom:0`, just offset further since a pill
-     this wide would otherwise cover too much of the photo tucked flush
-     against the corner. Border kept hairline-thin (1px) rather than the
-     heavier 1.5-2px used on the plain online dot — the dot's border is
-     doing real work (cutting a gap against the photo behind a *solid*
-     fill), but this pill's fill is already the light surface color, so
-     a thick outline just reads as heavy/clunky rather than adding
-     contrast. Directory rows and the DM inbox list use this smaller
-     size (14px tall) — see the Profile-page override below for the
-     larger one used on that page's big photo. */
+     Anchored on the same `left:33px;top:33px` point as the dot above (see
+     the anchor-point comment on `.avatar-presence-wrap`) instead of its
+     own separate `right/bottom` — that mismatch was exactly what let the
+     pill drift off-center from the dot as its label got wider. Border
+     kept hairline-thin (1px) rather than the heavier 1.5-2px used on the
+     plain online dot — the dot's border is doing real work (cutting a gap
+     against the photo behind a *solid* fill), but this pill's fill is
+     already the light surface color, so a thick outline just reads as
+     heavy/clunky rather than adding contrast. Directory rows and the DM
+     inbox list use this smaller size (14px tall) — see the Profile-page
+     override below for the larger one used on that page's big photo. */
   .avatar-presence-badge-timed.has-label {
-    opacity:1; transform:scale(1); box-sizing:border-box;
+    opacity:1; transform:translate(-50%,-50%) scale(1); box-sizing:border-box;
     width:auto; height:14px; min-width:14px; padding:0 4px;
     background: var(--color-surface); border:1px solid var(--color-forest-500);
     box-shadow:0 1px 3px rgba(0,0,0,.14);
     color: var(--color-forest-500); font-size:.42rem; letter-spacing:-.2px;
-    right:-6px; bottom:-2px;
+    left:33px; top:33px; right:auto; bottom:auto;
   }
-  .avatar-presence-wrap:has(.avatar-sm) .avatar-presence-badge { width:10px; height:10px; border-width:2px; }
+  /* DM conversation list's avatar is 46px (see `.dm-conv-row .avatar`
+     below), not the 40px default above, so it needs its own anchor point
+     — measured the same way against its own ring (left:39px;top:39px). */
+  .dm-conv-row .avatar-presence-badge { left:39px; top:39px; }
+  .dm-conv-row .avatar-presence-badge-timed.has-label { left:39px; top:39px; }
+  .avatar-presence-wrap:has(.avatar-sm) .avatar-presence-badge {
+    width:10px; height:10px; border-width:2px; left:25px; top:25px;
+  }
   .section-heading { @apply text-xs font-extrabold uppercase tracking-wider pl-0.5; color: var(--color-ink-faint); margin:4px 0 -4px; }
 
   /* ---------- "Online Now" strip (js/directory.js) — a horizontal row of
