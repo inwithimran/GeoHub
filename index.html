@@ -732,27 +732,27 @@
      getting a chunk of the photo covered. Only badges opted into
      `.avatar-presence-badge-timed` (Directory rows, the DM inbox list,
      and the Profile page's big photo — see the respective .js files)
-     show this indicator once offline — as a short "5m"/"59m"/"23h" label,
-     always a FIXED-diameter circle (width === height) for the same
-     "never an oval" reason as before.
-     Two changes from the first pass, both to stop it from eating into a
-     medium (40–46px) avatar's face: (1) smaller diameter (18px, down
-     from 22px) — just enough to fit "59m"/"23h" at a small font, not
-     sized for comfort; (2) `border: none` + an outer `box-shadow` ring
-     instead — a border is drawn *inside* the box (eating into the same
-     18px that needs to fit 3 characters), while a box-shadow ring sits
-     outside it for free, so the full diameter stays usable for text
-     without needing to grow the circle to compensate.
-     `right:-2px; bottom:-2px` (a small, whole-pixel — not fractional —
-     negative offset) tucks the circle mostly *outside* the avatar's own
-     edge rather than sinking into it, the way the online-only dot's
-     `right:0;bottom:0` reads fine at 14px but reads as "sunk into the
-     photo" once the circle is big enough to hold text. */
+     show this indicator once offline — as a short "5m"/"59m"/"23h" pill,
+     Messenger-style: light surface fill, a green outline/text (not a
+     solid fill) so it visually reads as "last-seen" rather than a second
+     "online" dot, and an auto width that grows with the text instead of
+     a fixed circle — a real Messenger badge is a rounded *pill*, not a
+     circle, and forcing 2-3 characters into a fixed-diameter circle is
+     what made the old version cramped. `rounded-full` on a non-square
+     box still renders as a pill (fully round ends), so this stays a
+     stable shape at any label length without needing JS to measure text.
+     `right:-7px; bottom:-3px` (whole-pixel, not fractional) sits the
+     pill mostly *outside* the avatar's own edge — same reasoning as the
+     plain dot's `right:0;bottom:0`, just offset further since a pill
+     this wide would otherwise cover too much of the photo tucked flush
+     against the corner. */
   .avatar-presence-badge-timed.has-label {
-    opacity:1; transform:scale(1); width:18px; height:18px; box-sizing:border-box;
-    background: color-mix(in srgb, var(--color-ink-faint) 85%, black 12%);
-    border:none; box-shadow:0 0 0 2px var(--color-surface);
-    font-size:.44rem; letter-spacing:-.3px; right:-2px; bottom:-2px;
+    opacity:1; transform:scale(1); box-sizing:border-box;
+    width:auto; height:17px; min-width:17px; padding:0 5px;
+    background: var(--color-surface); border:1.5px solid var(--color-forest-500);
+    box-shadow:0 2px 5px rgba(0,0,0,.16);
+    color: var(--color-forest-500); font-size:.5rem; letter-spacing:-.2px;
+    right:-7px; bottom:-3px;
   }
   .avatar-presence-wrap:has(.avatar-sm) .avatar-presence-badge { width:10px; height:10px; border-width:2px; }
   .section-heading { @apply text-xs font-extrabold uppercase tracking-wider pl-0.5; color: var(--color-ink-faint); margin:4px 0 -4px; }
@@ -1606,17 +1606,18 @@
      .profile-flow-avatar's z-[1] below) — without it the badge has
      z-index:auto and the avatar's own positive z-index paints on top of
      it, hiding the dot behind the photo entirely.
-     Same `right:0; bottom:0` + border-box + whole-pixel-only approach as
-     the generic badge above, and the offline label below is a FIXED
-     32x32 circle (not a growing pill) for the same reason described
-     there — a circle can't render as an oval no matter what text it
-     holds or which browser draws it. */
+     Same `border-box` + whole-pixel-only approach as the generic badge
+     above; the offline pill just scales up (taller, wider padding,
+     bigger font) to stay legible against a 96px photo, and sits pulled
+     out further (`right:-4px; bottom:-2px`) so it reads the same
+     "tucked onto the corner" way the smaller list/inbox version does
+     rather than sinking flush into the photo edge. */
   .profile-flow-avatar-wrap .avatar-presence-badge {
     @apply z-[2]; right:0; bottom:0; width:16px; height:16px; border-width:3px; box-sizing:border-box;
   }
   .profile-flow-avatar-wrap .avatar-presence-badge-timed.has-label {
-    width:32px; height:32px; font-size:.66rem; letter-spacing:-.2px; box-sizing:border-box;
-    right:0; bottom:0;
+    width:auto; min-width:34px; height:22px; padding:0 7px; font-size:.68rem; letter-spacing:-.2px; box-sizing:border-box;
+    right:-4px; bottom:-2px;
   }
   .profile-flow-avatar {
     @apply relative z-[1]; width:96px; height:96px; border:4px solid var(--color-paper);
