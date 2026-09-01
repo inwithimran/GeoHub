@@ -1,22 +1,3 @@
-// ============================================================
-// DEADLINES.JS — "Upcoming Deadlines" (assignment submissions, quizzes,
-// exam dates), shown as its own block on the Routine page, right next
-// to the weekly class schedule.
-//
-// Data model: "deadlines" collection, one doc per item:
-//   { title, type ("Assignment"|"Quiz"|"Exam"|"Other"), course, dueAt
-//     (Timestamp), notes, postedByUid, postedByName, createdAt,
-//     remindedAt (Timestamp, stamped server-side once the "due
-//     tomorrow" push has gone out for it — see api/deadline-reminders.js) }
-//
-// Same trust model as the Notice Board: only the CR/admin can add/edit/
-// delete a deadline (firestore.rules), everyone signed in can see the
-// list. Posting one also drops an immediate "new deadline" notification
-// (Notice-style push + Notification-tab entry); a SEPARATE Vercel cron
-// job (api/deadline-reminders.js) sends a second push ~1 day before the
-// due date, since that one has to fire even while nobody has GeoHub
-// open — a client-side timer can't do that.
-// ============================================================
 import { db, auth, ADMIN_EMAILS } from "./firebase-config.js";
 import { onSnapshotWithRetry } from "./realtime-retry.js";
 import {
@@ -53,7 +34,7 @@ export function initDeadlines() {
     }
   }
 
-  if (unsubscribeDeadlines) return;
+  if (unsubscribeDeadlines) return; 
   const q = query(collection(db, "deadlines"), orderBy("dueAt", "asc"));
   unsubscribeDeadlines = onSnapshotWithRetry(q, (snap) => {
     allDeadlines = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -71,11 +52,6 @@ export function teardownDeadlines() {
   deadlinesLoaded = false;
 }
 
-// ============================================================
-// RENDER — nearest-first list. Past-due items sink to the bottom
-// visually via a muted "overdue" style rather than being hidden
-// outright, since a CR may still want to see (and clean up) them.
-// ============================================================
 function typeGlyph(type) {
   switch (type) {
     case "Exam": return "📕";
@@ -148,7 +124,7 @@ function renderDeadlines() {
       confirmLabel: "Delete",
       onConfirm: async () => {
         await deleteDoc(doc(db, "deadlines", id));
-        deleteActivityForDeadline(id);
+        deleteActivityForDeadline(id); 
         showToast("Deadline deleted.");
       }
     })
@@ -168,9 +144,6 @@ function openDeadlineDetail(id) {
   `);
 }
 
-// ============================================================
-// ADD / EDIT (admin only — enforced again server-side in firestore.rules)
-// ============================================================
 function typeOptionsHtml(selected) {
   return DEADLINE_TYPES.map(t => `<option value="${t}" ${t === selected ? "selected" : ""}>${t}</option>`).join("");
 }

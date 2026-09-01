@@ -18,7 +18,7 @@ function paint(pref) {
 
 export function setThemePreference(pref) {
   if (!VALID.includes(pref)) return;
-  try { localStorage.setItem(STORAGE_KEY, pref); } catch { }
+  try { localStorage.setItem(STORAGE_KEY, pref); } catch {  }
   paint(pref);
 }
 

@@ -1,27 +1,3 @@
-// ============================================================
-// ROUTINE.JS — Weekly Class Routine + the "Notices & Notifications"
-// page (its own route — NOT a modal/backdrop sheet — reached by
-// tapping the bell icon in the header).
-//
-// That page has two header tabs:
-//   • Notice       — the CR/admin notice board (unchanged data model,
-//                     just rendered into a page section instead of a
-//                     bottom sheet).
-//   • Notification — a live activity feed ("X posted on the Wall",
-//                     "Y shared a note", …), backed by a new "activity"
-//                     Firestore collection. Other modules call the
-//                     exported logActivity() after a successful action
-//                     they want to show up here (see wall.js, resources.js).
-//
-// Routine: single doc at routine/weekly, shape:
-//          { Saturday: [{time, subject, room}, ...], Sunday: [...], ... }
-//          Read live and edited in-app via the admin-only "Edit" button
-//          on the Routine page (see the routine editor block below) —
-//          no more hand-editing the doc in the Firebase Console. Saving
-//          also drops a "routine updated" notification + push.
-// Notices: realtime "notices" collection, posting restricted to
-//          emails listed in ADMIN_EMAILS (CR / class admins).
-// ============================================================
 import { db, auth, ADMIN_EMAILS } from "./firebase-config.js";
 import {
   collection, addDoc, updateDoc, deleteDoc, query, where, orderBy, limit, serverTimestamp,
@@ -38,7 +14,7 @@ import { triggerPush } from "./push-trigger.js";
 
 function posterProfile(uid, fallbackName, fallbackEmail) {
   const cached = getCachedProfile(uid);
-  if (!cached) ensureProfileLoaded(uid);
+  if (!cached) ensureProfileLoaded(uid); 
   return cached || { uid, name: fallbackName, email: fallbackEmail };
 }
 
@@ -57,27 +33,6 @@ const noticeTabBadge = document.getElementById("notice-tab-badge");
 const notificationTabBadge = document.getElementById("notification-tab-badge");
 const markAllReadBtn = document.getElementById("notif-mark-all-btn");
 
-// ============================================================
-// PER-ITEM READ TRACKING — the bell badge, and each tab's own badge,
-// only clear once the SPECIFIC notice/notification behind the count has
-// been opened — not just because the Notices & Notifications page (or a
-// tab) was visited. Read state is a set of doc ids, scoped per signed-in
-// uid (so a shared device doesn't leak one classmate's read state into
-// another's).
-//
-// Persisted in TWO places: localStorage (instant, no round-trip — so the
-// badges paint correctly the moment the page loads) AND Firestore, under
-// users/{uid}/readState/{kind} (owner-only, see firestore.rules). The
-// Firestore copy is what makes this survive "Clear site data"/reinstalling
-// the app/switching devices — localStorage alone doesn't, since wiping
-// browser storage wipes it right along with everything else, which used
-// to make every notice/notification look unread again even though the
-// person had already seen them all. On init we read localStorage first
-// (for an instant, flicker-free badge) and then merge in whatever
-// Firestore has (which may know about reads localStorage doesn't, e.g.
-// after a data clear or on a different device); every mark-as-read after
-// that writes to both.
-// ============================================================
 function readIdsStorageKey(kind) {
   return `geohub_${kind}_read_ids_${auth.currentUser?.uid || "anon"}`;
 }
@@ -147,12 +102,13 @@ let unsubscribeNotices = null;
 let unsubscribeActivityPublic = null;
 let unsubscribeActivityPrivate = null;
 let latestNotices = [];
-let latestActivityPublic = [];
-let latestActivityPrivate = [];
-let activityFeedError = null;
-let noticesLoaded = false;
-let activityPublicLoaded = false;
-let activityPrivateLoaded = false;
+
+let latestActivityPublic = [];  
+let latestActivityPrivate = []; 
+let activityFeedError = null;   
+let noticesLoaded = false;        
+let activityPublicLoaded = false;  
+let activityPrivateLoaded = false; 
 let noticesPageWired = false;
 
 const NOTICE_TEXT_LIMIT = 1000;
@@ -171,6 +127,7 @@ function visibleToMe(a) {
     return a.targetUid === auth.currentUser?.uid;
   }
   if (a.actorUid === auth.currentUser?.uid) return false;
+
   const joinedAt = currentProfile?.createdAt?.toDate?.();
   const postedAt = a.createdAt?.toDate?.();
   if (joinedAt && postedAt && postedAt < joinedAt) return false;
@@ -255,7 +212,7 @@ function handleVisibilityChange() {
     }, BACKGROUND_DETACH_DELAY_MS);
   } else {
     clearTimeout(backgroundDetachTimer);
-    subscribeNotifications();
+    subscribeNotifications(); 
   }
 }
 
@@ -312,12 +269,6 @@ export function initRoutine() {
   }
 }
 
-// ============================================================
-// UNREAD BADGES — the header bell (total) and each header tab's own
-// badge (Notice / Notification, counted separately). See the per-item
-// read-tracking block near the top of this file for how "unread" is
-// decided.
-// ============================================================
 function setBadgeEl(el, count) {
   if (!el) return;
   el.textContent = count > 9 ? "9+" : String(count);
@@ -333,11 +284,6 @@ function updateNoticeBadge() {
   setBadgeEl(notificationTabBadge, unreadActivity);
 }
 
-// ============================================================
-// PAGE SHELL — tab switching between Notice / Notification.
-// Wired once; the two panels themselves are re-rendered live by
-// the realtime listeners above whenever their data changes.
-// ============================================================
 function wireNoticesPageTabs() {
   if (noticesPageWired) return;
   const section = document.getElementById("section-notices");
@@ -356,17 +302,14 @@ function wireNoticesPageTabs() {
       });
       section.querySelectorAll(".notices-page-panel").forEach(p =>
         p.classList.toggle("active", p.dataset.panel === btn.dataset.tab));
-      resetScrollForTabs(tabsEl);
+      resetScrollForTabs(tabsEl); 
     });
   });
 }
 
-// ============================================================
-// NOTICE TAB
-// ============================================================
 function renderNoticeTabBody() {
   const host = document.getElementById("notice-tab-body");
-  if (!host) return;
+  if (!host) return; 
 
   if (!host.dataset.shellBuilt) {
     const isAdmin = !!(auth.currentUser && ADMIN_EMAILS.includes(auth.currentUser.email));
@@ -394,14 +337,6 @@ function renderNoticeTabBody() {
   renderNoticesList();
 }
 
-// ============================================================
-// ADMIN — REPORTED POSTS. A student's "Report Post" action (see
-// wall.js) writes here; only the admin can read this collection
-// (enforced in firestore.rules), so this whole block quietly does
-// nothing for a non-admin. Lives on its own page (section-reports in
-// index.html, reached via the topbar flag icon) rather than a modal
-// tucked inside the Notice tab, so an admin can find it directly.
-// ============================================================
 let unsubscribeReports = null;
 let openReportCount = 0;
 let openReports = [];
@@ -416,12 +351,12 @@ function subscribeReports() {
     setBadgeEl(document.getElementById("admin-reports-badge"), openReportCount);
     setBadgeEl(document.getElementById("topbar-settings-badge"), openReportCount);
     renderReportsPage();
-  }, () => { });
+  }, () => {  });
 }
 
 function renderReportsPage() {
   const listEl = document.getElementById("reports-page-list");
-  if (!listEl) return;
+  if (!listEl) return; 
   if (!openReports.length) {
     listEl.innerHTML = `<p class="empty-state">No open reports. 🎉</p>`;
     return;
@@ -500,7 +435,7 @@ function renderNoticesList() {
 
   noticeList.querySelectorAll(".notice-row").forEach(row =>
     row.addEventListener("click", (e) => {
-      if (e.target.closest(".kebab-menu")) return;
+      if (e.target.closest(".kebab-menu")) return; 
       openNoticeDetail(row.dataset.id);
     }));
 
@@ -512,7 +447,7 @@ function renderNoticesList() {
       confirmLabel: "Delete",
       onConfirm: async () => {
         await deleteDoc(doc(db, "notices", noticeId));
-        deleteActivityForNotice(noticeId);
+        deleteActivityForNotice(noticeId); 
         showToast("Notice deleted.");
       }
     })
@@ -527,7 +462,7 @@ export function openNoticeById(noticeId) {
 function openNoticeDetail(noticeId) {
   const n = latestNotices.find(x => x.id === noticeId);
   if (!n) return;
-  markNoticeRead(noticeId);
+  markNoticeRead(noticeId); 
   openModal(`
     <div class="notice-detail-modal">
       <div class="notice-detail-head">
@@ -564,7 +499,7 @@ function openEditNoticeModal(noticeId) {
       await updateDoc(doc(db, "notices", noticeId), {
         text, urgent: document.getElementById("notice-edit-urgent").checked
       });
-      closeModal();
+      closeModal(); 
       showToast("Notice updated.");
     } catch (err) {
       document.getElementById("notice-edit-error").textContent = "Couldn't update notice: " + err.message;
@@ -592,7 +527,7 @@ async function postNotice() {
     });
     input.value = "";
     urgent.checked = false;
-    input.dispatchEvent(new Event("input"));
+    input.dispatchEvent(new Event("input")); 
     showToast("Notice posted.");
     logActivity({ type: "notice", text, noticeId: noticeRef.id });
     triggerPush({ type: "notice", text, urgent: wasUrgent, noticeId: noticeRef.id });
@@ -603,13 +538,6 @@ async function postNotice() {
     setBtnLoading(submit, false);
   }
 }
-
-// ============================================================
-// NOTIFICATION TAB — a live feed of department activity (new wall
-// posts, new shared notes, …). Any module can add an entry with
-// logActivity() right after its own write succeeds; this tab just
-// reads the resulting "activity" collection.
-// ============================================================
 
 export async function logActivity({ type, text = "", targetUid = null, postId = null, resourceId = null, noticeId = null, deadlineId = null }) {
   if (!auth.currentUser) return;
@@ -708,8 +636,8 @@ function renderActivityList() {
     const a = activity[Number(row.dataset.index)];
     if (!a) return;
     row.addEventListener("click", (e) => {
-      if (e.target.closest(".kebab-menu")) return;
-      markActivityRead(a.id);
+      if (e.target.closest(".kebab-menu")) return; 
+      markActivityRead(a.id); 
       openActivityDestination(a);
     });
   });
@@ -719,18 +647,13 @@ function renderActivityList() {
   });
 }
 
-// ============================================================
-// Clicking a notification should land on whatever it's actually about
-// (the post that got liked/commented on, the shared resource, the
-// notice) rather than always opening the actor's profile.
-// ============================================================
 async function openActivityDestination(a) {
   switch (a.type) {
     case "post":
     case "like":
     case "comment":
     case "mention": {
-      if (!a.postId) return;
+      if (!a.postId) return; 
       const { openPostDetailPage } = await import("./post-detail.js");
       openPostDetailPage(a.postId, { focusComment: a.type === "comment" });
       break;
@@ -775,16 +698,6 @@ function switchToNoticeTab() {
   tabBtn?.click();
 }
 
-// ============================================================
-// WEEKLY ROUTINE — single doc at routine/weekly, shape:
-//   { Saturday: [{time, subject, room}, ...], Sunday: [...], …,
-//     updatedAt: <server timestamp, stamped on every save — used by
-//     api/send-push.js to confirm a "routine updated" push claim is
-//     reporting something that just happened> }
-// Read live (not a one-shot fetch) so an admin's edit shows up for
-// everyone with the page open, without needing a refresh. Writing is
-// admin-only (see the in-app editor below and firestore.rules).
-// ============================================================
 const DAY_ORDER = ["Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 let latestRoutineData = null;
 let unsubscribeRoutineDoc = null;
@@ -888,7 +801,7 @@ async function saveRoutine() {
       const time = row.querySelector(".rt-time").value.trim();
       const subject = row.querySelector(".rt-subject").value.trim();
       const room = row.querySelector(".rt-room").value.trim();
-      if (!time && !subject && !room) continue;
+      if (!time && !subject && !room) continue; 
       if (!time || !subject) {
         errorEl.textContent = `${day}: please fill in both time and subject, or remove that row.`;
         return;
@@ -901,6 +814,7 @@ async function saveRoutine() {
   errorEl.textContent = "";
   setBtnLoading(btn, true, "Saving…");
   try {
+   
     await setDoc(doc(db, "routine", "weekly"), payload);
     closeModal();
     showToast("Routine updated.");
@@ -917,7 +831,7 @@ async function saveRoutine() {
 }
 
 export function teardownRoutine() {
-  unsubscribeNotifications();
+  unsubscribeNotifications(); 
   if (unsubscribeReports) unsubscribeReports();
   unsubscribeReports = null;
   if (unsubscribeRoutineDoc) { unsubscribeRoutineDoc(); unsubscribeRoutineDoc = null; }

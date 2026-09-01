@@ -1,9 +1,3 @@
-// ============================================================
-// DIRECTORY.JS — Classmate Directory
-// Reads every doc in "users" (each student's own signup profile
-// doubles as their directory entry — no separate collection needed).
-// Also doubles as the shared profile cache used across the app.
-// ============================================================
 import { auth, db } from "./firebase-config.js";
 import { collection, query, limit } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { onSnapshotWithRetry } from "./realtime-retry.js";
@@ -19,21 +13,10 @@ let activeYear = "All";
 
 let allStudents = [];
 let unsubscribeDirectory = null;
-
 let onlineSection = null;
 let onlineRefreshTimer = null;
 const ONLINE_SECTION_REFRESH_MS = 12_000;
 
-// ============================================================
-// PAGINATION — same trade-off as the Wall (see wall.js): reading
-// every classmate in one go got expensive as the department's
-// signups grew, so the realtime listener is capped to a page size
-// and "Load more classmates" just asks for a bigger page. No
-// orderBy() is needed here (the list is re-sorted by name client-
-// side for display anyway) — Firestore's default document-id order
-// keeps each bigger page a strict superset of the last, so nobody
-// already on screen jumps around when more load in underneath.
-// ============================================================
 const DIRECTORY_PAGE_SIZE = 60;
 let directoryPageLimit = DIRECTORY_PAGE_SIZE;
 let lastLoadedCount = 0;
@@ -55,7 +38,7 @@ function subscribeDirectory(onSnapshotReceived) {
     lastLoadedCount = snap.size;
     allStudents = snap.docs.map(d => {
       const data = d.data();
-      cacheUserProfile(d.id, data);
+      cacheUserProfile(d.id, data); 
       return data;
     }).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
     renderOnlineNowSection();

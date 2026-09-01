@@ -1,24 +1,3 @@
-// ============================================================
-// MESSAGES.JS — "Messages" page: two sub-tabs.
-//
-//  - Class Chat: one open room every classmate can read and post in
-//    (classChat/{messageId}), rendered as a live chat-bubble feed with
-//    a composer pinned to the bottom of the panel.
-//  - Direct Messages: a 1:1 inbox. conversations/{conversationId} holds
-//    one doc per PAIR of students (id = both uids, sorted + joined —
-//    see dmConversationId() below, so both sides always land on the
-//    exact same document instead of racing to create duplicates), with
-//    a messages subcollection underneath. The list view shows every
-//    conversation the signed-in student is part of; tapping one opens
-//    its own full-page thread (section-dm-thread — a drill-down page
-//    pushed to history, same pattern as post-detail.js/profile-view.js,
-//    never a modal).
-//
-// Both surfaces lean on js/presence.js for "Online"/"Active Xm ago",
-// and on the shared profile cache (ui-utils.js) for names/avatars —
-// same conventions as wall.js/directory.js, so a classmate's profile
-// updates (new photo, name change) repaint everywhere live.
-// ============================================================
 import { auth, db } from "./firebase-config.js";
 import {
   collection, doc, query, where, orderBy, limitToLast,
@@ -75,15 +54,6 @@ function dmConversationId(uidA, uidB) {
   return [uidA, uidB].sort().join("_");
 }
 
-// ============================================================
-// BLOCK / UNBLOCK — a student can stop a specific classmate's DMs by
-// adding their own uid to that ONE conversation's `blockedBy` array
-// (see firestore.rules — a message can't be created while the
-// conversation's blockedBy list is non-empty, and either participant
-// may only ever add/remove THEIR OWN uid). Scoped to that one
-// conversation on purpose: blocking someone doesn't touch the Wall,
-// Class Chat, or anything else they can see.
-// ============================================================
 export async function getBlockState(otherUid) {
   const myUid = auth.currentUser?.uid;
   if (!myUid || !otherUid) return { blockedByMe: false, blockedByThem: false };
@@ -101,10 +71,6 @@ export async function setDmBlocked(otherUid, blocked) {
   });
 }
 
-// ============================================================
-// SUB-TABS — Class Chat / Direct Messages. A plain show/hide toggle,
-// same tab pattern as a classmate's Profile page (profile-view.js).
-// ============================================================
 export function isClassChatSubtabActive() {
   return document.querySelector(".msg-subtab-btn.active")?.dataset.msgtab === "class";
 }
@@ -128,13 +94,9 @@ function wireSubtabs() {
   document.getElementById("class-chat-back-btn")?.addEventListener("click", () => activateSubtab("dm"));
 }
 
-// ============================================================
-// CLASS CHAT
-// ============================================================
 const CLASS_CHAT_TEXT_LIMIT = 1000;
 let unsubscribeClassChat = null;
-let classChatAtBottom = true;
-
+let classChatAtBottom = true; 
 let classChatMessages = [];
 let classChatLastReadMs = 0;
 let unsubscribeClassChatRead = null;
@@ -163,7 +125,7 @@ function renderChatBubbles(listEl, docs, { emptyText, showNames = true }) {
     if (dayKey !== lastDayKey) {
       lastDayKey = dayKey;
       html += `<div class="chat-day-divider">${escapeHtml(new Date(ms).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }))}</div>`;
-      prevSenderUid = null;
+      prevSenderUid = null; 
     }
     const grouped = prevSenderUid === uid && (ms - prevMs) < 5 * 60 * 1000;
     prevSenderUid = uid;
@@ -171,8 +133,7 @@ function renderChatBubbles(listEl, docs, { emptyText, showNames = true }) {
 
     const profile = authorProfile(uid, m.authorName);
     const timeLabel = new Date(ms).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-    const canDelete = mine;
-
+    const canDelete = mine; 
     messageTextCache.set(m.id, m.text || "");
     html += `
       <div class="chat-bubble-row ${mine ? "mine" : ""}" data-msg-id="${escapeHtml(m.id)}" data-can-delete="${canDelete ? "1" : "0"}">
@@ -190,14 +151,9 @@ function renderChatBubbles(listEl, docs, { emptyText, showNames = true }) {
   wireMessageLongPress(listEl);
 }
 
-// ============================================================
-// PRESS-AND-HOLD MESSAGE ACTIONS (Copy / Delete) — Messenger-style: no
-// permanent icon sitting on every bubble, just hold a message down to pop
-// a small menu next to it. Shared by Class Chat and DM thread bubbles.
-// ============================================================
 const LONG_PRESS_MS = 420;
-const LONG_PRESS_MOVE_TOLERANCE = 10;
-const messageTextCache = new Map();
+const LONG_PRESS_MOVE_TOLERANCE = 10; 
+const messageTextCache = new Map(); 
 
 function closeMessageActionMenu() {
   document.querySelector(".msg-action-backdrop")?.remove();
@@ -263,8 +219,8 @@ function openMessageActionMenu(row) {
   const gap = 8;
   let left = mine ? rowRect.right - menuRect.width : rowRect.left;
   left = Math.min(Math.max(left, 8), window.innerWidth - menuRect.width - 8);
-  let top = rowRect.top - menuRect.height - gap;
-  if (top < 8) top = Math.min(rowRect.bottom + gap, window.innerHeight - menuRect.height - 8);
+  let top = rowRect.top - menuRect.height - gap; 
+  if (top < 8) top = Math.min(rowRect.bottom + gap, window.innerHeight - menuRect.height - 8); 
   menu.style.left = `${left}px`;
   menu.style.top = `${top}px`;
 
@@ -337,7 +293,7 @@ function paintClassChatBadge() {
 function markClassChatRead() {
   const myUid = auth.currentUser?.uid;
   if (!myUid) return;
-  classChatLastReadMs = Date.now();
+  classChatLastReadMs = Date.now(); 
   paintClassChatBadge();
   setDoc(doc(db, "classChatReads", myUid), { lastReadAt: serverTimestamp() }, { merge: true }).catch(() => {});
 }
@@ -347,10 +303,11 @@ function subscribeClassChatRead() {
   if (!myUid || unsubscribeClassChatRead) return;
   unsubscribeClassChatRead = onSnapshotWithRetry(doc(db, "classChatReads", myUid), (snap) => {
     const lastReadAt = snap.data()?.lastReadAt;
+
     if (snap.metadata.hasPendingWrites && lastReadAt == null) return;
     classChatLastReadMs = snap.exists() ? (lastReadAt?.toMillis?.() || 0) : 0;
     paintClassChatBadge();
-  }, () => { });
+  }, () => {  });
 }
 
 function subscribeClassChat() {
@@ -377,7 +334,7 @@ async function submitClassChat() {
   if (!text || classChatSendBtn.disabled) return;
   classChatInput.value = "";
   classChatSendBtn.disabled = true;
-  classChatAtBottom = true;
+  classChatAtBottom = true; 
   try {
     const msgRef = await addDoc(collection(db, "classChat"), {
       authorUid: auth.currentUser.uid,
@@ -392,15 +349,12 @@ async function submitClassChat() {
       messageId: msgRef.id
     });
   } catch (err) {
-    classChatInput.value = text;
+    classChatInput.value = text; 
     const { message, technical } = friendlyError(err, "Couldn't send that message.");
     showToast(message, { details: technical });
   }
 }
 
-// ============================================================
-// DIRECT MESSAGES — conversation list
-// ============================================================
 let unsubscribeConversations = null;
 let allConversations = [];
 
@@ -501,16 +455,12 @@ function markConversationRead(conversationId) {
   updateDoc(doc(db, "conversations", conversationId), { [`unread.${myUid}`]: 0 }).catch(() => {});
 }
 
-// ============================================================
-// DIRECT MESSAGES — one open thread (drill-down page)
-// ============================================================
 let currentDmUid = null;
 let currentDmConversationId = null;
 let unsubscribeDmMessages = null;
 let unsubscribeDmConversation = null;
 let dmThreadAtBottom = true;
 const dmMessageCache = new Map();
-
 export function getOpenDmUid() { return currentDmUid; }
 
 export function teardownDmThread() {
@@ -581,21 +531,21 @@ export async function openDmThread(uid, { fromPopstate = false, replace = false 
   currentDmUid = uid;
 
   if (goToRouteRef) goToRouteRef("dm-thread", { fromPopstate, replace, state: { dmUid: uid } });
-
+  
   let profile = getCachedProfile(uid);
   if (!profile) {
     try {
       profile = await fetchProfile(uid);
       if (profile) cacheUserProfile(uid, profile);
     } catch (err) {
-      if (uid !== currentDmUid) return;
+      if (uid !== currentDmUid) return; 
       renderDmThreadNotFound();
       const { message, technical } = friendlyError(err, "Couldn't open this conversation.");
       showToast(message, { details: technical });
       return;
     }
   }
-  if (uid !== currentDmUid) return;
+  if (uid !== currentDmUid) return; 
   if (!profile) {
     renderDmThreadNotFound();
     return;
@@ -629,7 +579,7 @@ export async function openDmThread(uid, { fromPopstate = false, replace = false 
     showToast(message, { details: technical });
     return;
   }
-  if (uid !== currentDmUid) return;
+  if (uid !== currentDmUid) return; 
   currentDmConversationId = conversationId;
   markConversationRead(conversationId);
 
@@ -668,7 +618,7 @@ async function submitDmMessage() {
   const conversationId = currentDmConversationId;
   const otherUid = currentDmUid;
   if (!text || !conversationId || !otherUid || dmThreadSendBtn.disabled) return;
-  if (dmThreadForm?.classList.contains("hidden")) return;
+  if (dmThreadForm?.classList.contains("hidden")) return; 
   dmThreadInput.value = "";
   dmThreadSendBtn.disabled = true;
   dmThreadAtBottom = true;
@@ -700,9 +650,6 @@ async function submitDmMessage() {
   }
 }
 
-// ============================================================
-// INIT / TEARDOWN
-// ============================================================
 export function initMessages() {
   wireSubtabs();
 
@@ -714,6 +661,7 @@ export function initMessages() {
 
   dmThreadForm?.addEventListener("submit", (e) => { e.preventDefault(); submitDmMessage(); });
   dmThreadInput?.addEventListener("input", () => { dmThreadSendBtn.disabled = !dmThreadInput.value.trim(); });
+
   wireKebabMenus(document.getElementById("dm-thread-header-row"), {
     block: () => {
       const otherUid = currentDmUid;

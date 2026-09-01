@@ -1,12 +1,3 @@
-// ============================================================
-// RESOURCES.JS — Central Note & Sheet Hub
-// Resources live in the "resources" collection:
-// { title, category, contributorName, contributorUid, link, openCount, createdAt }
-// openCount is a simple view/download tally (see bumpResourceOpenCount()),
-// bumped by ANY signed-in student who taps Open/Download — not just the
-// contributor — so the Hub can surface which notes are actually useful,
-// not just recently posted.
-// ============================================================
 import { db, auth, RESOURCE_CATEGORIES } from "./firebase-config.js";
 import {
   collection, addDoc, updateDoc, deleteDoc, doc, setDoc, query, where, orderBy, limit, getDocs, serverTimestamp, increment
@@ -46,27 +37,11 @@ let allResources = [];
 let activeCategory = "All";
 let unsubscribeResources = null;
 
-// ============================================================
-// "SAVE FOR LATER" BOOKMARKS — a student's own private shortlist, kept
-// live via users/{uid}/bookmarks/{resourceId} (see firestore.rules —
-// owner-only). Each bookmark doc carries a small denormalized copy of
-// the resource's title/category/link/etc. (not just the id) so the
-// Saved chip's list renders straight from this listener, without
-// depending on that resource still being within the main Hub's
-// currently-loaded page (see RESOURCE_PAGE_SIZE below) or even still
-// existing in `allResources` at all.
-// ============================================================
 const SAVED_CHIP_KEY = "__saved__";
-let savedResources = [];
-let savedResourceIds = new Set();
+let savedResources = [];             
+let savedResourceIds = new Set();    
 let unsubscribeBookmarks = null;
 
-// ============================================================
-// PAGINATION — same trade-off as the Wall (see wall.js): loading
-// the whole Hub in one shot got expensive as more notes/sheets
-// piled up, so the realtime listener is capped to a page size and
-// "Load more resources" just asks for a bigger page.
-// ============================================================
 const RESOURCE_PAGE_SIZE = 30;
 let resourcePageLimit = RESOURCE_PAGE_SIZE;
 let lastLoadedCount = 0;

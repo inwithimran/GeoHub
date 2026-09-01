@@ -1,10 +1,3 @@
-// ============================================================
-// CLOUDINARY.JS — unsigned image uploads (profile photos + post
-// photos), each compressed client-side (resized + re-encoded on
-// a <canvas>) before it's sent, so uploads stay small and fast
-// on a mobile connection without needing any server code.
-// ============================================================
-
 const CLOUD_NAME = "s9htrtz2";
 const UPLOAD_PRESET = "GeoHub";
 const UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;
@@ -58,7 +51,7 @@ export async function uploadImage(file, { maxDim = 1600, quality = 0.8, folder }
   const res = await fetch(UPLOAD_URL, { method: "POST", body: form });
   if (!res.ok) {
     let msg = "Upload failed.";
-    try { msg = (await res.json())?.error?.message || msg; } catch { }
+    try { msg = (await res.json())?.error?.message || msg; } catch {}
     throw new Error(msg);
   }
   const data = await res.json();
@@ -69,23 +62,6 @@ export async function uploadImages(files, opts = {}) {
   return Promise.all(Array.from(files).map((f) => uploadImage(f, opts)));
 }
 
-// ============================================================
-// RAW FILE UPLOADS (PDFs, Word/Excel/PowerPoint docs, zips, …) — used
-// by the Notes & Sheet Hub's "Upload a file" option (js/resources.js),
-// so a student sharing a note doesn't have to go create a Google Drive
-// link first.
-//
-// Deliberately posted to Cloudinary's /raw/upload endpoint (not
-// /auto/upload) rather than letting Cloudinary auto-detect the resource
-// type: Cloudinary auto-detects PDFs specifically as an "image" asset
-// (for thumbnailing), and *delivering* an "image"-type PDF is blocked by
-// default under Cloudinary's account-level PDF/ZIP delivery security
-// setting unless that's manually turned on in the console — a trap for
-// exactly this use case. Uploading explicitly as "raw" sidesteps that
-// setting entirely: a raw asset is delivered as-is, no image pipeline
-// involved, so a shared PDF opens for classmates with no extra
-// Cloudinary console configuration required.
-// ============================================================
 const RAW_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/raw/upload`;
 
 export async function uploadRawFile(file, { folder } = {}) {
@@ -99,7 +75,7 @@ export async function uploadRawFile(file, { folder } = {}) {
   const res = await fetch(RAW_UPLOAD_URL, { method: "POST", body: form });
   if (!res.ok) {
     let msg = "Upload failed.";
-    try { msg = (await res.json())?.error?.message || msg; } catch { }
+    try { msg = (await res.json())?.error?.message || msg; } catch {  }
     throw new Error(msg);
   }
   const data = await res.json();

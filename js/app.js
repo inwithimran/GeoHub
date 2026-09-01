@@ -1,9 +1,3 @@
-// ============================================================
-// APP.JS — Entry point.
-// Wires up the auth screen, watches login state, swaps between
-// the auth screen and the app shell, and handles SPA routing
-// between the 5 sections via the sidebar / bottom nav.
-// ============================================================
 import { DEPARTMENT_NAME, COLLEGE_NAME, auth, resetCacheOnColdStart, markSessionEstablished } from "./firebase-config.js";
 import {
   signUp, logIn, logOut, watchAuthState, friendlyAuthError, currentProfile,
@@ -43,18 +37,6 @@ const loadingBarFill = document.querySelector(".loading-bar-fill");
 const authScreen = document.getElementById("auth-screen");
 const appShell = document.getElementById("app-shell");
 
-// ============================================================
-// LOADING PROGRESS — a real, determinate readout instead of a
-// decorative bar that sweeps back and forth regardless of what has
-// actually loaded. Each stage below is tied to a genuine milestone:
-// the script executing, the DOM parsed, every page resource finished
-// downloading, and Firebase resolving whether someone's signed in.
-// The bar only ever moves forward and always reaches exactly 100%
-// right before the overlay is dismissed, so "fully filled" really
-// does mean "done loading" — and because the stages are real events
-// rather than a fixed timer, a fast/cached visit fires through all of
-// them almost immediately instead of being held to a fake pace.
-// ============================================================
 let loadingProgress = 0;
 function setLoadingProgress(pct) {
   loadingProgress = Math.max(loadingProgress, pct);
@@ -65,43 +47,31 @@ function resetLoadingProgress() {
   if (loadingBarFill) {
     loadingBarFill.style.transition = "none";
     loadingBarFill.style.width = "6%";
-    void loadingBarFill.offsetWidth;
+    void loadingBarFill.offsetWidth; 
     loadingBarFill.style.transition = "";
     loadingProgress = 6;
   }
 }
 resetLoadingProgress();
-setLoadingProgress(15);
+setLoadingProgress(15); 
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => setLoadingProgress(35), { once: true });
 } else {
   setLoadingProgress(35);
 }
 if (document.readyState === "complete") {
-  setLoadingProgress(60);
+  setLoadingProgress(60); 
 } else {
   window.addEventListener("load", () => setLoadingProgress(60), { once: true });
 }
 
-// ============================================================
-// OFFLINE BANNER — a dropped connection used to only show up as
-// scattered "Couldn't load…" toasts from whichever listener happened
-// to fail first, which didn't make the actual cause obvious. This
-// listens for the browser's own online/offline signal and shows one
-// clear top banner instead, independent of login state (it also
-// applies while the auth screen is up). Firestore's realtime
-// listeners reconnect and re-sync on their own once the connection
-// returns, so there's nothing to re-fetch manually here — the banner
-// is purely a status indicator.
-// ============================================================
 const offlineBanner = document.getElementById("offline-banner");
 function updateOfflineBanner() {
   offlineBanner.classList.toggle("show", !navigator.onLine);
 }
 window.addEventListener("online", updateOfflineBanner);
 window.addEventListener("offline", updateOfflineBanner);
-updateOfflineBanner();
-
+updateOfflineBanner(); 
 function setLoadingLabel(text) {
   if (loadingLabel) loadingLabel.textContent = text;
 }
@@ -131,21 +101,6 @@ const allTabTriggers = document.querySelectorAll("[data-tab]");
 
 let featuresInitialized = false;
 
-// ============================================================
-// COLD-START PRELOAD GATE — see resetCacheOnColdStart() in
-// firebase-config.js for the full story (firebase-js-sdk's IndexedDB
-// persistence can come back corrupted right after "Clear site data",
-// silently returning incomplete lists/missing docs). isColdStart is
-// resolved once, right before watchAuthState is wired up below.
-//
-// On a cold start, the initial Wall/Directory loading screen doesn't get
-// dismissed on a fixed timer — it waits for each listener's first
-// genuinely server-confirmed snapshot (snap.metadata.fromCache === false)
-// before showing the app, same idea as how a professional social app
-// won't flash a half-empty feed/directory after a fresh install. On an
-// ordinary reload (not a cold start), the existing healthy cache is
-// trusted as always, and the app still paints instantly from disk.
-// ============================================================
 let isColdStart = false;
 
 function waitForTrustedSnapshot(initFn, timeoutMs = 12000) {
@@ -165,11 +120,6 @@ function waitForTrustedSnapshot(initFn, timeoutMs = 12000) {
   });
 }
 
-// ============================================================
-// AUTH SCREEN — tab switching + form submission. Google sign-in
-// sits above the tabs on both Log In and Sign Up, always visible —
-// there's no separate "gate" step, so no Back button is needed.
-// ============================================================
 const authCardHead = document.getElementById("auth-card-head");
 
 function switchAuthTab(target) {
@@ -189,10 +139,6 @@ function switchAuthTab(target) {
 }
 allTabTriggers.forEach(el => el.addEventListener("click", () => switchAuthTab(el.dataset.tab)));
 
-// ============================================================
-// PASSWORD SHOW / HIDE — works for every ".pw-toggle" button
-// (login password field, signup password field, etc.)
-// ============================================================
 document.querySelectorAll(".pw-toggle").forEach(btn => {
   btn.addEventListener("click", () => {
     const input = document.getElementById(btn.dataset.input);
@@ -205,11 +151,6 @@ document.querySelectorAll(".pw-toggle").forEach(btn => {
   });
 });
 
-// ============================================================
-// GOOGLE SIGN-IN — available from both the Log In and Sign Up
-// tabs; Firebase figures out on its own whether this is a
-// returning student or a brand-new one.
-// ============================================================
 async function handleGoogleSignIn(btn) {
   const errorEl = document.getElementById("google-auth-error");
   if (errorEl) errorEl.textContent = "";
@@ -244,12 +185,6 @@ loginForm.addEventListener("submit", async (e) => {
   }
 });
 
-// ============================================================
-// FORGOT PASSWORD — reachable straight from the Log In tab, since
-// someone who's actually locked out (forgotten password) can't sign
-// in first to reach the same reset action tucked inside Settings.
-// Reuses whatever's already typed into the Email field above it.
-// ============================================================
 const forgotPasswordBtn = document.getElementById("forgot-password-btn");
 forgotPasswordBtn.addEventListener("click", async () => {
   const errorEl = document.getElementById("login-error");
@@ -306,9 +241,6 @@ signupForm.addEventListener("submit", async (e) => {
   }
 });
 
-// ============================================================
-// ROUTING — one active <section class="route-section"> at a time
-// ============================================================
 const routeTitles = {
   wall: "Student Wall",
   resources: "Notes & Sheet Hub",
@@ -321,8 +253,9 @@ const routeTitles = {
   search: "Search",
   settings: "Settings",
   "user-profile": "Profile",
-  "post-detail": "Post",
-  "dm-thread": "Private Message"};
+  "post-detail": "Post", 
+  "dm-thread": "Private Message"
+};
 
 let currentRoute = "wall";
 
@@ -331,24 +264,6 @@ let routeFromMap = {};
 const TOPBAR_BACK_ROUTES = new Set(["search", "user-profile", "post-detail", "notices", "reports", "settings"]);
 const FROM_TRACKED_ROUTES = new Set([...TOPBAR_BACK_ROUTES, "dm-thread"]);
 
-// ============================================================
-// HASH URL <-> ROUTE — every section now gets a real URL (#wall,
-// #post-detail?id=...&from=wall, ...) instead of leaving the
-// address bar untouched. Two things this buys us that plain
-// history.pushState(state, "") couldn't:
-//   1. Reloading the tab (or the PWA itself) lands back on
-//      whichever section/entity the hash points to, instead of
-//      always snapping back to the Wall — see the auth-resolved
-//      handler near the bottom of this file.
-//   2. The shared #topbar-back-btn (and DM thread's own back
-//      button) can read exactly which tab to return to straight
-//      off the URL via ?from=..., rather than depending on the
-//      browser's own back-stack being intact — which it isn't
-//      right after a reload, or when the page was opened fresh
-//      from a shared link/notification.
-// `id` covers whichever single entity a route needs (a classmate's
-// uid, a post id, a DM partner's uid) — each route only ever uses
-// one of these, so a single `id` param covers all three.
 function buildHash(route, id, from) {
   const params = new URLSearchParams();
   if (id) params.set("id", id);
@@ -367,16 +282,6 @@ function parseHash(hash) {
 const SCROLL_MEMORY_EXCLUDED_ROUTES = new Set(["post-detail", "user-profile", "dm-thread"]);
 let scrollPositions = {};
 
-// ============================================================
-// ROUTE <-> BACK BUTTON — every section change pushes a history
-// entry (replaced, not pushed, for the very first section after
-// login), so the device/browser back button steps back through
-// previously visited sections instead of leaving the app.
-// `fromPopstate` is true when we're reacting to the back button
-// itself, so we don't push a new entry for a navigation that's
-// already a "back". `state` carries any extra data (e.g. which
-// classmate's profile page is open) alongside the route itself.
-// ============================================================
 function goToRoute(route, { fromPopstate = false, replace = false, state = {} } = {}) {
   if (!routeTitles[route]) return;
   const trackFrom = FROM_TRACKED_ROUTES.has(route);
@@ -485,11 +390,6 @@ window.addEventListener("popstate", (e) => {
   }
 });
 
-// ============================================================
-// LOGOUT — both the desktop sidebar button and the mobile profile
-// button go through a confirmation sheet first, so a stray tap
-// never signs someone out by accident.
-// ============================================================
 function confirmLogout() {
   openModal(`
     <div class="confirm-modal">
@@ -526,9 +426,6 @@ function confirmLogout() {
 document.getElementById("logout-btn-desktop").addEventListener("click", confirmLogout);
 document.getElementById("logout-btn-settings").addEventListener("click", confirmLogout);
 
-// ============================================================
-// PROFILE SECTION — card-free, flowing layout for the logged-in student
-// ============================================================
 function renderProfile() {
   if (!currentProfile) return;
   const joined = fullDate(currentProfile.createdAt);
@@ -634,13 +531,6 @@ function renderProfile() {
   });
 }
 
-// ============================================================
-// SETTINGS PAGE — reached via the gear icon next to the header
-// bell. A handful of real, working settings (not placeholders):
-// jump-off points to Edit Profile & Privacy and a password reset
-// email, a push-notifications toggle, an About blurb, and Log Out
-// as the very last thing on the page.
-// ============================================================
 function renderSettingsPage() {
   const pushToggle = document.getElementById("settings-push-toggle");
   const pushStatus = document.getElementById("settings-push-status");
@@ -722,14 +612,6 @@ function renderSettingsPage() {
   };
 }
 
-// ============================================================
-// AVATAR ACTION SHEET — tapping the camera badge on your own profile
-// photo opens this instead of jumping straight into the (editable)
-// Edit Profile form. "View Photo" reuses the same full-screen
-// tap-to-enlarge viewer as post photos; "Change Photo" goes straight
-// to picking + cropping a new one and saves just that field, without
-// having to open and resubmit the whole details form.
-// ============================================================
 function openAvatarActionSheet(p) {
   const hasPhoto = !!p.photoURL;
   openModal(`
@@ -788,11 +670,6 @@ function changeProfilePhotoQuick() {
   input.click();
 }
 
-// ============================================================
-// COMPLETE / EDIT PROFILE DETAILS — used right after a first-time
-// Google sign-in (roll/blood/phone are unknown) and later from the
-// "Edit" button on My Profile.
-// ============================================================
 function openProfileDetailsModal(isFirstTime = false) {
   const nameStatus = isFirstTime ? { canChange: true, daysRemaining: 0 } : nameChangeStatus();
   openModal(`
@@ -940,7 +817,7 @@ async function saveProfileDetails(isFirstTime, getSelectedPhotoFile) {
       setBtnLoading(btn, true, "Saving…");
     }
     await updateProfileDetails({ name, roll, blood, gender, phone, year, session, hometown, address, socialLink, bio, hidePhone, hideEmail, photoURL });
-    closeModal({ force: true });
+    closeModal({ force: true }); 
     showToast(isFirstTime ? "Profile complete — welcome aboard!" : "Profile updated.");
     if (!document.getElementById("section-profile").classList.contains("hidden")) renderProfile();
   } catch (err) {
@@ -951,34 +828,25 @@ async function saveProfileDetails(isFirstTime, getSelectedPhotoFile) {
   }
 }
 
-// ============================================================
-// PWA — register the service worker on every visit (not just once
-// push is enabled) so GeoHub is installable and caches its app
-// shell for offline/instant repeat loads. Idempotent: push.js
-// re-registers the same script later to attach FCM, which just
-// reuses this registration.
-// ============================================================
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("/firebase-messaging-sw.js").catch(() => {});
   });
 }
 
-// ============================================================
-// AUTH STATE — the single switch between auth-screen and app-shell
-// ============================================================
 isColdStart = await resetCacheOnColdStart();
 
 watchAuthState(
   async (user, profile) => {
     showLoadingScreen("Loading GeoHub");
-    setLoadingProgress(85);
+    setLoadingProgress(85); 
     authScreen.classList.add("hidden");
     appShell.classList.remove("hidden");
 
     const displayProfile = profile || { name: user.email, email: user.email };
     const composerAvatar = document.getElementById("composer-avatar");
     if (composerAvatar) composerAvatar.innerHTML = avatarInner(displayProfile);
+
 
     let wallReady = Promise.resolve(true);
     let directoryReady = Promise.resolve(true);
@@ -996,7 +864,6 @@ watchAuthState(
     }
     restoreRouteFromHash();
     initPush();
-
     if (profile && profile.profileIncomplete) {
       openProfileDetailsModal(true);
     }
@@ -1007,14 +874,14 @@ watchAuthState(
       markSessionEstablished();
     }
 
-    setLoadingProgress(100);
+    setLoadingProgress(100); 
     setTimeout(hideLoadingScreen, LOADING_MIN_DISPLAY_MS);
   },
   () => {
     appShell.classList.add("hidden");
     authScreen.classList.remove("hidden");
     history.replaceState({ geohubAuthScreen: true }, "", location.pathname + location.search);
-    scrollPositions = {};
+    scrollPositions = {}; 
     currentRoute = "wall";
 
     if (featuresInitialized) {

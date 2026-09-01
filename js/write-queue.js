@@ -1,30 +1,3 @@
-// ============================================================
-// WRITE-QUEUE.JS — offline write queue for user actions that must
-// reach the server (currently: creating a Wall post — see the
-// "create-post" handler wired up in js/wall.js).
-//
-// IndexedDB, not localStorage: a queued post can carry image
-// files, and localStorage only holds strings under a small (~5MB
-// combined) quota — IndexedDB stores Blobs/Files directly and
-// scales far past that.
-//
-// Flow:
-//   1. A write that fails because the network is unreachable (see
-//      isNetworkError below) gets handed to enqueueWrite() instead
-//      of surfacing an error the user can't do anything about.
-//   2. initWriteQueueSync() (called once per login, from app.js)
-//      wires a `window.addEventListener("online", ...)` and also
-//      makes one attempt immediately on startup, in case writes
-//      were queued last session and we're already back online by
-//      the time the app reloads.
-//   3. syncPendingWrites() drains the queue in order, oldest first,
-//      via whatever handler was registered for that write's `kind`
-//      (registerWriteHandler). The moment it hits another network
-//      failure it stops and waits for the next reconnect — it does
-//      NOT drop the remaining queue, so nothing is lost by a second
-//      dropped connection mid-sync.
-// ============================================================
-
 const DB_NAME = "geohub-offline";
 const DB_VERSION = 1;
 const STORE = "pendingWrites";
@@ -87,7 +60,7 @@ export function registerWriteHandler(kind, handler) {
 export function isNetworkError(err) {
   if (typeof navigator !== "undefined" && navigator.onLine === false) return true;
   if (!err) return false;
-  if (err.name === "TypeError") return true;
+  if (err.name === "TypeError") return true; 
   const msg = String(err.message || "").toLowerCase();
   return msg.includes("failed to fetch") || msg.includes("network") || msg.includes("load failed");
 }
@@ -103,15 +76,15 @@ export async function syncPendingWrites() {
       resyncRequested = false;
       const writes = await getAllWrites();
       for (const w of writes) {
-        if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+        if (typeof navigator !== "undefined" && navigator.onLine === false) return; 
         const handler = handlers.get(w.kind);
-        if (!handler) { await removeWrite(w.id); continue; }
+        if (!handler) { await removeWrite(w.id); continue; } 
         try {
           await handler(w.payload);
           await removeWrite(w.id);
         } catch (err) {
-          if (isNetworkError(err)) return;
-          await removeWrite(w.id);
+          if (isNetworkError(err)) return; 
+          await removeWrite(w.id); 
           console.error(`geohub write-queue: dropped a queued "${w.kind}" write after a non-network failure`, err);
         }
       }

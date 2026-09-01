@@ -1,7 +1,3 @@
-// ============================================================
-// UI-UTILS.JS — small shared helpers (toast, modal, formatting)
-// used by wall.js / resources.js / directory.js / routine.js
-// ============================================================
 import { ADMIN_EMAILS, ADMIN_NAME, db } from "./firebase-config.js";
 import { doc } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { onSnapshotWithRetry } from "./realtime-retry.js";
@@ -51,15 +47,6 @@ export function showToast(message, { details, duration = 2500 } = {}) {
   toastTimer = setTimeout(() => toastEl.classList.add("hidden"), duration);
 }
 
-// ============================================================
-// FRIENDLY ERROR MESSAGES — Firestore/Firebase errors surface as
-// short codes like "permission-denied" or "failed-precondition"
-// that mean nothing to a student. This maps the common ones to
-// plain language for the toast headline, while keeping the raw
-// code/message around (as `technical`) for anyone who taps
-// "Details" — same info that used to be dumped straight into the
-// toast text, just no longer the first thing everyone reads.
-// ============================================================
 const FRIENDLY_ERROR_MESSAGES = {
   "permission-denied": "You don't have permission to do that.",
   "unauthenticated": "You've been signed out — please log in again.",
@@ -91,29 +78,13 @@ const modalBody = document.getElementById("modal-body");
 const modalScroll = document.getElementById("modal-scroll");
 const modalCloseBtn = document.getElementById("modal-close-btn");
 
-// ============================================================
-// MODAL <-> BACK BUTTON — every modal push its own history entry,
-// so the device/browser back button closes the modal (instead of
-// leaving the whole app) and lands the user back on whatever
-// section they were viewing. Content-only refreshes of an already
-// -open modal (e.g. a "Loading…" state swapped for the real
-// content) don't push a second entry.
-//
-// Tapping the dark backdrop no longer closes the sheet — the only
-// way to dismiss a modal is the close (X) button in its top-right
-// corner. A modal opened with { closable: false } (the mandatory
-// "finish your profile" step right after first sign-in) hides that
-// button entirely and can't be dismissed until the flow calls
-// closeModal({ force: true }) itself.
-// ============================================================
-let modalHistoryOpen = false;
-let closingFromPopstate = false;
-let modalClosable = true;
-
+let modalHistoryOpen = false;  
+let closingFromPopstate = false; 
+let modalClosable = true;    
 export function openModal(html, { closable = true } = {}) {
   const wasHidden = modalOverlay.classList.contains("hidden");
   modalBody.innerHTML = html;
-  if (modalScroll) modalScroll.scrollTop = 0;
+  if (modalScroll) modalScroll.scrollTop = 0; 
   modalClosable = closable;
   modalOverlay.classList.toggle("no-close", !closable);
   modalOverlay.classList.remove("hidden");
@@ -122,6 +93,7 @@ export function openModal(html, { closable = true } = {}) {
     modalHistoryOpen = true;
   }
 }
+
 export function closeModal({ force = false, keepHistory = false } = {}) {
   if (modalOverlay.classList.contains("hidden")) return;
   if (!modalClosable && !force) return;
@@ -131,10 +103,12 @@ export function closeModal({ force = false, keepHistory = false } = {}) {
   modalClosable = true;
   if (modalHistoryOpen) {
     modalHistoryOpen = false;
-    if (!closingFromPopstate && !keepHistory) history.back();
+    if (!closingFromPopstate && !keepHistory) history.back(); 
   }
 }
+
 modalCloseBtn.addEventListener("click", () => closeModal());
+
 window.addEventListener("popstate", () => {
   if (modalOverlay.classList.contains("hidden")) return;
   if (!modalClosable) {
@@ -146,22 +120,10 @@ window.addEventListener("popstate", () => {
   closingFromPopstate = false;
 });
 
-// ============================================================
-// HORIZONTAL CHIP-ROW SCROLLING ON DESKTOP — .chip-row (category
-// filters on the Notes & Sheets Hub, year filters in the Classmate
-// Directory, …) hides its scrollbar and relies on a touch/trackpad
-// swipe to scroll sideways. A plain desktop mouse only has a
-// vertical wheel, so any chips past the visible edge were simply
-// unreachable there. Redirect an ordinary vertical wheel scroll into
-// horizontal scrolling whenever it happens over a .chip-row that
-// still has somewhere to go — delegated on document so it also
-// covers rows built dynamically after this file loads (e.g. the
-// Directory's year chips).
-// ============================================================
 document.addEventListener("wheel", (e) => {
   const row = e.target.closest?.(".chip-row");
   if (!row || row.scrollWidth <= row.clientWidth) return;
-  if (Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
+  if (Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return; 
   e.preventDefault();
   row.scrollLeft += e.deltaY;
 }, { passive: false });
@@ -185,12 +147,6 @@ export function initialsOf(name = "?") {
   return name.trim().split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() || "").join("") || "?";
 }
 
-// ============================================================
-// AVATARS — every avatar in the app is a gender-based silhouette
-// icon (never initials/letters) on a color that's unique per
-// student, so classmates are visually distinguishable at a glance
-// across the Wall, comments, Directory and Profile screens.
-// ============================================================
 
 const AVATAR_PALETTE = [
   "#e11d48", "#db2777", "#c026d3", "#9333ea", "#7c3aed",
@@ -278,11 +234,6 @@ export function fullDate(timestamp) {
   return timestamp.toDate().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
 }
 
-// ============================================================
-// BUTTON LOADING STATE — used on every submit action (login,
-// signup, post, comment, notice, resource, profile save…) so the
-// user always gets clear feedback while a request is in flight.
-// ============================================================
 const spinnerHtml = `<span class="btn-spinner" aria-hidden="true"></span>`;
 
 export function setBtnLoading(btn, loading, label) {
@@ -302,15 +253,6 @@ export function setBtnLoading(btn, loading, label) {
   }
 }
 
-// ============================================================
-// CHAR COUNTER — a small "n/limit" readout under a composer field,
-// used on the post/comment/notice text boxes so someone can see a
-// runaway wall of text coming before they hit submit, instead of
-// discovering it only once it's rendered (and breaks the feed's
-// layout) for everyone else. `field.maxLength` is set as the actual
-// enforcement (native, covers typing AND paste) — the counter here is
-// just the visible feedback layered on top of that.
-// ============================================================
 export function wireCharCounter(field, limit) {
   if (!field) return;
   field.maxLength = limit;
@@ -329,25 +271,6 @@ export function wireCharCounter(field, limit) {
   update();
 }
 
-// ============================================================
-// SHARED USER CACHE — populated by the directory listener (which
-// already streams every student's profile) so other screens can
-// show a name/avatar/details for a uid without a fresh fetch.
-//
-// Two gaps this used to have, both of which showed up as "post
-// authors' photos don't appear on the Wall":
-//   1. Race: the Wall's own posts listener is a smaller query than
-//      the Directory's, so it very often resolves and renders
-//      *before* the Directory has warmed the cache — the avatar was
-//      drawn once, with nothing in the cache, and never revisited.
-//   2. Ceiling: the Directory only ever caches its first page
-//      (DIRECTORY_PAGE_SIZE students) unless someone opens Directory
-//      and clicks "Load more" — a post author outside that page
-//      never got cached at all.
-// `subscribeToProfileUpdates` lets any screen re-draw just the
-// avatars once a profile lands, and `ensureProfileLoaded` fills gap
-// #2 with a one-off fetch for any uid the cache doesn't have yet.
-// ============================================================
 const userCache = new Map();
 const profileListeners = new Set();
 const subscribedProfiles = new Set();
@@ -362,6 +285,7 @@ export function getCachedProfile(uid) {
   return userCache.get(uid) || null;
 }
 
+
 export function subscribeToProfileUpdates(callback) {
   profileListeners.add(callback);
   return () => profileListeners.delete(callback);
@@ -372,7 +296,7 @@ export function ensureProfileLoaded(uid) {
   subscribedProfiles.add(uid);
   onSnapshotWithRetry(doc(db, "users", uid), (snap) => {
     if (snap.exists()) cacheUserProfile(uid, snap.data());
-  }, () => { });
+  }, () => {  });
 }
 
 export function attachClampToggle(container) {
@@ -391,15 +315,6 @@ export function clampableHtml(rawText, extraClass = "") {
   return `<p class="clampable ${extraClass} ${isLong ? "is-clampable" : ""}">${safe}</p>${isLong ? `<button type="button" class="clamp-toggle"> See more</button>` : ""}`;
 }
 
-// ============================================================
-// RICH TEXT — @mentions and #hashtags, shared by post text and
-// comment text. `mentions` is the [{uid,name}] array stored on the
-// post/comment doc (see wireMentionAutocomplete below for how that
-// gets built while composing). Escaping happens first, exactly like
-// clampableHtml, so this is just as XSS-safe — the mention/hashtag
-// markup added afterwards is built entirely from trusted fragments
-// (fixed tag strings + already-escaped text), never raw user input.
-// ============================================================
 const HASHTAG_RE = /#([A-Za-z0-9_\u0980-\u09FF]{2,40})/g;
 
 function escapeRegExp(str) {
@@ -456,15 +371,6 @@ export function wireRichTextClicks(root) {
   });
 }
 
-// ============================================================
-// @MENTION AUTOCOMPLETE — shared by the post composer, post edit
-// box, and comment box. Watches a text field for an "@" trigger word
-// under the caret and shows a small suggestion dropdown positioned
-// under the field. `getCandidates(query)` should return up to a
-// handful of {uid, name, ...profile} matches; `onPick(candidate)` is
-// called after the name has been spliced into the field so the
-// caller can remember {uid, name} for when the post/comment is saved.
-// ============================================================
 export function wireMentionAutocomplete(fieldEl, getCandidates, onPick) {
   if (!fieldEl || fieldEl.dataset.mentionWired) return;
   fieldEl.dataset.mentionWired = "1";
@@ -561,13 +467,6 @@ export function wireMentionAutocomplete(fieldEl, getCandidates, onPick) {
   });
   window.addEventListener("resize", () => { if (!dropdown.classList.contains("hidden")) reposition(); });
 }
-
-// ============================================================
-// OWNER "THREE-DOT" MENU — reused wherever a student should be
-// able to edit/delete something they own (posts, comments,
-// resources, notices). Markup + wiring live here once so every
-// screen behaves identically and only one dropdown is ever open.
-// ============================================================
 
 export function kebabMenuHtml(id, actions, extraClass = "") {
   return `

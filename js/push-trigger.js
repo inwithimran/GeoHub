@@ -1,14 +1,4 @@
-// ============================================================
-// PUSH-TRIGGER.JS — client-side call to the Vercel API route
-// (api/send-push.js) that actually sends the push notification.
-// Called right after a write to Firestore succeeds (new post, new
-// resource, new notice, new comment) — see wall.js, resources.js,
-// routine.js. Always best-effort: a failure here never blocks or
-// surfaces an error for the action that triggered it, since the
-// underlying post/notice/etc. was already saved successfully.
-// ============================================================
 import { auth } from "./firebase-config.js";
-
 export async function triggerPush(payload) {
   try {
     if (!auth.currentUser) return;

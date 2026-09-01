@@ -1,22 +1,7 @@
-// ============================================================
-// POST-DETAIL.JS — a single post's own full-page view ("Post
-// Detail"), pushed to browser history like profile-view.js's
-// classmate profile page — never a modal. Reached by tapping a
-// post's text/photo/empty space/Comment pill on the Wall or on a
-// profile's Posts tab (see wall.js's renderPost), or from a
-// post-related row in the Notification tab (see routine.js).
-//
-// The post itself and its comment thread are both realtime
-// (onSnapshot), so likes/edits/new comments made by classmates
-// while this page is open show up live — same spirit as the Wall,
-// just for one post. The comment box lives at the very bottom of
-// the thread, below every comment, same as the rest of the app's
-// comment UI.
-// ============================================================
 import { db, auth } from "./firebase-config.js";
 import { onSnapshotWithRetry } from "./realtime-retry.js";
 import {
-  doc, collection, query, orderBy, updateDoc, deleteDoc, serverTimestamp, increment
+  doc, collection, query, orderBy, updateDoc, deleteDoc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { currentProfile } from "./auth.js";
 import { callApi } from "./api-client.js";
@@ -29,7 +14,8 @@ import {
 import {
   authorProfile, openEditPostModal, deletePost, wireMentions,
   openReactionsModal, wireReactionControl, paintReactionButton, REACTION_EMOJIS,
-  pollHtml, wirePoll, togglePinPost
+  pollHtml, wirePoll, togglePinPost, setCommentCountCache, paintCommentCountBtn,
+  updateStatsRowVisibility, commentCountLabel
 } from "./wall.js";
 import { openUserProfilePage } from "./profile-view.js";
 import { avatarPresenceDotHtml } from "./presence.js";
@@ -45,6 +31,8 @@ export function registerPostDetailRouter(goToRoute) { goToRouteRef = goToRoute; 
 let unsubscribePost = null;
 let unsubscribeComments = null;
 let currentPostId = null;
+let pendingComments = [];
+let rerenderRef = null;
 
 const unsubscribeProfileUpdates = subscribeToProfileUpdates((uid) => {
   const profile = getCachedProfile(uid);
@@ -60,6 +48,7 @@ export function openPostDetailPage(postId, { fromPopstate = false, replace = fal
   if (!postId || !bodyEl) return;
   teardownPostDetail();
   currentPostId = postId;
+  pendingComments = [];
 
   if (goToRouteRef) goToRouteRef("post-detail", { fromPopstate, replace, state: { postId } });
   bodyEl.innerHTML = postDetailSkeletonHtml();
@@ -73,10 +62,9 @@ export function openPostDetailPage(postId, { fromPopstate = false, replace = fal
   let commentsLoaded = false;
   let titleSet = false;
   let shouldFocusComment = focusComment;
-  pendingComments = [];
 
   const render = () => {
-    if (postId !== currentPostId) return;
+    if (postId !== currentPostId) return; 
     if (!postLoaded) return;
     if (!post) {
       bodyEl.innerHTML = `<p class="empty-state">This post is no longer available — it may have been deleted.</p>`;
@@ -89,7 +77,7 @@ export function openPostDetailPage(postId, { fromPopstate = false, replace = fal
     });
     shouldFocusComment = false;
   };
-  triggerRender = render;
+  rerenderRef = render;
 
   unsubscribePost = onSnapshotWithRetry(doc(db, "posts", postId), (snap) => {
     if (postId !== currentPostId) return;
@@ -111,21 +99,12 @@ export function openPostDetailPage(postId, { fromPopstate = false, replace = fal
     if (postId !== currentPostId) return;
     comments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     commentsLoaded = true;
-    const stillPending = [...pendingComments];
-    comments.forEach((c) => {
-      const i = stillPending.findIndex(p => p.authorUid === c.authorUid && p.text === c.text);
-      if (i !== -1) stillPending.splice(i, 1);
-    });
-    pendingComments = stillPending;
     render();
   }, (err) => {
     const { message, technical } = friendlyError(err, "Couldn't load comments.");
     showToast(message, { details: technical });
   });
 }
-
-let pendingComments = [];
-let triggerRender = null;
 
 function postDetailSkeletonHtml() {
   return `
@@ -160,14 +139,9 @@ export function teardownPostDetail() {
   if (unsubscribeComments) { unsubscribeComments(); unsubscribeComments = null; }
   currentPostId = null;
   pendingComments = [];
-  triggerRender = null;
+  rerenderRef = null;
 }
 
-// ============================================================
-// RENDERING — the post card (reusing the same look as a Wall row)
-// followed by the full, always-expanded comment thread, with the
-// "write a comment" box as the very last element on the page.
-// ============================================================
 function renderPostDetail(postId, post, comments, container, { focusComment, commentsLoaded, onDeleted }) {
   const uid = auth.currentUser.uid;
   const author = authorProfile(post.authorUid, post.authorName);
@@ -181,12 +155,14 @@ function renderPostDetail(postId, post, comments, container, { focusComment, com
   const selEnd = prevInput ? prevInput.selectionEnd : null;
   const prevScrollY = window.scrollY;
 
-  const pendingHtml = pendingComments.map(p => pendingCommentItemHtml(p)).join("");
+  if (commentsLoaded) setCommentCountCache(postId, comments.length);
+
   const commentsHtml = !commentsLoaded
     ? commentSkeletonHtml()
-    : (comments.length || pendingComments.length)
-      ? comments.map(c => commentItemHtml(c, uid, isOwnPost)).join("") + pendingHtml
-      : `<p class="empty-state" style="padding:10px 0;">No comments yet — be the first to reply.</p>`;
+    : (comments.length
+        ? comments.map(c => commentItemHtml(c, uid, isOwnPost)).join("")
+        : `<p class="empty-state" style="padding:10px 0;">No comments yet — be the first to reply.</p>`)
+      + pendingComments.map(pendingCommentItemHtml).join("");
 
   let kebabActions = [];
   if (isOwnPost) kebabActions.push({ action: "edit", label: "Edit Post" });
@@ -210,6 +186,10 @@ function renderPostDetail(postId, post, comments, container, { focusComment, com
       ${clampableRichHtml(post.text, post.mentions, "post-text")}
       ${postImagesHtml(post.images)}
       ${pollHtml(post)}
+      <div class="post-stats hidden">
+        <button type="button" class="post-like-count hidden"></button>
+        <button type="button" class="stats-comment-count ${commentsLoaded && comments.length ? "" : "hidden"}">${commentsLoaded ? commentCountLabel(comments.length) : ""}</button>
+      </div>
       <div class="post-actions">
         <div class="reaction-control">
           <button type="button" class="post-action-btn reaction-btn" data-id="${postId}">
@@ -223,9 +203,7 @@ function renderPostDetail(postId, post, comments, container, { focusComment, com
         <button type="button" class="post-action-btn comment-jump-btn">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
           <span>Comment</span>
-          ${post.commentCount ? `<span class="action-count-badge">${post.commentCount}</span>` : ""}
         </button>
-        <button type="button" class="post-like-count hidden"></button>
       </div>
     </article>
     <div class="comments-block">
@@ -248,8 +226,7 @@ function renderPostDetail(postId, post, comments, container, { focusComment, com
     if (selStart != null) input.setSelectionRange(selStart, selEnd);
   }
   wireCommentCounter(container, input);
-  window.scrollTo(0, prevScrollY);
-
+  window.scrollTo(0, prevScrollY); 
   const postEl = container.querySelector(".feed-post");
   const reactionBtn = postEl.querySelector(".reaction-btn");
   const likeCountBtn = postEl.querySelector(".post-like-count");
@@ -260,6 +237,9 @@ function renderPostDetail(postId, post, comments, container, { focusComment, com
   paintReactionButton(reactionBtn, likeCountBtn, post);
   likeCountBtn.addEventListener("click", () => openReactionsModal(reactionsOfPost(post)));
   postEl.querySelector(".comment-jump-btn").addEventListener("click", () => focusCommentInput(container));
+  const statsCommentBtn = postEl.querySelector(".stats-comment-count");
+  statsCommentBtn.addEventListener("click", () => focusCommentInput(container));
+  updateStatsRowVisibility(postEl);
   attachClampToggle(postEl);
   wireRichTextClicks(postEl);
   applyPostImageRatios(postEl);
@@ -293,10 +273,7 @@ function renderPostDetail(postId, post, comments, container, { focusComment, com
       title: "Delete this comment?",
       text: "This comment will be removed from the thread. This can't be undone.",
       confirmLabel: "Delete",
-      onConfirm: async () => {
-        await deleteDoc(doc(db, "posts", postId, "comments", commentId));
-        updateDoc(doc(db, "posts", postId), { commentCount: increment(-1) }).catch(() => {});
-      }
+      onConfirm: () => deleteDoc(doc(db, "posts", postId, "comments", commentId))
     })
   });
 
@@ -313,6 +290,7 @@ function renderPostDetail(postId, post, comments, container, { focusComment, com
 function reactionsOfPost(post) {
   return post.reactions || Object.fromEntries((post.likes || []).map((u) => [u, "👍"]));
 }
+
 
 function commentItemHtml(c, uid, isPostOwner) {
   const author = authorProfile(c.authorUid, c.authorName);
@@ -339,11 +317,14 @@ function commentItemHtml(c, uid, isPostOwner) {
 function pendingCommentItemHtml(p) {
   return `
     <div class="comment-item comment-item-pending">
-      <div class="avatar avatar-sm">${avatarInner(currentProfile || {})}</div>
-      <div class="comment-body">
-        <span class="comment-author">${nameWithBadge(currentProfile ? currentProfile.name : "You", currentProfile ? currentProfile.email : "")}</span>
-        <p>${richTextHtml(p.text, p.mentions)}</p>
-        <small class="comment-pending-status"><span class="comment-pending-spinner"></span>Sending…</small>
+      <span class="avatar-presence-wrap">
+        <span class="avatar avatar-sm">${avatarInner(currentProfile || {})}</span>
+      </span>
+      <div class="comment-body comment-body-pending">
+        <p>${escapeHtml(p.text)}</p>
+        <div class="comment-sending-dots" aria-label="Sending comment">
+          <span></span><span></span><span></span>
+        </div>
       </div>
     </div>`;
 }
@@ -368,20 +349,24 @@ function focusCommentInput(container) {
 }
 
 async function submitComment(postId, commentsEl, sendBtn, postAuthorUid, getMentions) {
-  if (sendBtn.disabled) return;
+  if (sendBtn.disabled) return; 
   const input = commentsEl.querySelector(".comment-input-row input");
   const text = input.value.trim();
   if (!text) return;
   const mentions = getMentions ? getMentions() : [];
-
+  
   input.value = "";
-  input.dispatchEvent(new Event("input"));
+  input.dispatchEvent(new Event("input")); 
   sendBtn.disabled = true;
   sendBtn.classList.add("is-loading");
 
-  const pendingEntry = { authorUid: auth.currentUser.uid, text, mentions };
-  pendingComments.push(pendingEntry);
-  if (triggerRender) triggerRender();
+  const tempId = `pending-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  pendingComments.push({ tempId, text });
+  if (postId === currentPostId && rerenderRef) rerenderRef();
+
+  const liveSendBtn = () => bodyEl?.querySelector(".comment-send-btn");
+  const liveSendBtnNow = liveSendBtn();
+  if (liveSendBtnNow) { liveSendBtnNow.disabled = true; liveSendBtnNow.classList.add("is-loading"); }
 
   try {
     await callApi("create-comment", { postId, text, mentions });
@@ -395,21 +380,18 @@ async function submitComment(postId, commentsEl, sendBtn, postAuthorUid, getMent
       triggerPush({ type: "mention", text, actorName: currentProfile.name, targetUid: m.uid, postId });
     });
   } catch (err) {
-    pendingComments = pendingComments.filter(p => p !== pendingEntry);
-    if (triggerRender) triggerRender();
-    const liveInput = commentsEl.querySelector(".comment-input-row input");
+    const liveInput = bodyEl?.querySelector(".comment-input-row input");
     if (liveInput) { liveInput.value = text; liveInput.dispatchEvent(new Event("input")); }
     const { message, technical } = friendlyError(err, "Couldn't send your comment.");
     showToast(message, { details: technical });
   } finally {
-    sendBtn.disabled = false;
-    sendBtn.classList.remove("is-loading");
+    pendingComments = pendingComments.filter((p) => p.tempId !== tempId);
+    const btnAfter = liveSendBtn();
+    if (btnAfter) { btnAfter.disabled = false; btnAfter.classList.remove("is-loading"); }
+    if (postId === currentPostId && rerenderRef) rerenderRef();
   }
 }
 
-// ============================================================
-// EDIT OWN COMMENT — reached via the comment's three-dot menu
-// ============================================================
 function openEditCommentModal(postId, commentId, currentText, currentMentions = []) {
   openModal(`
     <div class="composer-modal">
@@ -434,7 +416,7 @@ function openEditCommentModal(postId, commentId, currentText, currentMentions = 
     setBtnLoading(e.currentTarget, true, "Saving…");
     try {
       await updateDoc(doc(db, "posts", postId, "comments", commentId), { text, mentions: getMentions(), editedAt: serverTimestamp() });
-      closeModal();
+      closeModal(); 
     } catch (err) {
       errorEl.textContent = "Couldn't save changes: " + err.message;
       setBtnLoading(e.currentTarget, false);

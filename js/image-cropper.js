@@ -1,14 +1,5 @@
-// ============================================================
-// IMAGE-CROPPER.JS — a small, dependency-free "move & scale"
-// cropper for profile photos, in the spirit of the Facebook/
-// Instagram profile-photo flow: pick a file, then drag to
-// reposition and pinch/scroll/slide to zoom the photo inside a
-// circular 1:1 frame before it's uploaded. Output is always a
-// square (1:1) JPEG blob, sized for an avatar.
-// ============================================================
-
 const OUTPUT_SIZE = 640;
-const MIN_ZOOM = 1;
+const MIN_ZOOM = 1;   
 const MAX_ZOOM = 3.2;
 
 export function openImageCropper(file) {
@@ -45,8 +36,8 @@ export function openImageCropper(file) {
     const cancelBtn = overlay.querySelector(".cropper-cancel");
 
     let viewportSize = 0;
-    let baseScale = 1;
-    let zoom = MIN_ZOOM;
+    let baseScale = 1;  
+    let zoom = MIN_ZOOM; 
     let offsetX = 0, offsetY = 0;
     let naturalW = 0, naturalH = 0;
     let settled = false;
@@ -130,8 +121,8 @@ export function openImageCropper(file) {
       setZoom(MIN_ZOOM + t * (MAX_ZOOM - MIN_ZOOM));
     });
 
-    const pointers = new Map();
-    let dragLast = null;
+    const pointers = new Map(); 
+    let dragLast = null;      
     let pinchStartDist = null;
     let pinchStartZoom = 1;
 

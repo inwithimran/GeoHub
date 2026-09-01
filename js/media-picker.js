@@ -1,20 +1,6 @@
-// ============================================================
-// MEDIA-PICKER.JS — shared "attach photos" UI for the post
-// composer and Edit Post modal: a hidden multi-file <input>, and
-// a single live grid that opens with a square image+ "add" tile
-// (sized like a thumbnail, Instagram/Facebook-style) followed by
-// every attached photo — already-uploaded ones (edit mode) and
-// newly-picked ones side by side, each with its own remove (×)
-// button. Selected File objects are tracked in memory per modal
-// instance and only compressed + uploaded to Cloudinary at submit
-// time (see wall.js). Also renders an already-uploaded post's
-// image grid in the feed, and a simple full-screen tap-to-enlarge
-// viewer for it.
-// ============================================================
 import { escapeHtml, showToast } from "./ui-utils.js";
 
 const MAX_RAW_FILE_BYTES = 15 * 1024 * 1024;
-
 export function isAcceptableImageFile(file) {
   if (!file.type || !file.type.startsWith("image/")) {
     showToast(`"${file.name}" isn't an image — skipped.`);
@@ -108,9 +94,8 @@ export function postImagesHtml(images = []) {
     </div>`;
 }
 
-const SINGLE_IMAGE_MIN_RATIO = 0.66;
-const SINGLE_IMAGE_MAX_RATIO = 1.91;
-
+const SINGLE_IMAGE_MIN_RATIO = 0.66; 
+const SINGLE_IMAGE_MAX_RATIO = 1.91; 
 export function applyPostImageRatios(root) {
   root.querySelectorAll(".post-image-grid.one .post-image-item").forEach(item => {
     if (item.dataset.ratioApplied) return;

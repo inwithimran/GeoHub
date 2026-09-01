@@ -1,7 +1,3 @@
-// ============================================================
-// AUTH.JS — Sign up, log in, log out, and auth-state watching.
-// Writes a profile document to Firestore at users/{uid} on signup.
-// ============================================================
 import { auth, db, ADMIN_EMAILS } from "./firebase-config.js";
 import {
   createUserWithEmailAndPassword,
@@ -17,16 +13,6 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { callApi } from "./api-client.js";
 
-// ============================================================
-// PRIVACY: the `users/{uid}` document is readable by every signed-in
-// classmate (that's what powers the Directory), so it can only ever
-// hold the "visible mirror" of phone/email — never the real values
-// when a student has hidden them. The real, unmasked values always
-// live in `users/{uid}/private/contact`, which Firestore rules only
-// let the student themself (or an admin) read. These two small
-// helpers compute the mirror and keep both documents in sync so the
-// rest of the app doesn't have to think about it.
-// ============================================================
 function isAdminEmailLocal(email) {
   return !!email && ADMIN_EMAILS.includes(email);
 }
@@ -41,14 +27,6 @@ export let currentProfile = null;
 
 const googleProvider = new GoogleAuthProvider();
 
-// ============================================================
-// NAME CHANGE COOLDOWN — a student may change their display name, but
-// only once every 7 days. `nameChangedAt` on the profile doc records the
-// last time it actually changed (null until the first edit, so the very
-// first change is never blocked). Enforced here for the UI AND, for real,
-// in firestore.rules — this client-side check alone is just a courtesy;
-// it can't be trusted to stop someone from writing to Firestore directly.
-// ============================================================
 const NAME_CHANGE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 
 function toMillis(ts) {
@@ -117,6 +95,7 @@ export async function logIn(email, password) {
         }
       } catch (inner) {
         if (inner.code === "auth/google-only-account") throw inner;
+       
       }
     }
     throw err;
@@ -129,6 +108,7 @@ export async function signInWithGoogle() {
 }
 
 export async function updateProfileDetails({ name, roll, blood, phone, bio, session, year, hometown, address, socialLink, gender, hidePhone, hideEmail, photoURL }) {
+
   const wasNameChangeAttempt = name !== undefined && name.trim() && name.trim() !== (currentProfile?.name || "");
   const { profile } = await callApi("update-profile", {
     name, roll, blood, phone, bio, session, year, hometown, address, socialLink, gender, hidePhone, hideEmail, photoURL

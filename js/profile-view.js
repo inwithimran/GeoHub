@@ -1,14 +1,3 @@
-// ============================================================
-// PROFILE-VIEW.JS — a classmate's profile as a full drill-down
-// page (its own route, pushed to browser history — never a
-// modal), used from the Student Wall (tapping a post/comment
-// author) and the Classmate Directory (tapping a directory row).
-// Also exports loadUserPosts(), shared with "My Profile" in
-// app.js so both the student's own profile and a classmate's
-// profile show the same Info / Posts tabbed layout.
-// Respects each student's own privacy choices — a hidden phone
-// number never renders a working Call button.
-// ============================================================
 import { auth, db, COLLEGE_NAME } from "./firebase-config.js";
 import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { fetchProfile } from "./auth.js";
@@ -173,7 +162,7 @@ function renderProfilePage(profile, uid) {
   const blockItem = cardEl.querySelector("#user-profile-block-item");
   if (moreMenu && blockItem) {
     getBlockState(uid).then(({ blockedByMe }) => {
-      if (cardEl.querySelector("#user-profile-block-item") !== blockItem) return;
+      if (cardEl.querySelector("#user-profile-block-item") !== blockItem) return; 
       blockItem.textContent = blockedByMe ? "Unblock this classmate" : "Block this classmate";
       blockItem.classList.toggle("danger", !blockedByMe);
       blockItem.dataset.blocked = blockedByMe ? "1" : "0";
@@ -236,12 +225,6 @@ function renderProfilePage(profile, uid) {
   });
 }
 
-// ============================================================
-// POSTS TAB — every post this student has written to the Student
-// Wall, newest first. Shared by both "My Profile" (app.js) and a
-// classmate's profile page above, so it only needs to be written
-// (and kept in sync with the Wall's post shape) in one place.
-// ============================================================
 export async function loadUserPosts(uid, listEl) {
   if (!listEl) return;
   try {

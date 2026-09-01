@@ -1,10 +1,3 @@
-// ============================================================
-// API-CLIENT.JS — shared helper for calling GeoHub's own
-// write-validation Vercel API routes (create-post, create-comment,
-// update-profile). Same Authorization-header pattern js/push-trigger.js
-// already uses for api/send-push.js, factored out so every caller
-// doesn't re-implement the token fetch + fetch() + error unwrap.
-// ============================================================
 import { auth } from "./firebase-config.js";
 
 const CLIENT_COOLDOWN_MS = { "create-post": 3000, "create-comment": 1500 };
@@ -27,7 +20,7 @@ export async function callApi(path, payload, { skipClientCooldown = false } = {}
     body: JSON.stringify(payload)
   });
   let data = null;
-  try { data = await res.json(); } catch { }
+  try { data = await res.json(); } catch {  }
   if (!res.ok) throw new Error((data && data.error) || `Request failed (${res.status}).`);
   return data;
 }

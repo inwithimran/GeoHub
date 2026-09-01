@@ -1,13 +1,7 @@
-// ============================================================
-// WALL.JS — Student Wall / Community Feed
-// Posts live in the "posts" collection. Each post has a
-// "comments" subcollection. Likes are stored as an array of
-// uids on the post doc so the like count is always in sync.
-// ============================================================
 import { db, auth } from "./firebase-config.js";
 import {
   collection, addDoc, doc, getDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit, where,
-  serverTimestamp, arrayUnion, arrayRemove, getDocs, deleteField, startAfter
+  serverTimestamp, arrayUnion, arrayRemove, getDocs, deleteField, startAfter, getCountFromServer
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { currentProfile, fetchProfile } from "./auth.js";
 import {
@@ -28,22 +22,71 @@ import { callApi } from "./api-client.js";
 import { onSnapshotWithRetry } from "./realtime-retry.js";
 import { enqueueWrite, registerWriteHandler, isNetworkError } from "./write-queue.js";
 
-// ============================================================
-// REACTIONS — a small fixed emoji set (kept small on purpose: a
-// bigger picker is harder to hit accurately on a phone, and a
-// department Wall doesn't need Facebook's full set). A plain tap on
-// the button toggles the default 👍; press-and-hold opens the picker
-// to pick (or switch to) a specific one. Stored as a uid -> emoji map
-// on the post ("reactions"), with "likes" kept alongside as a plain
-// array of the same uids purely for back-compat with older code paths
-// (the "liked by" count, etc.) — see reactionsOf() for the read side.
-// ============================================================
 export const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢"];
 const DEFAULT_REACTION = "👍";
 const OUTLINE_LEAF_SVG = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M20 4c-8 0-16 4-16 13 0 1.5.3 2.6.8 3.4C6 15 11 9 18 6c-6 4-10 10-12.4 13.7.5.2 1 .3 1.4.3C16 20 20 12 20 4z"/></svg>`;
 
 function reactionsOf(post) {
   return post.reactions || Object.fromEntries((post.likes || []).map((uid) => [uid, DEFAULT_REACTION]));
+}
+
+const commentCountCache = new Map();
+
+export function setCommentCountCache(postId, count) {
+  commentCountCache.set(postId, count);
+}
+
+async function fetchCommentCount(postId) {
+  if (commentCountCache.has(postId)) return commentCountCache.get(postId);
+  try {
+    const snap = await getCountFromServer(collection(db, "posts", postId, "comments"));
+    const count = snap.data().count;
+    commentCountCache.set(postId, count);
+    return count;
+  } catch {
+    return 0;
+  }
+}
+
+export function commentCountLabel(count) {
+  return `${count} ${count === 1 ? "comment" : "comments"}`;
+}
+
+export function paintCommentCountBtn(btnEl, count) {
+  if (!btnEl) return;
+  btnEl.textContent = commentCountLabel(count);
+  btnEl.classList.toggle("hidden", count === 0);
+  btnEl.dataset.count = String(count);
+}
+
+export function updateStatsRowVisibility(root) {
+  const statsRow = root.querySelector(".post-stats");
+  if (!statsRow) return;
+  const likeBtn = statsRow.querySelector(".post-like-count");
+  const commentBtn = statsRow.querySelector(".stats-comment-count");
+  const hasLikes = likeBtn && !likeBtn.classList.contains("hidden");
+  const hasComments = commentBtn && !commentBtn.classList.contains("hidden");
+  statsRow.classList.toggle("hidden", !hasLikes && !hasComments);
+}
+
+function wireStatsCommentCount(root, postId, initialCount) {
+  const btn = root.querySelector(".stats-comment-count");
+  if (!btn) return;
+  btn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    const { openPostDetailPage } = await import("./post-detail.js");
+    openPostDetailPage(postId, { focusComment: true });
+  });
+  if (initialCount != null) {
+    paintCommentCountBtn(btn, initialCount);
+    updateStatsRowVisibility(root);
+    return;
+  }
+  fetchCommentCount(postId).then((count) => {
+    if (!document.body.contains(btn)) return;
+    paintCommentCountBtn(btn, count);
+    updateStatsRowVisibility(root);
+  });
 }
 
 export function wireMentions(fieldEl, initial = []) {
@@ -67,59 +110,18 @@ const composerTrigger = document.getElementById("composer-trigger");
 
 let unsubscribePosts = null;
 
-// ============================================================
-// PAGINATION — true cursor-based (startAfter), not "grow the live
-// query's limit and resubscribe". That older approach re-fetched every
-// already-seen post on each "Load earlier posts" click (even if served
-// from Firestore's local cache, it still re-ran the whole listener),
-// which got wasteful as both the Wall and its scroll depth grew.
-//
-// Now only the newest WALL_PAGE_SIZE posts are ever live (onSnapshot) —
-// that's the part people are actually looking at, where new posts/likes/
-// edits/deletes need to show up in real time. "Load earlier posts" is a
-// separate one-shot getDocs() per click, cursored with startAfter() off
-// the oldest post loaded so far, and those older posts are appended as
-// static data — they won't move if edited/deleted by someone else while
-// still on screen (a manual refresh picks that up), which is the
-// deliberate trade-off for not re-reading/re-listening to the entire
-// scroll depth on every click. Your OWN actions on an older post (like,
-// comment, edit, delete) still work and update in place immediately —
-// see the optimistic updates throughout this file — this only affects
-// picking up someone ELSE'S concurrent change to a post you've already
-// scrolled past.
-//
-// KNOWN EDGE CASE: because the live page and the older pages are two
-// separate queries, if enough new posts arrive to push the exact post
-// that was the live/older boundary at cursor-time out of the live
-// window, that one post can briefly go unrendered until the Wall is
-// next reloaded (subscribeWall() recomputes everything fresh). Rare in
-// practice, self-heals on reload, and not a data-loss issue — the post
-// is still safely in Firestore the whole time.
-// ============================================================
 const WALL_PAGE_SIZE = 20;
-let liveDocs = [];
-let olderDocs = [];
-let hasMoreOlder = true;
-let loadingOlder = false;
-
-// ============================================================
-// AUTO-PAGINATION — replaces the old tap-to-load-more button with a
-// sentinel <div> pinned to the bottom of the rendered posts. An
-// IntersectionObserver watches it and calls loadOlderPosts() itself
-// the moment it scrolls near the viewport — a 600px rootMargin means
-// the next page starts fetching *before* the user actually hits the
-// bottom, so the spinner (usually) resolves before they'd even see an
-// empty gap. Re-created on every renderWallList() since that rebuilds
-// the whole #wall-list DOM (see the "Load earlier" pagination comment
-// above) and the old sentinel node goes with it.
-// ============================================================
+let liveDocs = [];     
+let olderDocs = [];    
+let hasMoreOlder = true; 
+let loadingOlder = false; 
 let wallScrollObserver = null;
 
 const POST_TEXT_LIMIT = 3000;
 
 export function authorProfile(uid, fallbackName) {
   const cached = getCachedProfile(uid);
-  if (!cached) ensureProfileLoaded(uid);
+  if (!cached) ensureProfileLoaded(uid); 
   return cached || { uid, name: fallbackName };
 }
 
@@ -195,20 +197,16 @@ async function loadOlderPosts() {
 }
 
 async function refreshStaticPost(postId) {
-  if (liveDocs.some((d) => d.id === postId)) return;
+  if (liveDocs.some((d) => d.id === postId)) return; 
   try {
     const snap = await getDoc(doc(db, "posts", postId));
     olderDocs = snap.exists()
       ? olderDocs.map((d) => (d.id === postId ? snap : d))
       : olderDocs.filter((d) => d.id !== postId);
     renderWallList();
-  } catch { }
+  } catch {  }
 }
 
-// ============================================================
-// COMPOSER — clicking the trigger row opens a dedicated modal,
-// like the "what's on your mind" pattern in professional apps.
-// ============================================================
 function openComposerModal() {
   openModal(`
     <div class="composer-modal">
@@ -315,7 +313,7 @@ function wirePollBuilder() {
 async function handleCreatePost(getImageFiles, getMentions, getPoll) {
   const textarea = document.getElementById("post-input");
   const btn = document.getElementById("post-submit");
-  if (btn.disabled) return;
+  if (btn.disabled) return; 
   const errorEl = document.getElementById("post-error");
   const text = textarea.value.trim();
   errorEl.textContent = "";
@@ -386,9 +384,6 @@ function notifyMentions(mentions, text, postId) {
   });
 }
 
-// ============================================================
-// EDIT / DELETE OWN POST — reached via the post's three-dot menu
-// ============================================================
 export function openEditPostModal(postId, currentText, onSaved, currentImages = [], currentMentions = []) {
   openModal(`
     <div class="composer-modal">
@@ -437,12 +432,6 @@ export function openEditPostModal(postId, currentText, onSaved, currentImages = 
   });
 }
 
-// ============================================================
-// REPORT POST — lets a classmate flag a post for the admin/CR to
-// review, without giving them any power over the post themselves
-// (no edit, no delete — that stays owner/admin-only per the Firestore
-// rules). Writes to a "reports" collection only the admin can read.
-// ============================================================
 async function reportPost(postId, post) {
   openModal(`
     <h3>Report this post</h3>
@@ -479,21 +468,11 @@ export async function deletePost(postId, onDeleted) {
   const commentsSnap = await getDocs(collection(db, "posts", postId, "comments"));
   await Promise.all(commentsSnap.docs.map(c => deleteDoc(c.ref)));
   await deleteDoc(doc(db, "posts", postId));
-  deleteActivityForPost(postId);
+  deleteActivityForPost(postId); 
   showToast("Post deleted.");
   onDeleted?.();
 }
 
-// ============================================================
-// POST RENDERING — flat feed row, no card chrome. Shared by the
-// realtime Wall feed AND a profile's "Posts" tab (own or a
-// classmate's), so likes/comments/kebab all work identically
-// everywhere a post can appear. Tapping the post itself (its text,
-// its photos, empty space, or the Comment pill) opens the full Post
-// Detail page — only the Like button, the like-count/"liked by"
-// pill, the author's avatar/name, and the kebab menu are excluded
-// from that, since they're their own controls.
-// ============================================================
 export function renderPost(postId, post, listEl, { onChanged } = {}) {
   const uid = auth.currentUser.uid;
   const reactions = reactionsOf(post);
@@ -528,6 +507,12 @@ export function renderPost(postId, post, listEl, { onChanged } = {}) {
     ${clampableRichHtml(post.text, post.mentions, "post-text")}
     ${postImagesHtml(post.images)}
     ${pollHtml(post)}
+    <div class="post-stats hidden">
+      <button type="button" class="post-like-count ${reactionCount ? "" : "hidden"}" data-id="${postId}">
+        ${reactionSummaryHtml(reactions)}
+      </button>
+      <button type="button" class="stats-comment-count hidden" data-id="${postId}"></button>
+    </div>
     <div class="post-actions">
       <div class="reaction-control">
         <button type="button" class="post-action-btn reaction-btn ${myReaction ? "liked" : ""}" data-id="${postId}" aria-pressed="${!!myReaction}">
@@ -541,10 +526,6 @@ export function renderPost(postId, post, listEl, { onChanged } = {}) {
       <button class="post-action-btn comment-toggle-btn" data-id="${postId}">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
         <span>Comment</span>
-        ${post.commentCount ? `<span class="action-count-badge">${post.commentCount}</span>` : ""}
-      </button>
-      <button type="button" class="post-like-count ${reactionCount ? "" : "hidden"}" data-id="${postId}">
-        ${reactionSummaryHtml(reactions)}
       </button>
     </div>
   `;
@@ -556,12 +537,14 @@ export function renderPost(postId, post, listEl, { onChanged } = {}) {
     b.addEventListener("click", () => openUserProfilePage(post.authorUid)));
   wireReactionControl(el, postId, post);
   likeCountBtn.addEventListener("click", () => openReactionsModal(reactionsOf(post)));
+  wireStatsCommentCount(el, postId);
+  updateStatsRowVisibility(el);
   el.querySelector(".comment-toggle-btn").addEventListener("click", async () => {
     const { openPostDetailPage } = await import("./post-detail.js");
     openPostDetailPage(postId, { focusComment: true });
   });
   el.addEventListener("click", async (e) => {
-    if (e.target.closest(".reaction-control, .post-like-count, .kebab-menu, [data-author], .comment-toggle-btn, .clamp-toggle, .mention-chip, .hashtag-chip, .poll-block")) return;
+    if (e.target.closest(".reaction-control, .post-stats, .kebab-menu, [data-author], .comment-toggle-btn, .clamp-toggle, .mention-chip, .hashtag-chip, .poll-block")) return;
     const { openPostDetailPage } = await import("./post-detail.js");
     openPostDetailPage(postId);
   });
@@ -607,14 +590,10 @@ export function paintReactionButton(btnEl, countEl, post) {
   const total = Object.keys(reactions).length;
   countEl.classList.toggle("hidden", total === 0);
   countEl.innerHTML = reactionSummaryHtml(reactions);
+  const scopeEl = countEl.closest(".feed-post") || countEl.closest("article") || document;
+  updateStatsRowVisibility(scopeEl);
 }
 
-// ============================================================
-// REACTION PICKER — a plain tap on the button toggles the default
-// 👍 on/off; press-and-hold pops a small emoji row above it to pick
-// (or switch to) a specific reaction. Only one picker is ever open
-// at a time, closed the same way the kebab-menu dropdowns are.
-// ============================================================
 function closeAllReactionPickers() {
   document.querySelectorAll(".reaction-picker").forEach(p => p.classList.add("hidden"));
 }
@@ -692,10 +671,6 @@ export async function reactToPost(postId, post, emoji, btnEl, countEl) {
   }
 }
 
-// ============================================================
-// "WHO REACTED" — resolves each uid to a name via the shared
-// profile cache (warmed by directory.js), fetching any it's missing.
-// ============================================================
 export async function openReactionsModal(reactions) {
   const uids = Object.keys(reactions || {});
   if (!uids.length) return;
@@ -704,7 +679,7 @@ export async function openReactionsModal(reactions) {
   const people = await Promise.all(uids.map(async (uid) => {
     let p = getCachedProfile(uid);
     if (!p) {
-      try { p = await fetchProfile(uid); if (p) cacheUserProfile(uid, p); } catch { }
+      try { p = await fetchProfile(uid); if (p) cacheUserProfile(uid, p); } catch {}
     }
     return p ? { ...p, uid, emoji: reactions[uid] } : { uid, name: "Classmate", emoji: reactions[uid] };
   }));
@@ -728,11 +703,6 @@ export async function openReactionsModal(reactions) {
     }));
 }
 
-// ============================================================
-// PIN POST — admin/CR only. Toggling this doesn't touch anything
-// else on the post (see firestore.rules), so it works even on a
-// post the admin didn't write.
-// ============================================================
 export async function togglePinPost(postId, wasPinned) {
   try {
     await updateDoc(doc(db, "posts", postId), {
@@ -746,11 +716,6 @@ export async function togglePinPost(postId, wasPinned) {
   }
 }
 
-// ============================================================
-// POLLS — a post can optionally carry a single-choice poll. Votes
-// are stored as { [uid]: optionId } on the post; tapping the option
-// you already picked retracts your vote, tapping another switches it.
-// ============================================================
 export function pollHtml(post) {
   const poll = post.poll;
   if (!poll || !poll.options) return "";
@@ -803,12 +768,6 @@ export async function votePoll(postId, post, optionId) {
   }
 }
 
-// ============================================================
-// HASHTAGS — tapping a "#tag" chip in a post shows every post that
-// carries it. array-contains is a single-field filter, so this needs
-// no composite Firestore index (see routine.js's activity queries for
-// why that matters — a missing index otherwise fails silently).
-// ============================================================
 export async function openHashtagResults(tag) {
   openModal(`<h3>#${escapeHtml(tag)}</h3>${skeletonRowsHtml(3)}`);
   let posts;
@@ -854,6 +813,6 @@ export function teardownWall() {
   wallScrollObserver = null;
   liveDocs = [];
   olderDocs = [];
-  hasMoreOlder = true;
+  hasMoreOlder = true; 
   loadingOlder = false;
 }

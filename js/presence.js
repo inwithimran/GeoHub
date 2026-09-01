@@ -1,35 +1,3 @@
-// ============================================================
-// PRESENCE.JS — "who's online" for GeoHub.
-//
-// This app only has Firestore (no Realtime Database), so there's no
-// onDisconnect() hook to reliably fire the instant someone closes a
-// tab, loses signal, or their browser just crashes. Instead this uses
-// the same trick most Firestore-only presence systems lean on:
-//
-//   1. While a student has GeoHub open AND the tab is actually visible,
-//      we "heartbeat" — stamp users/{uid}.lastActive with the server
-//      time every HEARTBEAT_INTERVAL_MS.
-//   2. Anyone viewing that student (Directory, Wall post, Post Detail,
-//      a Profile page) treats them as "Online" as long as that stamp
-//      is fresher than ONLINE_WINDOW_MS — a window comfortably wider
-//      than one heartbeat, so a slow network or a throttled background
-//      tab doesn't flicker someone's status.
-//   3. Nobody ever has to write "online: false" on the way out — if
-//      the tab dies without warning, the heartbeat just stops, and the
-//      stamp silently ages past the window on every viewer's own
-//      clock. Self-healing, no cleanup job needed.
-//
-// The tab-visibility piece (pausing the heartbeat when hidden) keeps
-// this cheap: a student who opens GeoHub and leaves the tab in the
-// background all day doesn't rack up silent writes for it, and
-// correctly reads as "Active Xm ago" (not "Online") to classmates
-// once their heartbeat goes stale. A short BACKGROUND_GRACE_MS delay
-// before actually pausing means a quick app-switch (checking a
-// notification, glancing at another app) doesn't instantly read as
-// "went offline" to everyone else — same reasoning Facebook-style
-// presence uses to stay a stable, non-flickery dot instead of
-// bouncing on/off on every brief blip.
-// ============================================================
 import { db, auth } from "./firebase-config.js";
 import { doc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { getCachedProfile, subscribeToProfileUpdates, timeAgo } from "./ui-utils.js";
@@ -78,7 +46,7 @@ export function initPresence() {
       if (backgroundGraceTimer) clearTimeout(backgroundGraceTimer);
       backgroundGraceTimer = setTimeout(() => {
         backgroundGraceTimer = null;
-        stopHeartbeat();
+        stopHeartbeat(); 
       }, BACKGROUND_GRACE_MS);
     }
   });
@@ -163,6 +131,7 @@ export function paintPresenceUI() {
     el.classList.toggle("online-now", isUserOnline(profile));
   });
 }
+
 
 function schedulePaint() {
   if (paintScheduled) return;

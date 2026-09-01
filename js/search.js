@@ -1,32 +1,9 @@
-// ============================================================
-// SEARCH.JS — Global Search (topbar search icon -> its own page).
-// Searches Wall posts, Notes & Sheet Hub resources, the Notice Board,
-// the Deadline tracker, AND the Classmate Directory, all from one
-// search bar, including "#hashtag" search over Wall posts.
-//
-// Firestore has no built-in full-text search, and this app is a single
-// department's worth of data (dozens/hundreds of docs, not millions) —
-// so rather than standing up a separate search service, each of the
-// four collections is fetched once (capped, newest-first) the first
-// time the Search page is opened, cached in memory, and then every
-// keystroke just re-filters that in-memory list. That keeps typing
-// instant with zero extra Firestore reads per keystroke, at the cost
-// of very-old content (beyond the cap) not being searchable — an
-// acceptable trade-off for how this app is actually used (finding
-// something from recent weeks, not archaeology).
-//
-// Classmates are the exception: they don't need their own fetch at all.
-// The Directory (js/directory.js) already keeps a live, always-warm
-// roster in memory for @mention autocomplete everywhere else in the
-// app, via getAllStudents() — so this just reads straight from that on
-// every keystroke instead of caching its own copy.
-// ============================================================
 import { db, auth } from "./firebase-config.js";
 import { collection, getDocs, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { escapeHtml, timeAgo, showToast, skeletonRowsHtml, avatarInner, nameWithBadge } from "./ui-utils.js";
 import { getAllStudents } from "./directory.js";
 
-const FETCH_CAP = 300;
+const FETCH_CAP = 300; 
 
 const input = document.getElementById("global-search-input");
 const resultsEl = document.getElementById("global-search-results");
@@ -88,7 +65,7 @@ function truncate(text = "", max = 100) {
 }
 
 function runSearch() {
-  if (!dataLoaded) return;
+  if (!dataLoaded) return; 
   const raw = input.value.trim();
   if (!raw) { resultsEl.innerHTML = `<p class="empty-state">Search across the Student Wall, Notes &amp; Sheets, Notice Board, and Classmate Directory.</p>`; return; }
 
