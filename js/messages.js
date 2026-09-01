@@ -2,7 +2,7 @@ import { auth, db } from "./firebase-config.js";
 import {
   collection, doc, query, where, orderBy, limitToLast,
   addDoc, updateDoc, setDoc, getDoc, deleteDoc, serverTimestamp, increment,
-  arrayUnion, arrayRemove
+  arrayUnion, arrayRemove, deleteField
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { onSnapshotWithRetry } from "./realtime-retry.js";
 import { currentProfile, fetchProfile } from "./auth.js";
@@ -106,7 +106,7 @@ function isNearBottom(el, slack = 80) {
   return el.scrollHeight - el.scrollTop - el.clientHeight < slack;
 }
 
-function renderChatBubbles(listEl, docs, { emptyText, showNames = true }) {
+function renderChatBubbles(listEl, docs, { emptyText, showNames = true, seenUpToMs = null }) {
   if (!docs.length) {
     listEl.innerHTML = `<div class="chat-empty">${escapeHtml(emptyText)}</div>`;
     return;
@@ -117,7 +117,7 @@ function renderChatBubbles(listEl, docs, { emptyText, showNames = true }) {
   let prevSenderUid = null;
   let prevMs = 0;
 
-  docs.forEach((m) => {
+  docs.forEach((m, idx) => {
     const uid = m.authorUid || m.senderUid;
     const mine = uid === myUid;
     const ms = m.createdAt?.toDate ? m.createdAt.toDate().getTime() : Date.now();
@@ -134,6 +134,7 @@ function renderChatBubbles(listEl, docs, { emptyText, showNames = true }) {
     const profile = authorProfile(uid, m.authorName);
     const timeLabel = new Date(ms).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
     const canDelete = mine; 
+    const showSeen = idx === docs.length - 1 && mine && seenUpToMs != null && ms <= seenUpToMs;
     messageTextCache.set(m.id, m.text || "");
     html += `
       <div class="chat-bubble-row ${mine ? "mine" : ""}" data-msg-id="${escapeHtml(m.id)}" data-can-delete="${canDelete ? "1" : "0"}">
@@ -141,7 +142,7 @@ function renderChatBubbles(listEl, docs, { emptyText, showNames = true }) {
         <div class="chat-bubble-group">
           ${!mine && !grouped && showNames ? `<span class="chat-bubble-name">${nameWithBadge(profile.name || "Classmate", profile.email)}</span>` : ""}
           <div class="chat-bubble">${richTextHtml(m.text || "", [])}</div>
-          <div class="chat-bubble-meta"><span>${timeLabel}</span></div>
+          <div class="chat-bubble-meta"><span>${timeLabel}</span>${showSeen ? `<span class="chat-seen-label">Seen</span>` : ""}</div>
         </div>
       </div>`;
   });
@@ -452,7 +453,52 @@ async function ensureConversation(otherUid) {
 function markConversationRead(conversationId) {
   const myUid = auth.currentUser?.uid;
   if (!myUid || !conversationId) return;
-  updateDoc(doc(db, "conversations", conversationId), { [`unread.${myUid}`]: 0 }).catch(() => {});
+  updateDoc(doc(db, "conversations", conversationId), {
+    [`unread.${myUid}`]: 0,
+    [`lastReadAt.${myUid}`]: serverTimestamp()
+  }).catch(() => {});
+}
+
+const DM_TYPING_RESEND_MS = 2500;
+const DM_TYPING_IDLE_MS = 3000;
+const DM_TYPING_STALE_MS = 6000;
+let dmOtherReadAtMs = 0;
+let dmOtherTypingUntilMs = 0;
+let dmTypingIdleTimer = null;
+let dmTypingCheckInterval = null;
+let dmLastTypingSentAt = 0;
+
+function dmTypingIndicatorEl() {
+  return document.getElementById("dm-typing-indicator");
+}
+
+function paintDmTypingIndicator() {
+  const el = dmTypingIndicatorEl();
+  if (!el) return;
+  el.classList.toggle("hidden", Date.now() >= dmOtherTypingUntilMs);
+}
+
+function sendMyTypingSignal(conversationId) {
+  if (!conversationId || !auth.currentUser) return;
+  const now = Date.now();
+  if (now - dmLastTypingSentAt > DM_TYPING_RESEND_MS) {
+    dmLastTypingSentAt = now;
+    updateDoc(doc(db, "conversations", conversationId), {
+      [`typing.${auth.currentUser.uid}`]: serverTimestamp()
+    }).catch(() => {});
+  }
+  clearTimeout(dmTypingIdleTimer);
+  dmTypingIdleTimer = setTimeout(() => clearMyTypingSignal(conversationId), DM_TYPING_IDLE_MS);
+}
+
+function clearMyTypingSignal(conversationId) {
+  clearTimeout(dmTypingIdleTimer);
+  dmTypingIdleTimer = null;
+  dmLastTypingSentAt = 0;
+  if (!conversationId || !auth.currentUser) return;
+  updateDoc(doc(db, "conversations", conversationId), {
+    [`typing.${auth.currentUser.uid}`]: deleteField()
+  }).catch(() => {});
 }
 
 let currentDmUid = null;
@@ -464,12 +510,19 @@ const dmMessageCache = new Map();
 export function getOpenDmUid() { return currentDmUid; }
 
 export function teardownDmThread() {
+  const conversationId = currentDmConversationId;
   if (unsubscribeDmMessages) unsubscribeDmMessages();
   if (unsubscribeDmConversation) unsubscribeDmConversation();
   unsubscribeDmMessages = null;
   unsubscribeDmConversation = null;
   currentDmUid = null;
   currentDmConversationId = null;
+  dmOtherReadAtMs = 0;
+  dmOtherTypingUntilMs = 0;
+  if (dmTypingCheckInterval) clearInterval(dmTypingCheckInterval);
+  dmTypingCheckInterval = null;
+  clearMyTypingSignal(conversationId);
+  paintDmTypingIndicator();
 }
 
 function dmThreadSkeletonHtml() {
@@ -529,6 +582,8 @@ export async function openDmThread(uid, { fromPopstate = false, replace = false 
   if (!uid || !auth.currentUser || uid === auth.currentUser.uid) return;
   teardownDmThread();
   currentDmUid = uid;
+  dmOtherReadAtMs = 0;
+  dmOtherTypingUntilMs = 0;
 
   if (goToRouteRef) goToRouteRef("dm-thread", { fromPopstate, replace, state: { dmUid: uid } });
   
@@ -556,7 +611,7 @@ export async function openDmThread(uid, { fromPopstate = false, replace = false 
   if (cachedMsgs) {
     dmThreadListEl.dataset.conversationId = likelyConversationId;
     dmThreadListEl.dataset.deleteHandler = "dm";
-    renderChatBubbles(dmThreadListEl, cachedMsgs, { emptyText: "No messages yet — say hello 👋", showNames: false });
+    renderChatBubbles(dmThreadListEl, cachedMsgs, { emptyText: "No messages yet — say hello 👋", showNames: false, seenUpToMs: dmOtherReadAtMs });
     dmThreadListEl.dataset.everLoaded = "1";
     dmThreadListEl.scrollTop = dmThreadListEl.scrollHeight;
   } else {
@@ -582,10 +637,19 @@ export async function openDmThread(uid, { fromPopstate = false, replace = false 
   if (uid !== currentDmUid) return; 
   currentDmConversationId = conversationId;
   markConversationRead(conversationId);
+  if (dmTypingCheckInterval) clearInterval(dmTypingCheckInterval);
+  dmTypingCheckInterval = setInterval(paintDmTypingIndicator, 1000);
 
   unsubscribeDmConversation = onSnapshotWithRetry(doc(db, "conversations", conversationId), (snap) => {
     if (conversationId !== currentDmConversationId) return;
-    paintDmBlockState(uid, snap.data()?.blockedBy || []);
+    const data = snap.data() || {};
+    paintDmBlockState(uid, data.blockedBy || []);
+    dmOtherReadAtMs = data.lastReadAt?.[uid]?.toMillis?.() || 0;
+    const otherTypingMs = data.typing?.[uid]?.toMillis?.() || 0;
+    dmOtherTypingUntilMs = otherTypingMs ? otherTypingMs + DM_TYPING_STALE_MS : 0;
+    paintDmTypingIndicator();
+    const cached = dmMessageCache.get(conversationId);
+    if (cached) renderChatBubbles(dmThreadListEl, cached, { emptyText: "No messages yet — say hello 👋", showNames: false, seenUpToMs: dmOtherReadAtMs });
   });
 
   const q = query(collection(db, "conversations", conversationId, "messages"), orderBy("createdAt", "asc"));
@@ -596,7 +660,7 @@ export async function openDmThread(uid, { fromPopstate = false, replace = false 
     dmMessageCache.set(conversationId, msgs);
     dmThreadListEl.dataset.conversationId = conversationId;
     dmThreadListEl.dataset.deleteHandler = "dm";
-    renderChatBubbles(dmThreadListEl, msgs, { emptyText: "No messages yet — say hello 👋", showNames: false });
+    renderChatBubbles(dmThreadListEl, msgs, { emptyText: "No messages yet — say hello 👋", showNames: false, seenUpToMs: dmOtherReadAtMs });
     dmThreadListEl.dataset.everLoaded = "1";
     if (wasNearBottom) dmThreadListEl.scrollTop = dmThreadListEl.scrollHeight;
     markConversationRead(conversationId);
@@ -622,6 +686,7 @@ async function submitDmMessage() {
   dmThreadInput.value = "";
   dmThreadSendBtn.disabled = true;
   dmThreadAtBottom = true;
+  clearMyTypingSignal(conversationId);
   try {
     const myUid = auth.currentUser.uid;
     const msgRef = await addDoc(collection(db, "conversations", conversationId, "messages"), {
@@ -660,7 +725,11 @@ export function initMessages() {
   paintClassChatOnlineCount();
 
   dmThreadForm?.addEventListener("submit", (e) => { e.preventDefault(); submitDmMessage(); });
-  dmThreadInput?.addEventListener("input", () => { dmThreadSendBtn.disabled = !dmThreadInput.value.trim(); });
+  dmThreadInput?.addEventListener("input", () => {
+    dmThreadSendBtn.disabled = !dmThreadInput.value.trim();
+    if (dmThreadInput.value.trim()) sendMyTypingSignal(currentDmConversationId);
+    else clearMyTypingSignal(currentDmConversationId);
+  });
 
   wireKebabMenus(document.getElementById("dm-thread-header-row"), {
     block: () => {
