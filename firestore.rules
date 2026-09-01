@@ -56,7 +56,7 @@ service cloud.firestore {
     match /activity/{activityId} {
       allow read: if isSignedIn() && (
         isAdmin() ||
-        !(resource.data.type in ["comment", "like", "mention"]) ||
+        !(resource.data.type in ["comment", "reply", "like", "comment-like", "mention"]) ||
         resource.data.targetUid == request.auth.uid ||
         resource.data.actorUid == request.auth.uid
       );
@@ -81,7 +81,8 @@ service cloud.firestore {
       match /comments/{commentId} {
         allow read: if isSignedIn();
         allow create: if false;
-        allow update: if isOwner(resource.data.authorUid) && textWithinLimit("text", 500);
+        allow update: if (isOwner(resource.data.authorUid) && textWithinLimit("text", 500)) ||
+          (isSignedIn() && onlyChangedFields(["reactions"]));
         allow delete: if isOwner(resource.data.authorUid) || isAdmin() ||
           isOwner(get(/databases/$(database)/documents/posts/$(postId)).data.authorUid);
       }

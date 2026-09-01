@@ -975,6 +975,29 @@
   .comment-author:hover { @apply underline; color: var(--color-forest-700); }
   .comment-body p { @apply text-[.87rem] leading-snug; color: var(--color-ink-soft); margin:1px 0 2px; }
   .comment-body small { @apply text-[.71rem]; color: var(--color-ink-faint); font-family:var(--font-mono); }
+  .comment-foot { @apply flex items-center gap-3; }
+  .comment-reaction-control { @apply relative shrink-0; }
+  .comment-reaction-btn, .comment-reaction-count { @apply bg-transparent p-0; }
+  .comment-reaction-btn { @apply text-[.71rem] font-bold inline-flex items-center gap-1; color: var(--color-ink-faint); }
+  .comment-reaction-btn:hover, .comment-reaction-btn:active { color: var(--color-forest-700); }
+  .comment-reaction-btn.liked { color: var(--color-forest-700); }
+  .comment-reaction-btn .reaction-icon { @apply inline-flex items-center justify-center transition-transform; width:12px; height:12px; font-size:12px; line-height:1; }
+  .comment-reaction-btn.like-pop .reaction-icon { @apply animate-leaf-pop; }
+  .comment-reaction-count { @apply text-[.71rem] font-bold shrink-0; color: var(--color-ink-faint); font-family:var(--font-mono); }
+  .comment-reaction-count:hover, .comment-reaction-count:active { color: var(--color-forest-700); }
+  .comment-reaction-count.hidden { @apply hidden; }
+  .comment-reply-btn { @apply text-[.71rem] font-bold bg-transparent p-0; color: var(--color-ink-faint); }
+  .comment-reply-btn:hover, .comment-reply-btn:active { color: var(--color-forest-700); }
+  .comment-replies { @apply flex flex-col gap-3 mt-3; margin-left:38px; padding-left:12px; border-left:2px dashed var(--color-line); }
+  .avatar-xs { @apply w-[24px] h-[24px] rounded-full overflow-hidden shrink-0 relative block; box-shadow:0 0 0 2px var(--color-surface), 0 0 0 3px var(--color-forest-100); }
+  .reply-context { @apply block text-[.68rem] font-bold; color: var(--color-ink-faint); margin-bottom:2px; }
+  .reply-target-chip { @apply flex items-center gap-2 text-[.78rem] font-semibold rounded-full mb-1.5; padding:7px 12px; background: var(--color-paper-deep); color: var(--color-ink-soft); }
+  .reply-target-chip.hidden { @apply hidden; }
+  .reply-target-cancel {
+    @apply ml-auto shrink-0 flex items-center justify-center rounded-full bg-transparent p-0;
+    width:20px; height:20px; color: var(--color-ink-faint);
+  }
+  .reply-target-cancel:hover, .reply-target-cancel:active { color: var(--color-danger-600); }
   .comment-input-row { @apply flex gap-2 items-center mt-0.5; }
   .comment-input-row input { @apply flex-1 border-[1.5px] rounded-full text-sm; border-color: var(--color-line); background: var(--color-paper-deep); padding:9px 15px; }
   .comment-input-row input:focus { outline:none; border-color: var(--color-forest-600); background:#fff; }
@@ -984,13 +1007,7 @@
 
   .comment-item-pending { @apply opacity-80; }
   .comment-body-pending p { color: var(--color-ink-faint); }
-  .comment-sending-dots { @apply flex items-center gap-1; margin-top:3px; }
-  .comment-sending-dots span {
-    @apply inline-block rounded-full; width:5px; height:5px;
-    background: var(--color-ink-faint); animation: var(--animate-dot);
-  }
-  .comment-sending-dots span:nth-child(2) { animation-delay:.15s; }
-  .comment-sending-dots span:nth-child(3) { animation-delay:.3s; }
+  .comment-pending-skel { width:56px; height:8px; }
 
   .chip-scroller { @apply w-full max-w-full overflow-hidden; }
   .chip-row { @apply flex gap-2 overflow-x-auto py-0.5 pb-1.5 w-full [&::-webkit-scrollbar]:hidden; scrollbar-width:none; }
