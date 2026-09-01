@@ -741,18 +741,25 @@
      what made the old version cramped. `rounded-full` on a non-square
      box still renders as a pill (fully round ends), so this stays a
      stable shape at any label length without needing JS to measure text.
-     `right:-7px; bottom:-3px` (whole-pixel, not fractional) sits the
+     `right:-6px; bottom:-2px` (whole-pixel, not fractional) sits the
      pill mostly *outside* the avatar's own edge — same reasoning as the
      plain dot's `right:0;bottom:0`, just offset further since a pill
      this wide would otherwise cover too much of the photo tucked flush
-     against the corner. */
+     against the corner. Border kept hairline-thin (1px) rather than the
+     heavier 1.5-2px used on the plain online dot — the dot's border is
+     doing real work (cutting a gap against the photo behind a *solid*
+     fill), but this pill's fill is already the light surface color, so
+     a thick outline just reads as heavy/clunky rather than adding
+     contrast. Directory rows and the DM inbox list use this smaller
+     size (14px tall) — see the Profile-page override below for the
+     larger one used on that page's big photo. */
   .avatar-presence-badge-timed.has-label {
     opacity:1; transform:scale(1); box-sizing:border-box;
-    width:auto; height:17px; min-width:17px; padding:0 5px;
-    background: var(--color-surface); border:1.5px solid var(--color-forest-500);
-    box-shadow:0 2px 5px rgba(0,0,0,.16);
-    color: var(--color-forest-500); font-size:.5rem; letter-spacing:-.2px;
-    right:-7px; bottom:-3px;
+    width:auto; height:14px; min-width:14px; padding:0 4px;
+    background: var(--color-surface); border:1px solid var(--color-forest-500);
+    box-shadow:0 1px 3px rgba(0,0,0,.14);
+    color: var(--color-forest-500); font-size:.42rem; letter-spacing:-.2px;
+    right:-6px; bottom:-2px;
   }
   .avatar-presence-wrap:has(.avatar-sm) .avatar-presence-badge { width:10px; height:10px; border-width:2px; }
   .section-heading { @apply text-xs font-extrabold uppercase tracking-wider pl-0.5; color: var(--color-ink-faint); margin:4px 0 -4px; }
@@ -1611,13 +1618,22 @@
      bigger font) to stay legible against a 96px photo, and sits pulled
      out further (`right:-4px; bottom:-2px`) so it reads the same
      "tucked onto the corner" way the smaller list/inbox version does
-     rather than sinking flush into the photo edge. */
+     rather than sinking flush into the photo edge. Border is toned down
+     to a faded green (color-mix at 55%) rather than the full-strength
+     green used on the small list/inbox badge — at this larger size a
+     solid-green outline read as too heavy/loud against the big photo,
+     so it's softened while the fill and text stay the same green. The
+     online (non-timed) dot's own white ring is also a notch thinner
+     here (2px, not 3px) for the same "don't compete with the photo"
+     reason. */
   .profile-flow-avatar-wrap .avatar-presence-badge {
-    @apply z-[2]; right:0; bottom:0; width:16px; height:16px; border-width:3px; box-sizing:border-box;
+    @apply z-[2]; right:0; bottom:0; width:16px; height:16px; border-width:2px; box-sizing:border-box;
   }
   .profile-flow-avatar-wrap .avatar-presence-badge-timed.has-label {
     width:auto; min-width:34px; height:22px; padding:0 7px; font-size:.68rem; letter-spacing:-.2px; box-sizing:border-box;
     right:-4px; bottom:-2px;
+    border-color: color-mix(in srgb, var(--color-forest-500) 55%, transparent);
+    box-shadow:0 1px 4px rgba(0,0,0,.12);
   }
   .profile-flow-avatar {
     @apply relative z-[1]; width:96px; height:96px; border:4px solid var(--color-paper);
