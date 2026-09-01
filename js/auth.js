@@ -13,8 +13,8 @@ import {
   fetchSignInMethodsForEmail
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
-  doc, setDoc, updateDoc, getDoc, serverTimestamp,
-  collection, query, where, limit, getDocs
+  doc, setDoc, updateDoc, getDoc, getDocFromServer, serverTimestamp,
+  collection, query, where, limit, getDocs, getDocsFromServer
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 // ============================================================
@@ -234,10 +234,38 @@ export async function fetchProfile(uid) {
   return snap.exists() ? snap.data() : null;
 }
 
-/** Fetch the CALLER's OWN real (unmasked) phone/email from the private subdocument. */
+/**
+ * Same read as fetchProfile(), but forced straight to the network instead
+ * of possibly being served from the local IndexedDB cache. Used ONLY for
+ * the caller's own uid, at the one moment that decides "returning student"
+ * vs. "brand-new student" (see watchAuthState below).
+ *
+ * Why this exists: firebase-js-sdk has a known, still-open bug
+ * (github.com/firebase/firebase-js-sdk/issues/8593) where, right after the
+ * browser's "Clear site data" wipes IndexedDB out from under an
+ * already-open Firestore connection, the persistence layer can come back
+ * corrupted — and a plain getDoc() confidently reports "document doesn't
+ * exist" for a document that is very much still on the server. Ordinary
+ * reads (Directory, other students' profiles, post authors) can tolerate
+ * that kind of staleness fine, so they keep using fetchProfile() above and
+ * benefit from the cache as normal. This one decision cannot: getting it
+ * wrong is what silently spawns a second blank profile and makes the
+ * student's real one look "lost".
+ *
+ * Throws (doesn't swallow) on failure — see the caller for why: a network
+ * error here must NOT be treated as "no profile exists".
+ */
+async function fetchOwnProfileFresh(uid) {
+  const snap = await getDocFromServer(doc(db, "users", uid));
+  return snap.exists() ? snap.data() : null;
+}
+
+/** Fetch the CALLER's OWN real (unmasked) phone/email from the private subdocument.
+ *  Forced to the network for the same reason as fetchOwnProfileFresh() above —
+ *  this only ever runs for the signed-in user's own uid, right at login. */
 async function fetchOwnContact(uid) {
   try {
-    const snap = await getDoc(doc(db, "users", uid, "private", "contact"));
+    const snap = await getDocFromServer(doc(db, "users", uid, "private", "contact"));
     return snap.exists() ? snap.data() : null;
   } catch {
     return null; // e.g. doesn't exist yet for an older account — falls back to the public mirror
@@ -259,7 +287,11 @@ async function fetchOwnContact(uid) {
 async function findProfileByEmail(email, excludeUid) {
   if (!email) return null;
   try {
-    const snap = await getDocs(query(collection(db, "users"), where("email", "==", email), limit(5)));
+    // getDocsFromServer, not getDocs — this only ever runs right after
+    // fetchOwnProfileFresh() has already concluded "no profile", so it's
+    // exactly the same corrupted-cache blind spot (see fetchOwnProfileFresh
+    // above) if it were allowed to answer from a possibly-stale cache too.
+    const snap = await getDocsFromServer(query(collection(db, "users"), where("email", "==", email), limit(5)));
     const match = snap.docs.find(d => d.id !== excludeUid);
     return match ? { uid: match.id, ...match.data() } : null;
   } catch {
@@ -279,7 +311,23 @@ async function findProfileByEmail(email, excludeUid) {
 export function watchAuthState(onLogin, onLogout, onConflict) {
   onAuthStateChanged(auth, async (user) => {
     if (user) {
-      let profile = await fetchProfile(user.uid);
+      let profile;
+      try {
+        profile = await fetchOwnProfileFresh(user.uid);
+      } catch {
+        // Couldn't reach the server to confirm one way or the other (e.g.
+        // genuinely offline right now). Do NOT fall back to a plain
+        // fetchProfile() here — that's the exact cache read that can
+        // falsely say "doesn't exist" (see fetchOwnProfileFresh above),
+        // and treating that false negative as "brand-new student" is what
+        // spawns a duplicate blank profile. Safer to sign back out and ask
+        // for a retry than to guess.
+        await signOut(auth);
+        if (onConflict) {
+          onConflict("Couldn't reach GeoHub's server to load your profile. Please check your connection and try signing in again.");
+        }
+        return;
+      }
 
       // First-ever sign-in with Google has no matching users/{uid} doc yet —
       // create a starter profile (roll/blood/phone blank) right here so
