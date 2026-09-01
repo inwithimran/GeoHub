@@ -26,10 +26,10 @@ import {
   arrayUnion, arrayRemove
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { onSnapshotWithRetry } from "./realtime-retry.js";
-import { currentProfile } from "./auth.js";
+import { currentProfile, fetchProfile } from "./auth.js";
 import {
   escapeHtml, showToast, friendlyError, avatarInner, nameWithBadge,
-  getCachedProfile, ensureProfileLoaded, subscribeToProfileUpdates,
+  getCachedProfile, cacheUserProfile, ensureProfileLoaded, subscribeToProfileUpdates,
   richTextHtml, wireRichTextClicks, wireKebabMenus, confirmDialog,
   timeAgo
 } from "./ui-utils.js";
@@ -641,6 +641,22 @@ function renderDmThreadHeader(uid) {
   paintPresenceUI();
 }
 
+/** Shown instead of the normal thread UI when `uid` doesn't correspond to a
+ *  real classmate profile — most commonly a stale or mistyped uid in a
+ *  shared link/bookmark (e.g. #dm-thread?id=...). Mirrors the "not found"
+ *  treatment openUserProfilePage already gives a bad profile link (see
+ *  profile-view.js) — never falls back to opening some other classmate's
+ *  inbox, or creating a conversation doc for a uid that isn't real. */
+function renderDmThreadNotFound() {
+  const topbarTitle = document.getElementById("topbar-title");
+  if (topbarTitle) topbarTitle.textContent = "Private Message";
+  dmThreadHeaderEl.innerHTML = `<div><span class="dm-thread-header-name">Classmate not found</span></div>`;
+  dmThreadListEl.innerHTML = `<div class="chat-empty">This classmate couldn't be found — the link may be old or mistyped.</div>`;
+  dmThreadListEl.dataset.everLoaded = "1";
+  dmThreadForm?.classList.add("hidden");
+  dmThreadBlockedBar?.classList.add("hidden");
+}
+
 /**
  * Open the DM thread with `uid` — used by a Directory row's Message button,
  * a classmate's Profile page Message button, and tapping a row in the
@@ -653,6 +669,33 @@ export async function openDmThread(uid, { fromPopstate = false, replace = false 
   currentDmUid = uid;
 
   if (goToRouteRef) goToRouteRef("dm-thread", { fromPopstate, replace, state: { dmUid: uid } });
+
+  // Confirm `uid` is really a classmate BEFORE showing/creating anything
+  // else — the caller (a Directory row, a Profile page's Message button,
+  // the conversation list) has always already cached the real profile by
+  // this point, so this only ever does real work for the one case that
+  // matters: a hand-typed or stale #dm-thread?id=... link with a wrong or
+  // made-up id, which must show "not found", never silently open SOME
+  // classmate's inbox instead.
+  let profile = getCachedProfile(uid);
+  if (!profile) {
+    try {
+      profile = await fetchProfile(uid);
+      if (profile) cacheUserProfile(uid, profile);
+    } catch (err) {
+      if (uid !== currentDmUid) return; // superseded by a newer navigation while this lookup was in flight
+      renderDmThreadNotFound();
+      const { message, technical } = friendlyError(err, "Couldn't open this conversation.");
+      showToast(message, { details: technical });
+      return;
+    }
+  }
+  if (uid !== currentDmUid) return; // superseded by a newer navigation while this lookup was in flight
+  if (!profile) {
+    renderDmThreadNotFound();
+    return;
+  }
+
   // Conversation ids are just the two sorted uids joined together (see
   // dmConversationId below), so we already know it before ever touching
   // Firestore — enough to check the cache and skip the skeleton flash for
@@ -677,7 +720,6 @@ export async function openDmThread(uid, { fromPopstate = false, replace = false 
   dmThreadBlockedBar?.classList.add("hidden");
   dmThreadMoreMenu?.classList.remove("is-blocking");
 
-  if (!getCachedProfile(uid)) ensureProfileLoaded(uid);
   renderDmThreadHeader(uid);
 
   let conversationId;
