@@ -1,25 +1,6 @@
-// ============================================================
-// api/_lib/validators.js — shared input validation for the
-// write-validation API routes (create-post, create-comment,
-// update-profile).
-//
-// The point of these routes isn't "prove someone is signed in" —
-// firestore.rules already does that, and does it for every write,
-// with no way for a client to skip it. What Firestore rules
-// genuinely CAN'T do well is: cross-check an array of {uid,name}
-// mentions against real profiles, restrict an image URL to actually
-// being one this app uploaded (vs. any arbitrary string), or re-derive
-// something (hashtags) from the text instead of trusting whatever
-// array the client attached to it. That richer checking is what
-// lives here — see each function's comment.
-//
-// Every validator either returns a clean value or throws an ApiError
-// (see adminApp.js) with a message that's safe to show the caller.
-// ============================================================
 import { ApiError } from "./adminApp.js";
 
-const CLOUDINARY_CLOUD = "s9htrtz2";
-
+const CLOUDINARY_CLOUD = "s9htrtz2"; 
 export function requiredText(value, field, maxLen) {
   const s = typeof value === "string" ? value.trim() : "";
   if (!s) throw new ApiError(400, `${field} is required.`);
@@ -84,6 +65,7 @@ export async function validateMentions(db, raw, callerUid, max = 20) {
   return out;
 }
 
+
 export function validatePoll(raw) {
   if (raw === undefined || raw === null) return null;
   if (typeof raw !== "object" || !Array.isArray(raw.options)) throw new ApiError(400, "Malformed poll.");
@@ -95,6 +77,6 @@ export function validatePoll(raw) {
       if (o.text.length > 80) throw new ApiError(400, "A poll option is too long (max 80 characters).");
       return o;
     });
-  if (options.length < 2) return null;
+  if (options.length < 2) return null; 
   return { options, votes: {} };
 }

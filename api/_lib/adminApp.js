@@ -1,17 +1,3 @@
-// ============================================================
-// api/_lib/adminApp.js — shared helper for every Vercel API route
-// that needs the Firebase Admin SDK.
-//
-// Vercel does not turn files under api/_lib/** into routes (any
-// file/folder starting with "_" is skipped by its zero-config API
-// detection), so this is safe to import from api/*.js without
-// becoming its own accidental endpoint.
-//
-// Pulled out of api/resolve-profile.js and api/send-push.js, which
-// each used to define their own copy of getAdminApp() — now every
-// write-validation route (create-post, create-comment,
-// update-profile, plus the two existing routes) shares one.
-// ============================================================
 import { initializeApp, cert, getApps } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { Timestamp } from "firebase-admin/firestore";
@@ -24,6 +10,7 @@ export function getAdminApp() {
   const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
   return initializeApp({ credential: cert(serviceAccount) });
 }
+
 
 export class ApiError extends Error {
   constructor(status, message) {
@@ -50,19 +37,7 @@ export function requirePost(req, res) {
   }
 }
 
-// ============================================================
-// RATE LIMITING — same Firestore-transaction cooldown pattern
-// api/send-push.js already used for pushes (checkAndBumpRateLimit),
-// generalized here with a `key` so each write-validation endpoint
-// gets its own bucket per caller (a burst of comments shouldn't use
-// up a student's post-creation allowance, and vice versa). The
-// client-side cooldown in js/api-client.js (callApi) is a courtesy —
-// it saves a wasted round trip and gives faster feedback — but this
-// is the real guard, since a client-side check can always be
-// bypassed by calling the endpoint directly.
-// ============================================================
-const DEFAULT_MIN_MS_BETWEEN_WRITES = 3000;
-
+const DEFAULT_MIN_MS_BETWEEN_WRITES = 3000; 
 export async function enforceRateLimit(db, uid, key, minMs = DEFAULT_MIN_MS_BETWEEN_WRITES) {
   const ref = db.collection("apiRateLimits").doc(`${uid}_${key}`);
   const allowed = await db.runTransaction(async (tx) => {
