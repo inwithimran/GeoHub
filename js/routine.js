@@ -36,18 +36,12 @@ import {
 import { currentProfile } from "./auth.js";
 import { triggerPush } from "./push-trigger.js";
 
-/** Resolve a poster's full profile (gender, photo, etc.) from the shared cache when available. */
 function posterProfile(uid, fallbackName, fallbackEmail) {
   const cached = getCachedProfile(uid);
-  if (!cached) ensureProfileLoaded(uid); // cache miss — fetch once, the subscription below repaints when it lands
+  if (!cached) ensureProfileLoaded(uid);
   return cached || { uid, name: fallbackName, email: fallbackEmail };
 }
 
-// Same fix as wall.js's refreshAuthorAvatars: the Notice board and
-// Notification feed both draw avatars from the shared profile cache at
-// render time, which can still be cold (Directory listener not warmed up
-// yet, or the poster isn't in the Directory's loaded page). Repaint any
-// matching avatar in place once that profile actually lands.
 subscribeToProfileUpdates((uid) => {
   const profile = getCachedProfile(uid);
   if (!profile) return;
@@ -93,7 +87,6 @@ function loadReadIdsLocal(kind) {
     return new Set(Array.isArray(raw) ? raw : []);
   } catch { return new Set(); }
 }
-/** Best-effort pull from Firestore, merged into whatever's already in `idSet`. Returns the same Set. */
 async function mergeReadIdsFromCloud(kind, idSet) {
   const uid = auth.currentUser?.uid;
   if (!uid) return idSet;
@@ -109,8 +102,6 @@ async function mergeReadIdsFromCloud(kind, idSet) {
   return idSet;
 }
 function saveReadIds(kind, idSet) {
-  // Cap what's persisted so this can't grow unbounded across months of use —
-  // only the most recent ids matter for badge purposes.
   const ids = Array.from(idSet).slice(-400);
   localStorage.setItem(readIdsStorageKey(kind), JSON.stringify(ids));
   const uid = auth.currentUser?.uid;
@@ -121,14 +112,8 @@ function saveReadIds(kind, idSet) {
 }
 let noticeReadIds = new Set();
 let activityReadIds = new Set();
-// "Deleted" notifications — same idea and same local+cloud persistence as
-// the read-id sets above, but for entries the person explicitly removed
-// from their own Notification tab (see dismissActivity()). This only ever
-// hides the entry from THIS person's feed/badges — the underlying activity
-// document (which may be visible to other classmates too) is untouched.
 let dismissedActivityIds = new Set();
 
-/** Marks one notice as read; safe to call repeatedly (no-ops once already read). */
 export function markNoticeRead(noticeId) {
   if (!noticeId || noticeReadIds.has(noticeId)) return;
   noticeReadIds.add(noticeId);
@@ -150,7 +135,6 @@ function markAllActivityRead() {
   updateNoticeBadge();
   renderActivityList();
 }
-/** Removes one notification from THIS person's Notification tab/badges for good. */
 function dismissActivity(activityId) {
   if (!activityId || dismissedActivityIds.has(activityId)) return;
   dismissedActivityIds.add(activityId);
@@ -163,80 +147,42 @@ let unsubscribeNotices = null;
 let unsubscribeActivityPublic = null;
 let unsubscribeActivityPrivate = null;
 let latestNotices = [];
-// The "activity" feed is split into two separately-queried, separately-
-// listened slices — see the big comment above initRoutine() for why this
-// can't be a single onSnapshot the way `notices` is.
-let latestActivityPublic = [];   // type in [post, resource, notice] — visible to everyone
-let latestActivityPrivate = [];  // type in [comment, like] targeted at ME specifically
-let activityFeedError = null;    // last onSnapshot error message, if either half of the feed is currently down
-let noticesLoaded = false;         // true once the notices listener's first snapshot has arrived
-let activityPublicLoaded = false;  // true once the public-activity listener's first snapshot has arrived
-let activityPrivateLoaded = false; // true once the private-activity listener's first snapshot has arrived
+let latestActivityPublic = [];
+let latestActivityPrivate = [];
+let activityFeedError = null;
+let noticesLoaded = false;
+let activityPublicLoaded = false;
+let activityPrivateLoaded = false;
 let noticesPageWired = false;
 
-// A notice is a short board announcement, not a long post — kept tighter
-// than POST_TEXT_LIMIT (wall.js) to fit the notice board's compact cards.
 const NOTICE_TEXT_LIMIT = 1000;
 
-// app.js hands us its router (goToRoute) so clicking a notification can
-// jump to another page (Wall / Notes hub / Notice tab), the same pattern
-// profile-view.js uses for registerProfilePageRouter.
 let goToRouteRef = null;
 export function registerNotificationsRouter(goToRoute) { goToRouteRef = goToRoute; }
 
-/** Merge the two slices back into one feed, newest first, capped like the old single query was. */
 function mergedActivity() {
   return [...latestActivityPublic, ...latestActivityPrivate]
     .sort((a, b) => (b.createdAt?.toDate?.().getTime() || 0) - (a.createdAt?.toDate?.().getTime() || 0))
     .slice(0, 60);
 }
 
-/**
- * "comment" and "like" activity entries are a private "someone interacted
- * with YOUR post" notification — they should only ever be visible to the
- * post's author, never to the whole department. "post" / "resource" /
- * "notice" stay public. (Firestore rules also enforce this server-side —
- * see the query split below for why the client has to respect the same
- * split; this filter is just so the client trusts nothing that slips
- * through.)
- */
 function visibleToMe(a) {
   if (a.type === "comment" || a.type === "like" || a.type === "mention") {
     return a.targetUid === auth.currentUser?.uid;
   }
-  // Public activity (post/resource/notice) exists to tell OTHER classmates
-  // something new happened — you don't need a "notification" telling you
-  // about your own post/resource/notice, so hide your own entries here.
   if (a.actorUid === auth.currentUser?.uid) return false;
-  // A newly-joined student shouldn't see a backlog of public notifications
-  // from before they signed up — only what's happened since they joined.
   const joinedAt = currentProfile?.createdAt?.toDate?.();
   const postedAt = a.createdAt?.toDate?.();
   if (joinedAt && postedAt && postedAt < joinedAt) return false;
   return true;
 }
 
-// ----------------------------------------------------------------
-// LIVE-LISTENER LIFECYCLE — notices + the two activity slices below
-// used to stay subscribed for a whole logged-in session regardless of
-// whether the Notice/Notification tab was ever opened, since the
-// topbar bell badge needs to update live even while browsing the Wall.
-// That's fine at this app's current size, but it's needless Firestore
-// read cost + battery drain once the department's usage grows AND the
-// tab/app is sitting backgrounded (phone locked, browser tab switched
-// away) — reads keep streaming in for a badge nobody's looking at.
-// So: stay subscribed (for the live badge) while GeoHub is actually
-// in the foreground, but detach after a short grace period once the
-// page is hidden, and reattach the moment it's visible again. A quick
-// tab-switch-and-back doesn't cost a detach/reattach cycle; genuinely
-// backgrounding the app for a while does.
-// ----------------------------------------------------------------
 const BACKGROUND_DETACH_DELAY_MS = 60 * 1000;
 let backgroundDetachTimer = null;
 let visibilityHandlerAttached = false;
 
 function subscribeNotifications() {
-  if (unsubscribeNotices || unsubscribeActivityPublic || unsubscribeActivityPrivate) return; // already live
+  if (unsubscribeNotices || unsubscribeActivityPublic || unsubscribeActivityPrivate) return;
 
   const q = query(collection(db, "notices"), orderBy("createdAt", "desc"));
   unsubscribeNotices = onSnapshotWithRetry(q, (snap) => {
@@ -249,32 +195,6 @@ function subscribeNotifications() {
     showToast(message, { details: technical });
   });
 
-  // ----------------------------------------------------------------
-  // IMPORTANT: this used to be ONE onSnapshot over the whole "activity"
-  // collection with no `where` clause. That silently broke live updates
-  // the moment a single "comment" or "like" doc existed anywhere: Firestore
-  // security rules are NOT filters — "rules are not filters" is the
-  // official Firestore behavior (a query is rejected outright, not
-  // filtered down, if it could possibly return a document the rules
-  // wouldn't let the caller read). Since comment/like docs are only
-  // readable by their targetUid, an unfiltered query over the whole
-  // collection became unsafe the instant one existed, so Firestore
-  // returned permission-denied for EVERY user's listener — and the old
-  // error handler here swallowed that silently as "no activity yet",
-  // which is exactly why the badge/list stopped updating live while push
-  // (a completely separate, server-side FCM path that never touches these
-  // rules) kept working fine. Splitting into two rule-safe queries fixes
-  // it: each one only asks for documents the rules already guarantee it
-  // can read.
-  //
-  // NOTE: combining `where` with `orderBy` on a different field needs a
-  // composite Firestore index — that used to mean these queries silently
-  // failed (permission/precondition errors) until someone manually created
-  // the index in the console. To avoid requiring that manual step, we drop
-  // orderBy here (an "in" filter alone needs no composite index) and pull a
-  // generous page instead of a tight one; mergedActivity() below already
-  // sorts everything client-side and trims to the newest 60 for display.
-  // ----------------------------------------------------------------
   const publicQ = query(
     collection(db, "activity"),
     where("type", "in", ["post", "resource", "notice"]),
@@ -288,13 +208,6 @@ function subscribeNotifications() {
     renderActivityList();
   }, (err) => {
     console.error("Couldn't load public activity feed:", err.code, err.message);
-    // Surfaced as a toast (not just console.error) because on a phone there's
-    // no devtools to check — this is the single most useful diagnostic if the
-    // Notification tab ever goes blank again: it will say either
-    // "permission-denied" (rules/query mismatch) or "failed-precondition"
-    // (missing Firestore composite index — the error also contains a direct
-    // link to create it, visible by tapping "Copy error" in most browsers'
-    // address bar / share sheet, or by reading it over someone's desktop).
     activityFeedError = err.code || err.message;
     const { message, technical } = friendlyError(err, "Couldn't load the notification feed.");
     showToast(message, { details: technical });
@@ -328,7 +241,6 @@ function subscribeNotifications() {
   }
 }
 
-/** Detach the three listeners above without touching anything else (routine doc, report-count, local read-state). Last-known data stays on screen — just stops streaming updates — until subscribeNotifications() runs again. */
 function unsubscribeNotifications() {
   if (unsubscribeNotices) { unsubscribeNotices(); unsubscribeNotices = null; }
   if (unsubscribeActivityPublic) { unsubscribeActivityPublic(); unsubscribeActivityPublic = null; }
@@ -338,27 +250,19 @@ function unsubscribeNotifications() {
 function handleVisibilityChange() {
   if (document.hidden) {
     clearTimeout(backgroundDetachTimer);
-    // Grace period so a quick tab-switch-and-back (or the phone screen
-    // blinking off for a second) never costs a detach/reattach round trip
-    // — only a genuine "backgrounded for a while" does.
     backgroundDetachTimer = setTimeout(() => {
       if (document.hidden) unsubscribeNotifications();
     }, BACKGROUND_DETACH_DELAY_MS);
   } else {
     clearTimeout(backgroundDetachTimer);
-    subscribeNotifications(); // no-op if already live
+    subscribeNotifications();
   }
 }
 
 export function initRoutine() {
-  // Paint instantly from whatever's cached locally...
   noticeReadIds = loadReadIdsLocal("notice");
   activityReadIds = loadReadIdsLocal("activity");
   dismissedActivityIds = loadReadIdsLocal("activity_dismissed");
-  // ...then merge in Firestore's copy (see the big comment on this block
-  // above), which is what makes read/deleted state survive a cleared
-  // localStorage. Each merge re-saves locally too, so next launch is
-  // instant again without needing another round-trip.
   mergeReadIdsFromCloud("notice", noticeReadIds).then(merged => {
     noticeReadIds = merged;
     saveReadIds("notice", noticeReadIds);
@@ -420,15 +324,6 @@ function setBadgeEl(el, count) {
   el.classList.toggle("hidden", count === 0);
 }
 
-/**
- * Recomputes the header bell (total) and each Notices tab's own count
- * (Notice / Notification, counted separately). Reported Posts has its own
- * page now with its own topbar badge (see watchOpenReportCount below), so
- * it's no longer folded in here. None of these three clear just because a
- * tab or the page was opened — only reading (or deleting) the specific
- * notice/notification behind the count does, via
- * markNoticeRead()/markActivityRead()/markAllActivityRead().
- */
 function updateNoticeBadge() {
   const unreadNotices = latestNotices.filter(n => !noticeReadIds.has(n.id)).length;
   const unreadActivity = mergedActivity().filter(visibleToMe)
@@ -461,7 +356,7 @@ function wireNoticesPageTabs() {
       });
       section.querySelectorAll(".notices-page-panel").forEach(p =>
         p.classList.toggle("active", p.dataset.panel === btn.dataset.tab));
-      resetScrollForTabs(tabsEl); // each tab starts at its own top, instead of inheriting the previous tab's scroll position
+      resetScrollForTabs(tabsEl);
     });
   });
 }
@@ -471,7 +366,7 @@ function wireNoticesPageTabs() {
 // ============================================================
 function renderNoticeTabBody() {
   const host = document.getElementById("notice-tab-body");
-  if (!host) return; // page not in the DOM yet
+  if (!host) return;
 
   if (!host.dataset.shellBuilt) {
     const isAdmin = !!(auth.currentUser && ADMIN_EMAILS.includes(auth.currentUser.email));
@@ -511,20 +406,8 @@ let unsubscribeReports = null;
 let openReportCount = 0;
 let openReports = [];
 
-/**
- * Keeps the open reports (and their count) live for the whole admin
- * session — started from initRoutine() as soon as an admin signs in (not
- * lazily when the Reports page happens to be opened), so the topbar badge
- * reflects a new report right away, and so a push arriving for one is
- * backed by the same "something needs your attention" signal shown in
- * the UI, and the page itself is already populated the moment it's opened.
- */
 function subscribeReports() {
   if (unsubscribeReports) return;
-  // A where()+orderBy() combo on different fields needs a composite
-  // Firestore index. This admin-only collection is always small, so we
-  // drop the orderBy (an equality-only where needs no composite index)
-  // and sort client-side instead — same result, no manual index setup.
   const q = query(collection(db, "reports"), where("resolved", "==", false));
   unsubscribeReports = onSnapshotWithRetry(q, (snap) => {
     openReportCount = snap.size;
@@ -533,13 +416,12 @@ function subscribeReports() {
     setBadgeEl(document.getElementById("admin-reports-badge"), openReportCount);
     setBadgeEl(document.getElementById("topbar-settings-badge"), openReportCount);
     renderReportsPage();
-  }, () => { /* not admin, or offline — page/badge just stay at their last known state */ });
+  }, () => { });
 }
 
-/** Renders the live Reported Posts list — same View/Dismiss/Remove actions the old modal had, just on their own page now. Re-run automatically by subscribeReports() on every change, so dismissing/removing one just quietly drops it from the list rather than needing a manual row.remove(). */
 function renderReportsPage() {
   const listEl = document.getElementById("reports-page-list");
-  if (!listEl) return; // page not in the DOM yet
+  if (!listEl) return;
   if (!openReports.length) {
     listEl.innerHTML = `<p class="empty-state">No open reports. 🎉</p>`;
     return;
@@ -567,7 +449,6 @@ function renderReportsPage() {
       setBtnLoading(e.currentTarget, true, "…");
       try {
         await updateDoc(doc(db, "reports", reportId), { resolved: true });
-        // No manual row.remove() — the live listener above re-renders without it.
       } catch (err) {
         const { message, technical } = friendlyError(err, "Couldn't dismiss.");
         showToast(message, { details: technical });
@@ -619,7 +500,7 @@ function renderNoticesList() {
 
   noticeList.querySelectorAll(".notice-row").forEach(row =>
     row.addEventListener("click", (e) => {
-      if (e.target.closest(".kebab-menu")) return; // let the kebab handle its own click
+      if (e.target.closest(".kebab-menu")) return;
       openNoticeDetail(row.dataset.id);
     }));
 
@@ -631,14 +512,13 @@ function renderNoticesList() {
       confirmLabel: "Delete",
       onConfirm: async () => {
         await deleteDoc(doc(db, "notices", noticeId));
-        deleteActivityForNotice(noticeId); // best-effort: drop its "posted a notice" feed entry too
+        deleteActivityForNotice(noticeId);
         showToast("Notice deleted.");
       }
     })
   });
 }
 
-/** Switch to the Notice tab and open a specific notice — used by global search results. */
 export function openNoticeById(noticeId) {
   switchToNoticeTab();
   openNoticeDetail(noticeId);
@@ -647,7 +527,7 @@ export function openNoticeById(noticeId) {
 function openNoticeDetail(noticeId) {
   const n = latestNotices.find(x => x.id === noticeId);
   if (!n) return;
-  markNoticeRead(noticeId); // the Notice tab badge only drops once this specific notice has been opened
+  markNoticeRead(noticeId);
   openModal(`
     <div class="notice-detail-modal">
       <div class="notice-detail-head">
@@ -684,7 +564,7 @@ function openEditNoticeModal(noticeId) {
       await updateDoc(doc(db, "notices", noticeId), {
         text, urgent: document.getElementById("notice-edit-urgent").checked
       });
-      closeModal(); // the live "notices" listener already re-renders the page underneath
+      closeModal();
       showToast("Notice updated.");
     } catch (err) {
       document.getElementById("notice-edit-error").textContent = "Couldn't update notice: " + err.message;
@@ -712,7 +592,7 @@ async function postNotice() {
     });
     input.value = "";
     urgent.checked = false;
-    input.dispatchEvent(new Event("input")); // refresh the char counter now that the field's been cleared
+    input.dispatchEvent(new Event("input"));
     showToast("Notice posted.");
     logActivity({ type: "notice", text, noticeId: noticeRef.id });
     triggerPush({ type: "notice", text, urgent: wasUrgent, noticeId: noticeRef.id });
@@ -731,12 +611,6 @@ async function postNotice() {
 // reads the resulting "activity" collection.
 // ============================================================
 
-/**
- * Best-effort activity log entry — never blocks or fails the action that
- * triggered it. postId/resourceId/noticeId identify the actual content the
- * notification is about, so clicking it in the Notification tab can jump
- * straight to that content instead of just opening the actor's profile.
- */
 export async function logActivity({ type, text = "", targetUid = null, postId = null, resourceId = null, noticeId = null, deadlineId = null }) {
   if (!auth.currentUser) return;
   try {
@@ -758,16 +632,6 @@ export async function logActivity({ type, text = "", targetUid = null, postId = 
   }
 }
 
-/**
- * Cascade-delete cleanup: when the thing an activity entry is ABOUT gets
- * deleted (a Wall post, a shared resource, a notice), its activity
- * entries — the "X posted…"/"liked your post"/"commented on…" feed items,
- * and the private per-uid ones targeted at the author — should disappear
- * from the Notification tab too, instead of lingering as a notification
- * for content that no longer exists. Best-effort: never blocks or fails
- * the delete that triggered it (see firestore.rules for who's allowed to
- * delete an activity doc).
- */
 async function deleteActivityMatching(field, value) {
   if (!value) return;
   try {
@@ -777,13 +641,9 @@ async function deleteActivityMatching(field, value) {
     console.warn(`Couldn't clean up activity where ${field}=${value}:`, err.message);
   }
 }
-/** Call after deleting a Wall post — removes its post/comment/like activity entries. */
 export function deleteActivityForPost(postId) { return deleteActivityMatching("postId", postId); }
-/** Call after deleting a shared resource — removes its "shared a note/sheet" entry. */
 export function deleteActivityForResource(resourceId) { return deleteActivityMatching("resourceId", resourceId); }
-/** Call after deleting a notice — removes its "posted a notice" entry. */
 export function deleteActivityForNotice(noticeId) { return deleteActivityMatching("noticeId", noticeId); }
-/** Call after deleting a deadline — removes its "posted a deadline" entry. */
 export function deleteActivityForDeadline(deadlineId) { return deleteActivityMatching("deadlineId", deadlineId); }
 
 function truncate(text, max) {
@@ -811,11 +671,6 @@ function renderActivityList() {
 
   const activity = mergedActivity().filter(visibleToMe).filter(a => !dismissedActivityIds.has(a.id));
 
-  // Distinguish "genuinely nothing has happened yet" from "the feed failed to
-  // load" — these used to look identical ("No recent activity yet."), which is
-  // exactly what made the underlying permission/index bug invisible. Showing
-  // the raw Firestore error code here means the fix (or next bug) is visible
-  // on the phone itself, no devtools needed.
   if (activityFeedError) {
     host.innerHTML = `<p class="empty-state">Couldn't load notifications (${escapeHtml(activityFeedError)}). Pull to refresh, or tell your admin this code.</p>`;
     return;
@@ -853,15 +708,13 @@ function renderActivityList() {
     const a = activity[Number(row.dataset.index)];
     if (!a) return;
     row.addEventListener("click", (e) => {
-      if (e.target.closest(".kebab-menu")) return; // let the kebab handle its own click
-      markActivityRead(a.id); // Notification tab badge only drops once this specific entry has been opened
+      if (e.target.closest(".kebab-menu")) return;
+      markActivityRead(a.id);
       openActivityDestination(a);
     });
   });
 
   wireKebabMenus(host, {
-    // Removes it from THIS person's Notification tab only — see
-    // dismissActivity() for why nothing is deleted server-side.
     delete: (activityId) => dismissActivity(activityId)
   });
 }
@@ -877,7 +730,7 @@ async function openActivityDestination(a) {
     case "like":
     case "comment":
     case "mention": {
-      if (!a.postId) return; // older entries logged before postId existed
+      if (!a.postId) return;
       const { openPostDetailPage } = await import("./post-detail.js");
       openPostDetailPage(a.postId, { focusComment: a.type === "comment" });
       break;
@@ -915,7 +768,6 @@ async function openActivityDestination(a) {
   }
 }
 
-/** Switches the Notices & Notifications page over to its "Notice" tab. */
 function switchToNoticeTab() {
   const section = document.getElementById("section-notices");
   if (!section) return;
@@ -967,16 +819,6 @@ function renderRoutineTable() {
   routineTable.innerHTML = html || `<p class="empty-state">Routine has not been published yet.</p>`;
 }
 
-// ----------------------------------------------------------------
-// IN-APP ROUTINE EDITOR (admin only, enforced again server-side by
-// firestore.rules) — replaces having to edit the routine/weekly doc by
-// hand in the Firebase Console. One card per day; each day holds a list
-// of {time, subject, room} slot rows that can be added/removed freely.
-// Saving overwrites the WHOLE doc (not a merge) so a day/slot that was
-// removed in the editor actually disappears from the published routine,
-// then drops a "routine updated" Notification-tab entry + push to the
-// whole department, the same way posting a Notice does.
-// ----------------------------------------------------------------
 function slotRowHtml(s = {}) {
   return `
     <div class="routine-editor-slot-row">
@@ -1025,7 +867,6 @@ function wireRoutineEditor() {
       dayEl.querySelector(".routine-editor-slot-list").insertAdjacentHTML("beforeend", slotRowHtml());
     });
   });
-  // Delegated so it keeps working for rows added by "Add class" above, not just the ones rendered on open.
   host.addEventListener("click", (e) => {
     const removeBtn = e.target.closest("[data-remove-slot]");
     if (removeBtn) removeBtn.closest(".routine-editor-slot-row").remove();
@@ -1047,7 +888,7 @@ async function saveRoutine() {
       const time = row.querySelector(".rt-time").value.trim();
       const subject = row.querySelector(".rt-subject").value.trim();
       const room = row.querySelector(".rt-room").value.trim();
-      if (!time && !subject && !room) continue; // a fully blank row is just skipped, not an error
+      if (!time && !subject && !room) continue;
       if (!time || !subject) {
         errorEl.textContent = `${day}: please fill in both time and subject, or remove that row.`;
         return;
@@ -1060,9 +901,6 @@ async function saveRoutine() {
   errorEl.textContent = "";
   setBtnLoading(btn, true, "Saving…");
   try {
-    // Full overwrite (not updateDoc/merge) — a day or slot removed in the
-    // editor is meant to actually disappear from the published routine,
-    // not linger because a merge only ever adds/replaces fields.
     await setDoc(doc(db, "routine", "weekly"), payload);
     closeModal();
     showToast("Routine updated.");
@@ -1079,7 +917,7 @@ async function saveRoutine() {
 }
 
 export function teardownRoutine() {
-  unsubscribeNotifications(); // also nulls out unsubscribeNotices/ActivityPublic/ActivityPrivate
+  unsubscribeNotifications();
   if (unsubscribeReports) unsubscribeReports();
   unsubscribeReports = null;
   if (unsubscribeRoutineDoc) { unsubscribeRoutineDoc(); unsubscribeRoutineDoc = null; }

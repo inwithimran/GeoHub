@@ -42,7 +42,7 @@ let unsubscribeDeadlines = null;
 let deadlinesLoaded = false;
 
 export function initDeadlines() {
-  if (!listEl) return; // page markup not present (shouldn't happen, but keep this best-effort)
+  if (!listEl) return;
 
   const isAdmin = !!(auth.currentUser && ADMIN_EMAILS.includes(auth.currentUser.email));
   if (addBtn) {
@@ -53,7 +53,7 @@ export function initDeadlines() {
     }
   }
 
-  if (unsubscribeDeadlines) return; // already subscribed
+  if (unsubscribeDeadlines) return;
   const q = query(collection(db, "deadlines"), orderBy("dueAt", "asc"));
   unsubscribeDeadlines = onSnapshotWithRetry(q, (snap) => {
     allDeadlines = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -85,7 +85,6 @@ function typeGlyph(type) {
   }
 }
 
-/** Human "Due in 2 days" / "Due today" / "Due tomorrow" / "Overdue by 3 days". */
 function dueLabel(dueAt) {
   const due = dueAt?.toDate?.();
   if (!due) return "";
@@ -149,7 +148,7 @@ function renderDeadlines() {
       confirmLabel: "Delete",
       onConfirm: async () => {
         await deleteDoc(doc(db, "deadlines", id));
-        deleteActivityForDeadline(id); // best-effort: drop its "posted a deadline" notification too
+        deleteActivityForDeadline(id);
         showToast("Deadline deleted.");
       }
     })
@@ -176,7 +175,6 @@ function typeOptionsHtml(selected) {
   return DEADLINE_TYPES.map(t => `<option value="${t}" ${t === selected ? "selected" : ""}>${t}</option>`).join("");
 }
 
-/** Local <input type="datetime-local"> value -> JS Date (interpreted in the student's own timezone). */
 function parseLocalDateTime(value) {
   if (!value) return null;
   const d = new Date(value);
@@ -290,9 +288,6 @@ function openEditDeadlineModal(id) {
     if (!dueDate) { errorEl.textContent = "Please pick a due date and time."; return; }
     setBtnLoading(e.currentTarget, true, "Saving…");
     try {
-      // Changing the due date re-arms the "due tomorrow" reminder push by
-      // clearing remindedAt — otherwise pushing a deadline back a week
-      // after the original reminder already fired would silently skip it.
       const dueChanged = !d.dueAt || d.dueAt.toDate().getTime() !== dueDate.getTime();
       await updateDoc(doc(db, "deadlines", id), {
         title, type, course, notes,
@@ -310,7 +305,6 @@ function openEditDeadlineModal(id) {
   });
 }
 
-/** Jump to (and flash) a specific deadline row — used by the global search results and Notification tab. */
 export function focusDeadline(deadlineId) {
   requestAnimationFrame(() => {
     const el = listEl?.querySelector(`.deadline-row[data-deadline-id="${deadlineId}"]`);

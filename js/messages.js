@@ -38,7 +38,6 @@ import { getAllStudents } from "./directory.js";
 import { isUserOnline, avatarPresenceDotHtml, presenceTextHtml, paintPresenceUI } from "./presence.js";
 import { triggerPush } from "./push-trigger.js";
 
-// ---------- Shared element refs ----------
 const subtabBtns = document.querySelectorAll(".msg-subtab-btn");
 const subtabPanels = document.querySelectorAll(".msg-subtab-panel");
 
@@ -49,9 +48,6 @@ const classChatSendBtn = document.getElementById("class-chat-send-btn");
 const classChatOnlineCount = document.getElementById("class-chat-online-count");
 
 const dmListEl = document.getElementById("dm-conversation-list");
-// Each sub-tab shows only its OWN unread count; the header/bottom-nav
-// "Messages" badges are the combined total of both, so they still light
-// up no matter which sub-tab a new message landed in.
 const dmTabBadge = document.getElementById("dm-total-unread-badge");
 const classChatTabBadge = document.getElementById("class-chat-unread-badge");
 const navTotalBadges = [
@@ -75,7 +71,6 @@ let goToRouteRef = null;
 let goBackToRouteRef = null;
 export function registerDmThreadRouter(goToRoute, goBackToRoute) { goToRouteRef = goToRoute; goBackToRouteRef = goBackToRoute; }
 
-/** Deterministic conversation id for a pair of students — order-independent. */
 function dmConversationId(uidA, uidB) {
   return [uidA, uidB].sort().join("_");
 }
@@ -89,8 +84,6 @@ function dmConversationId(uidA, uidB) {
 // conversation on purpose: blocking someone doesn't touch the Wall,
 // Class Chat, or anything else they can see.
 // ============================================================
-/** One-time read of the block state between the signed-in student and `otherUid` —
- *  never creates the conversation doc, so just viewing a profile can't spawn one. */
 export async function getBlockState(otherUid) {
   const myUid = auth.currentUser?.uid;
   if (!myUid || !otherUid) return { blockedByMe: false, blockedByThem: false };
@@ -99,7 +92,6 @@ export async function getBlockState(otherUid) {
   return { blockedByMe: blockedBy.includes(myUid), blockedByThem: blockedBy.includes(otherUid) };
 }
 
-/** Block or unblock `otherUid` from the signed-in student's own side. */
 export async function setDmBlocked(otherUid, blocked) {
   const myUid = auth.currentUser?.uid;
   if (!myUid || !otherUid) return;
@@ -113,16 +105,11 @@ export async function setDmBlocked(otherUid, blocked) {
 // SUB-TABS — Class Chat / Direct Messages. A plain show/hide toggle,
 // same tab pattern as a classmate's Profile page (profile-view.js).
 // ============================================================
-/** Whether the Class Chat sub-tab (full live room + composer) is the one currently showing — used to also hide the bottom nav for it, same as a DM thread. */
 export function isClassChatSubtabActive() {
   return document.querySelector(".msg-subtab-btn.active")?.dataset.msgtab === "class";
 }
 
 function syncMessageChatMode() {
-  // Only the Messages route ever has this section visible, so it's safe
-  // to flip chat-mode straight from a sub-tab click — see app.js's own
-  // route-level toggle (which handles every other route, and re-syncs
-  // this whenever the Messages route is (re)entered from elsewhere).
   document.getElementById("app-shell")?.classList.toggle("chat-mode", isClassChatSubtabActive());
 }
 
@@ -138,9 +125,6 @@ function wireSubtabs() {
     if (name === "class") markClassChatRead();
   }
   subtabBtns.forEach(btn => btn.addEventListener("click", () => activateSubtab(btn.dataset.msgtab)));
-  // Department Chat hides the bottom nav (see syncMessageChatMode/chat-mode),
-  // so — just like an open DM thread — it needs its own way back rather than
-  // relying on nav the person can no longer see.
   document.getElementById("class-chat-back-btn")?.addEventListener("click", () => activateSubtab("dm"));
 }
 
@@ -149,27 +133,17 @@ function wireSubtabs() {
 // ============================================================
 const CLASS_CHAT_TEXT_LIMIT = 1000;
 let unsubscribeClassChat = null;
-let classChatAtBottom = true; // whether the reader is scrolled near the bottom right now
+let classChatAtBottom = true;
 
-// ---- Class Chat's own unread badge ----
-// Class Chat has no per-message read-state (it's one shared room, not a
-// per-pair `unread` map like DMs), so instead each student gets one tiny
-// doc — classChatReads/{myUid} — holding only "when did I last look at
-// this". Unread is just "how many of the last 150 loaded messages are
-// from someone else and newer than that timestamp".
 let classChatMessages = [];
 let classChatLastReadMs = 0;
 let unsubscribeClassChatRead = null;
-let dmUnreadTotal = 0; // kept alongside Class Chat's own count so the nav badges can show the combined total
+let dmUnreadTotal = 0;
 
 function isNearBottom(el, slack = 80) {
   return el.scrollHeight - el.scrollTop - el.clientHeight < slack;
 }
 
-/** Renders a list of {id,...} chat docs (classChat OR one DM thread's messages) into `listEl` as grouped bubbles.
- *  `showNames`: Class Chat is a shared room (many voices), so each new sender needs a name label above their
- *  bubbles. A DM thread is always exactly the two of you — repeating "the other person's name" over and over
- *  is just noise there, so DM rendering passes this false and skips it. */
 function renderChatBubbles(listEl, docs, { emptyText, showNames = true }) {
   if (!docs.length) {
     listEl.innerHTML = `<div class="chat-empty">${escapeHtml(emptyText)}</div>`;
@@ -189,27 +163,16 @@ function renderChatBubbles(listEl, docs, { emptyText, showNames = true }) {
     if (dayKey !== lastDayKey) {
       lastDayKey = dayKey;
       html += `<div class="chat-day-divider">${escapeHtml(new Date(ms).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }))}</div>`;
-      prevSenderUid = null; // always show the header again right after a day divider
+      prevSenderUid = null;
     }
-    // Group consecutive messages from the same person within 5 minutes —
-    // skip re-showing their avatar/name for a tighter, more "chat-like" feel.
     const grouped = prevSenderUid === uid && (ms - prevMs) < 5 * 60 * 1000;
     prevSenderUid = uid;
     prevMs = ms;
 
     const profile = authorProfile(uid, m.authorName);
     const timeLabel = new Date(ms).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-    const canDelete = mine; // an admin could be added here too, but a chat message is low-stakes — owner-only keeps this simple
+    const canDelete = mine;
 
-    // No visible three-dot on the bubble itself — press-and-hold on the
-    // bubble (see wireMessageLongPress below) pops the Copy/Delete menu
-    // instead, the same gesture Messenger/WhatsApp use, so the message
-    // list itself stays clean of a permanent extra icon on every row.
-    // The raw text for Copy is looked up from messageTextCache by id
-    // rather than round-tripped through a data-attribute — escapeHtml()
-    // only escapes what's safe inside HTML *content*, not inside a quoted
-    // attribute, so a message containing a literal `"` would otherwise
-    // break out of the attribute.
     messageTextCache.set(m.id, m.text || "");
     html += `
       <div class="chat-bubble-row ${mine ? "mine" : ""}" data-msg-id="${escapeHtml(m.id)}" data-can-delete="${canDelete ? "1" : "0"}">
@@ -233,15 +196,14 @@ function renderChatBubbles(listEl, docs, { emptyText, showNames = true }) {
 // a small menu next to it. Shared by Class Chat and DM thread bubbles.
 // ============================================================
 const LONG_PRESS_MS = 420;
-const LONG_PRESS_MOVE_TOLERANCE = 10; // px of finger drift before it's treated as a scroll, not a hold
-const messageTextCache = new Map(); // msgId -> raw text, refreshed on every render; see the comment above for why this exists instead of a data-attribute
+const LONG_PRESS_MOVE_TOLERANCE = 10;
+const messageTextCache = new Map();
 
 function closeMessageActionMenu() {
   document.querySelector(".msg-action-backdrop")?.remove();
 }
 document.addEventListener("scroll", closeMessageActionMenu, true);
 
-/** Wire press-and-hold on every not-yet-wired bubble under `listEl`. Re-safe to call on every re-render. */
 function wireMessageLongPress(listEl) {
   listEl.querySelectorAll(".chat-bubble-row").forEach((row) => {
     const bubble = row.querySelector(".chat-bubble");
@@ -258,7 +220,7 @@ function wireMessageLongPress(listEl) {
     };
     const trackMove = (e) => {
       if (Math.abs(e.clientX - startX) > LONG_PRESS_MOVE_TOLERANCE || Math.abs(e.clientY - startY) > LONG_PRESS_MOVE_TOLERANCE) {
-        cancelPress(); // finger is scrolling the list, not holding the bubble
+        cancelPress();
       }
     };
 
@@ -267,14 +229,10 @@ function wireMessageLongPress(listEl) {
     bubble.addEventListener("pointerleave", cancelPress);
     bubble.addEventListener("pointercancel", cancelPress);
     bubble.addEventListener("pointermove", trackMove);
-    // Same reasoning as the reaction long-press fix on the Wall: suppress the
-    // phone's own text-selection/"Copy" callout so it can't fight this hold
-    // gesture for the same press.
     bubble.addEventListener("contextmenu", (e) => e.preventDefault());
   });
 }
 
-/** Pops the small Copy/Delete menu next to `row`'s bubble, clamped to stay on-screen either above or below it. */
 function openMessageActionMenu(row) {
   closeMessageActionMenu();
   const text = messageTextCache.get(row.dataset.msgId) || "";
@@ -300,15 +258,13 @@ function openMessageActionMenu(row) {
   backdrop.appendChild(menu);
   document.body.appendChild(backdrop);
 
-  // Anchor the menu to the bubble's own on-screen position, then clamp it
-  // inside the viewport — measuring only works once it's actually in the DOM.
   const rowRect = row.getBoundingClientRect();
   const menuRect = menu.getBoundingClientRect();
   const gap = 8;
   let left = mine ? rowRect.right - menuRect.width : rowRect.left;
   left = Math.min(Math.max(left, 8), window.innerWidth - menuRect.width - 8);
-  let top = rowRect.top - menuRect.height - gap; // prefer opening above the bubble
-  if (top < 8) top = Math.min(rowRect.bottom + gap, window.innerHeight - menuRect.height - 8); // not enough room above — open below instead
+  let top = rowRect.top - menuRect.height - gap;
+  if (top < 8) top = Math.min(rowRect.bottom + gap, window.innerHeight - menuRect.height - 8);
   menu.style.left = `${left}px`;
   menu.style.top = `${top}px`;
 
@@ -344,7 +300,6 @@ function deleteClassChatMessage(msgId) {
   });
 }
 
-/** "3 classmates online" under the Class Chat header — recomputed from the Directory's live roster + presence. */
 function paintClassChatOnlineCount() {
   if (!classChatOnlineCount) return;
   const students = getAllStudents();
@@ -355,7 +310,6 @@ function paintClassChatOnlineCount() {
   classChatOnlineCount.classList.toggle("online-now", onlineCount > 0);
 }
 
-/** The header/bottom-nav "Messages" badges show DM + Class Chat combined, so a new message in either lights them up. */
 function paintNavTotalBadge() {
   const total = dmUnreadTotal + classChatUnreadCount();
   navTotalBadges.forEach(el => {
@@ -380,40 +334,27 @@ function paintClassChatBadge() {
   paintNavTotalBadge();
 }
 
-/** Marks Class Chat as read right now — called the moment its sub-tab opens, and again for any message that arrives while it's already the active sub-tab (same "opening/staying on it is what reads it" idea as markConversationRead() for a DM thread). */
 function markClassChatRead() {
   const myUid = auth.currentUser?.uid;
   if (!myUid) return;
-  classChatLastReadMs = Date.now(); // paint instantly; the write below (and its own onSnapshot) settles the real value right after
+  classChatLastReadMs = Date.now();
   paintClassChatBadge();
   setDoc(doc(db, "classChatReads", myUid), { lastReadAt: serverTimestamp() }, { merge: true }).catch(() => {});
 }
 
-/** Keeps classChatLastReadMs live for the whole session, same "started once at init, not lazily on tab open" reasoning as watchOpenReportCount() in routine.js — so the badge is accurate even before Messages has ever been opened. */
 function subscribeClassChatRead() {
   const myUid = auth.currentUser?.uid;
   if (!myUid || unsubscribeClassChatRead) return;
   unsubscribeClassChatRead = onSnapshotWithRetry(doc(db, "classChatReads", myUid), (snap) => {
     const lastReadAt = snap.data()?.lastReadAt;
-    // markClassChatRead()'s setDoc(..., serverTimestamp()) fires this listener
-    // TWICE for the same write: once immediately with the local/pending
-    // version (where a serverTimestamp() sentinel reads back as null until
-    // the server confirms it), then again once it's actually confirmed. If
-    // we trusted the first one, `lastReadAt?.toMillis?.() || 0` would reset
-    // classChatLastReadMs to 0 for that instant — every message would look
-    // unread again — and the badge would flash back on before immediately
-    // clearing once the real timestamp lands. Skip that in-between echo.
     if (snap.metadata.hasPendingWrites && lastReadAt == null) return;
     classChatLastReadMs = snap.exists() ? (lastReadAt?.toMillis?.() || 0) : 0;
     paintClassChatBadge();
-  }, () => { /* no doc yet (never opened Class Chat before), or offline — badge just stays at its last known count */ });
+  }, () => { });
 }
 
 function subscribeClassChat() {
   if (unsubscribeClassChat) return;
-  // Capped to the most recent 150 messages — a live room doesn't need
-  // full history loaded on every open, same pagination trade-off the
-  // Wall/Directory already make elsewhere in this app.
   const q = query(collection(db, "classChat"), orderBy("createdAt", "asc"), limitToLast(150));
   unsubscribeClassChat = onSnapshotWithRetry(q, (snap) => {
     const wasNearBottom = classChatAtBottom || classChatList.dataset.everLoaded !== "1";
@@ -422,7 +363,6 @@ function subscribeClassChat() {
     renderChatBubbles(classChatList, msgs, { emptyText: "No messages yet — say hello to the department!" });
     classChatList.dataset.everLoaded = "1";
     if (wasNearBottom) classChatList.scrollTop = classChatList.scrollHeight;
-    // Any incoming message while this sub-tab is already open counts as read immediately.
     if (isClassChatSubtabActive()) markClassChatRead();
     else paintClassChatBadge();
   }, (err) => {
@@ -437,7 +377,7 @@ async function submitClassChat() {
   if (!text || classChatSendBtn.disabled) return;
   classChatInput.value = "";
   classChatSendBtn.disabled = true;
-  classChatAtBottom = true; // sending your own message should always snap the view to it
+  classChatAtBottom = true;
   try {
     const msgRef = await addDoc(collection(db, "classChat"), {
       authorUid: auth.currentUser.uid,
@@ -452,7 +392,7 @@ async function submitClassChat() {
       messageId: msgRef.id
     });
   } catch (err) {
-    classChatInput.value = text; // hand the text back so nothing typed is lost
+    classChatInput.value = text;
     const { message, technical } = friendlyError(err, "Couldn't send that message.");
     showToast(message, { details: technical });
   }
@@ -526,10 +466,6 @@ function subscribeConversations() {
   if (unsubscribeConversations) return;
   const myUid = auth.currentUser?.uid;
   if (!myUid) return;
-  // No orderBy here on purpose — array-contains + orderBy on a different
-  // field needs a composite index. Fetching unsorted and sorting client-
-  // side (same trade-off directory.js makes for the classmate list) keeps
-  // this working with zero Firestore console setup.
   const q = query(collection(db, "conversations"), where("participants", "array-contains", myUid));
   unsubscribeConversations = onSnapshotWithRetry(q, (snap) => {
     allConversations = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -541,7 +477,6 @@ function subscribeConversations() {
   });
 }
 
-/** Make sure the two-person conversation doc exists; returns its id. Safe to call repeatedly. */
 async function ensureConversation(otherUid) {
   const myUid = auth.currentUser.uid;
   const id = dmConversationId(myUid, otherUid);
@@ -574,17 +509,10 @@ let currentDmConversationId = null;
 let unsubscribeDmMessages = null;
 let unsubscribeDmConversation = null;
 let dmThreadAtBottom = true;
-// conversationId -> last-rendered messages array. Lets a thread you've
-// already opened this session redraw instantly from memory instead of
-// flashing back to the "Loading conversation…" skeleton every single
-// time it's reopened — the live listener still re-attaches and repaints
-// it with anything fresh a moment later, same as before.
 const dmMessageCache = new Map();
 
-/** The classmate uid whose thread is currently open (null if the page isn't open) — mirrors getOpenProfileUid()/getOpenPostId(). */
 export function getOpenDmUid() { return currentDmUid; }
 
-/** Call whenever navigating away from the thread page. */
 export function teardownDmThread() {
   if (unsubscribeDmMessages) unsubscribeDmMessages();
   if (unsubscribeDmConversation) unsubscribeDmConversation();
@@ -598,10 +526,6 @@ function dmThreadSkeletonHtml() {
   return `<div class="chat-empty" aria-hidden="true">Loading conversation…</div>`;
 }
 
-/** Reflects the conversation's live `blockedBy` array in the thread UI: the
- *  composer is swapped for a bar (either "You've blocked them" + Unblock,
- *  or a plain "can't message" notice if they've blocked you instead), and
- *  the header's three-dot menu item relabels itself Block/Unblock. */
 function paintDmBlockState(otherUid, blockedBy) {
   const myUid = auth.currentUser?.uid;
   const blockedByMe = blockedBy.includes(myUid);
@@ -641,12 +565,6 @@ function renderDmThreadHeader(uid) {
   paintPresenceUI();
 }
 
-/** Shown instead of the normal thread UI when `uid` doesn't correspond to a
- *  real classmate profile — most commonly a stale or mistyped uid in a
- *  shared link/bookmark (e.g. #dm-thread?id=...). Mirrors the "not found"
- *  treatment openUserProfilePage already gives a bad profile link (see
- *  profile-view.js) — never falls back to opening some other classmate's
- *  inbox, or creating a conversation doc for a uid that isn't real. */
 function renderDmThreadNotFound() {
   const topbarTitle = document.getElementById("topbar-title");
   if (topbarTitle) topbarTitle.textContent = "Private Message";
@@ -657,12 +575,6 @@ function renderDmThreadNotFound() {
   dmThreadBlockedBar?.classList.add("hidden");
 }
 
-/**
- * Open the DM thread with `uid` — used by a Directory row's Message button,
- * a classmate's Profile page Message button, and tapping a row in the
- * Direct Messages conversation list. Creates the conversation doc on first
- * contact between the two students.
- */
 export async function openDmThread(uid, { fromPopstate = false, replace = false } = {}) {
   if (!uid || !auth.currentUser || uid === auth.currentUser.uid) return;
   teardownDmThread();
@@ -670,36 +582,25 @@ export async function openDmThread(uid, { fromPopstate = false, replace = false 
 
   if (goToRouteRef) goToRouteRef("dm-thread", { fromPopstate, replace, state: { dmUid: uid } });
 
-  // Confirm `uid` is really a classmate BEFORE showing/creating anything
-  // else — the caller (a Directory row, a Profile page's Message button,
-  // the conversation list) has always already cached the real profile by
-  // this point, so this only ever does real work for the one case that
-  // matters: a hand-typed or stale #dm-thread?id=... link with a wrong or
-  // made-up id, which must show "not found", never silently open SOME
-  // classmate's inbox instead.
   let profile = getCachedProfile(uid);
   if (!profile) {
     try {
       profile = await fetchProfile(uid);
       if (profile) cacheUserProfile(uid, profile);
     } catch (err) {
-      if (uid !== currentDmUid) return; // superseded by a newer navigation while this lookup was in flight
+      if (uid !== currentDmUid) return;
       renderDmThreadNotFound();
       const { message, technical } = friendlyError(err, "Couldn't open this conversation.");
       showToast(message, { details: technical });
       return;
     }
   }
-  if (uid !== currentDmUid) return; // superseded by a newer navigation while this lookup was in flight
+  if (uid !== currentDmUid) return;
   if (!profile) {
     renderDmThreadNotFound();
     return;
   }
 
-  // Conversation ids are just the two sorted uids joined together (see
-  // dmConversationId below), so we already know it before ever touching
-  // Firestore — enough to check the cache and skip the skeleton flash for
-  // a thread already opened this session.
   const likelyConversationId = dmConversationId(auth.currentUser.uid, uid);
   const cachedMsgs = dmMessageCache.get(likelyConversationId);
   if (cachedMsgs) {
@@ -713,9 +614,6 @@ export async function openDmThread(uid, { fromPopstate = false, replace = false 
     dmThreadListEl.dataset.everLoaded = "0";
   }
   dmThreadAtBottom = true;
-  // Reset to the ordinary composer until the conversation doc's real
-  // blockedBy state comes back — avoids flashing the "blocked" bar for
-  // a conversation that was never blocked in the first place.
   dmThreadForm?.classList.remove("hidden");
   dmThreadBlockedBar?.classList.add("hidden");
   dmThreadMoreMenu?.classList.remove("is-blocking");
@@ -731,7 +629,7 @@ export async function openDmThread(uid, { fromPopstate = false, replace = false 
     showToast(message, { details: technical });
     return;
   }
-  if (uid !== currentDmUid) return; // superseded by a newer navigation while awaiting the conversation doc
+  if (uid !== currentDmUid) return;
   currentDmConversationId = conversationId;
   markConversationRead(conversationId);
 
@@ -751,7 +649,6 @@ export async function openDmThread(uid, { fromPopstate = false, replace = false 
     renderChatBubbles(dmThreadListEl, msgs, { emptyText: "No messages yet — say hello 👋", showNames: false });
     dmThreadListEl.dataset.everLoaded = "1";
     if (wasNearBottom) dmThreadListEl.scrollTop = dmThreadListEl.scrollHeight;
-    // Any incoming message while this thread is open counts as read immediately.
     markConversationRead(conversationId);
   }, (err) => {
     const { message, technical } = friendlyError(err, "Couldn't load this conversation.");
@@ -771,7 +668,7 @@ async function submitDmMessage() {
   const conversationId = currentDmConversationId;
   const otherUid = currentDmUid;
   if (!text || !conversationId || !otherUid || dmThreadSendBtn.disabled) return;
-  if (dmThreadForm?.classList.contains("hidden")) return; // blocked — composer shouldn't even be reachable
+  if (dmThreadForm?.classList.contains("hidden")) return;
   dmThreadInput.value = "";
   dmThreadSendBtn.disabled = true;
   dmThreadAtBottom = true;
@@ -817,9 +714,6 @@ export function initMessages() {
 
   dmThreadForm?.addEventListener("submit", (e) => { e.preventDefault(); submitDmMessage(); });
   dmThreadInput?.addEventListener("input", () => { dmThreadSendBtn.disabled = !dmThreadInput.value.trim(); });
-  // Block/unblock this classmate for DMs, now tucked behind the header's
-  // three-dot menu — blocking asks for a quick confirmation (it silences
-  // someone), unblocking doesn't need one.
   wireKebabMenus(document.getElementById("dm-thread-header-row"), {
     block: () => {
       const otherUid = currentDmUid;
@@ -847,24 +741,14 @@ export function initMessages() {
       showToast(message, { details: technical });
     });
   });
-  // Same reasoning as the shared #topbar-back-btn in app.js: prefer the
-  // ?from= tab baked into the URL over a blind history.back(), since that
-  // stays correct even right after a reload or a fresh deep link, when
-  // there's no real back-stack for history.back() to fall back on.
   dmThreadBackBtn?.addEventListener("click", () => {
     const from = history.state?.from;
-    // goBackToRouteRef (not goToRouteRef) so the target tab's own
-    // recorded "from" is preserved instead of being overwritten with
-    // "dm-thread" — see goBackToRoute's comment in app.js.
     if (from && goBackToRouteRef) goBackToRouteRef(from);
     else history.back();
   });
 
   subscribeConversations();
 
-  // Keep avatars, the online count, and any open presence text current as
-  // profiles/heartbeats change — same "repaint in place" approach as
-  // wall.js's refreshAuthorAvatars.
   subscribeToProfileUpdates((uid) => {
     const profile = getCachedProfile(uid);
     if (!profile) return;
@@ -873,9 +757,6 @@ export function initMessages() {
     if (uid === currentDmUid) renderDmThreadHeader(uid);
     if (allConversations.some(c => otherParticipant(c) === uid)) renderConversationList();
   });
-  // Presence has no other write to key off of when someone's heartbeat
-  // simply goes stale (they closed the tab) — re-check periodically so
-  // "Online" -> "Active Xm ago" transitions still show up in this page.
   setInterval(paintClassChatOnlineCount, 20_000);
 }
 

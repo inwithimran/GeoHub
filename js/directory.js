@@ -14,24 +14,12 @@ import { openDmThread } from "./messages.js";
 
 const directoryList = document.getElementById("directory-list");
 const searchInput = document.getElementById("directory-search");
-// Built once the first batch of profiles arrives (see renderYearChips) —
-// a "Year" filter row inserted right above the results, same chip style
-// as the Notes & Sheet Hub categories, so a big department can narrow
-// the directory down instead of scrolling past everyone.
 let yearChipRow = null;
 let activeYear = "All";
 
 let allStudents = [];
 let unsubscribeDirectory = null;
 
-// "Online Now" strip — built the same lazy way as yearChipRow above, but
-// inserted first so it always sits above the year filter. Search/year
-// filtering never touches it (it's not part of the filtered results
-// list); it only reflects who's actually online right now, department-
-// wide. Rebuilt on every Directory snapshot (a classmate's own heartbeat
-// write is itself one of those snapshots — see presence.js's file
-// header) plus a periodic tick so someone going stale/offline still
-// drops off the strip even without a fresh snapshot landing.
 let onlineSection = null;
 let onlineRefreshTimer = null;
 const ONLINE_SECTION_REFRESH_MS = 12_000;
@@ -50,15 +38,10 @@ const DIRECTORY_PAGE_SIZE = 60;
 let directoryPageLimit = DIRECTORY_PAGE_SIZE;
 let lastLoadedCount = 0;
 
-/** The current classmate list (for @mention autocomplete elsewhere — wall.js, post-detail.js). */
 export function getAllStudents() {
   return allStudents;
 }
 
-/** onSnapshotReceived, if given, fires on every Directory snapshot (not just
- *  the first) — the caller (js/app.js) only acts on the first one, to gate
- *  the login-time loading screen on genuinely-arrived data after a cold
- *  start (see initWall in js/wall.js for the same pattern). */
 export function initDirectory(onSnapshotReceived) {
   searchInput.addEventListener("input", renderDirectory);
   subscribeDirectory(onSnapshotReceived);
@@ -72,7 +55,7 @@ function subscribeDirectory(onSnapshotReceived) {
     lastLoadedCount = snap.size;
     allStudents = snap.docs.map(d => {
       const data = d.data();
-      cacheUserProfile(d.id, data); // keep the shared cache warm for wall.js / profile-view.js
+      cacheUserProfile(d.id, data);
       return data;
     }).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
     renderOnlineNowSection();
@@ -85,7 +68,6 @@ function subscribeDirectory(onSnapshotReceived) {
   });
 }
 
-/** Build/refresh the Year filter chips from whichever years are actually in use. */
 function renderYearChips() {
   const years = [...new Set(allStudents.map(s => s.year).filter(Boolean))];
   if (!years.length) { if (yearChipRow) { yearChipRow.remove(); yearChipRow = null; } return; }
@@ -109,13 +91,6 @@ function renderYearChips() {
   });
 }
 
-/**
- * The "who's online right now" strip — a horizontal row of avatars above
- * the filters, the way a chat-focused app (Slack, Messenger) surfaces
- * presence up front instead of making you scan the whole roster for
- * green dots. Excludes the signed-in student themselves. Collapses away
- * entirely when nobody's online, rather than showing an empty section.
- */
 function renderOnlineNowSection() {
   const myUid = auth.currentUser?.uid;
   const online = allStudents.filter(s => s.uid && s.uid !== myUid && isUserOnline(s));
@@ -193,7 +168,7 @@ function renderDirectory() {
 
   directoryList.querySelectorAll(".directory-row").forEach(row => {
     row.addEventListener("click", (e) => {
-      if (e.target.closest("[data-no-row-click]")) return; // let the Call/Message buttons work on their own
+      if (e.target.closest("[data-no-row-click]")) return;
       openUserProfilePage(row.dataset.uid);
     });
   });
@@ -204,9 +179,6 @@ function renderDirectory() {
     });
   });
 
-  // A full page came back — there may be more classmates beyond it.
-  // (When search/year narrows the visible rows, this still reflects
-  // whether the underlying loaded set is capped, not the filtered count.)
   if (lastLoadedCount === directoryPageLimit) {
     const loadMoreBtn = document.createElement("button");
     loadMoreBtn.type = "button";

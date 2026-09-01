@@ -21,10 +21,7 @@ import { logActivity, deleteActivityForResource } from "./routine.js";
 import { triggerPush } from "./push-trigger.js";
 import { uploadImage, uploadRawFile } from "./cloudinary.js";
 
-// Guardrail for the "Upload a file" option — generous enough for a
-// lecture-note PDF or a slide deck, small enough that an unsigned upload
-// preset never has to deal with anything huge from a phone connection.
-const MAX_RESOURCE_FILE_BYTES = 20 * 1024 * 1024; // 20MB
+const MAX_RESOURCE_FILE_BYTES = 20 * 1024 * 1024;
 
 function isAcceptableResourceFile(file) {
   if (!file) return false;
@@ -35,7 +32,6 @@ function isAcceptableResourceFile(file) {
   return true;
 }
 
-/** File extension (lowercase, no dot) from a filename or a Cloudinary URL — used to pick a nicer icon glyph. */
 function extOf(name = "") {
   const match = /\.([a-z0-9]{2,5})(?:$|\?)/i.exec(name);
   return match ? match[1].toLowerCase() : "";
@@ -61,8 +57,8 @@ let unsubscribeResources = null;
 // existing in `allResources` at all.
 // ============================================================
 const SAVED_CHIP_KEY = "__saved__";
-let savedResources = [];               // full bookmark docs, newest-saved first
-let savedResourceIds = new Set();      // just the resource ids, for a fast "is this one saved?" check
+let savedResources = [];
+let savedResourceIds = new Set();
 let unsubscribeBookmarks = null;
 
 // ============================================================
@@ -83,7 +79,6 @@ export function initResources() {
   subscribeBookmarks();
 }
 
-/** Keeps this student's own Saved list live for the whole session (not just while the Saved chip is open), so the bookmark icons on every resource row always reflect the current saved state. */
 function subscribeBookmarks() {
   if (unsubscribeBookmarks) return;
   const uid = auth.currentUser?.uid;
@@ -98,7 +93,6 @@ function subscribeBookmarks() {
   });
 }
 
-/** Add/remove one resource from this student's own Saved list. Never blocks or affects the resource itself — purely a personal bookmark. */
 async function toggleBookmark(resId, alreadySaved) {
   const uid = auth.currentUser?.uid;
   if (!uid || !resId) return;
@@ -120,14 +114,12 @@ async function toggleBookmark(resId, alreadySaved) {
         savedAt: serverTimestamp()
       });
     }
-    // The live listener above re-renders once the write lands — no local toggling needed here.
   } catch (err) {
     const { message, technical } = friendlyError(err, "Couldn't update your Saved list.");
     showToast(message, { details: technical });
   }
 }
 
-/** Bookmark/ribbon icon shown on every resource row — filled+gold when saved, outline otherwise. */
 function bookmarkBtnHtml(resId, saved) {
   return `
     <button type="button" class="bookmark-toggle-btn ${saved ? "active" : ""}" data-res-id="${resId}" data-saved="${saved ? "1" : "0"}" aria-pressed="${saved}" aria-label="${saved ? "Remove from Saved" : "Save for later"}">
@@ -163,9 +155,6 @@ function buildChips() {
   });
 }
 
-/** Keyword search over title, category, and contributor name — combined with
- *  whichever category chip (or the Saved chip) is active, same "narrow what's
- *  already loaded" approach as the Directory's own search box. */
 function matchesResourceSearch(r, term) {
   if (!term) return true;
   return (r.title || "").toLowerCase().includes(term) ||
@@ -176,10 +165,6 @@ function matchesResourceSearch(r, term) {
 function renderResources() {
   const term = (searchInput?.value || "").trim().toLowerCase();
 
-  // The Saved chip renders straight from the bookmarks listener, not a
-  // filtered slice of `allResources` — see the big comment above
-  // subscribeBookmarks() for why. It's a small personal list, so it never
-  // paginates the way the main Hub view does below.
   if (activeCategory === SAVED_CHIP_KEY) {
     const savedFiltered = savedResources.filter(r => matchesResourceSearch(r, term));
     renderResourceRows(savedFiltered, resourceList, term ? "No saved notes match your search." : "No saved notes yet — tap the bookmark icon on any resource to save it for later.", { savedView: true });
@@ -192,13 +177,6 @@ function renderResources() {
   ).filter(r => matchesResourceSearch(r, term));
   renderResourceRows(filtered, resourceList, term ? "No resources match your search." : "No resources shared yet in this category.");
 
-  // A full page came back — there may be more resources beyond it.
-  // (Switching category chips only ever filters what's already loaded,
-  // so the button reflects the loaded set being capped, not the
-  // filtered count.) Only the main Hub list paginates this way — a
-  // profile's "Notes" tab uses loadUserResources() below instead.
-  // Skipped while actively searching/filtering, since "load more" would
-  // just fetch more unfiltered pages instead of surfacing better matches.
   if (!term && lastLoadedCount === resourcePageLimit) {
     const loadMoreBtn = document.createElement("button");
     loadMoreBtn.type = "button";
@@ -213,22 +191,8 @@ function renderResources() {
   }
 }
 
-/**
- * Shared row renderer — used by the main Notes & Sheet Hub list, the Saved
- * chip's list, and by a profile's "Notes" tab. Pass { savedView: true } for
- * the Saved chip: it reads from the bookmark docs themselves (title/
- * category/link/etc. are denormalized onto them, see toggleBookmark()), so
- * the meta line reads "Saved <time>" instead of "Shared by <name> <time>",
- * and there's no owner edit/delete kebab (unsaving is the only action).
- */
-/** Best-effort "someone opened/downloaded this" tally — fire-and-forget so a
- *  slow/offline write never delays the actual Open/Download navigation
- *  (the anchor's own href does that natively). Lets contributors and
- *  browsers alike see which notes are actually getting used, not just
- *  freshly posted. */
 function bumpResourceOpenCount(resId) {
   updateDoc(doc(db, "resources", resId), { openCount: increment(1) }).catch(() => {
-    /* non-critical — a missed tally isn't worth surfacing an error for */
   });
 }
 
@@ -278,7 +242,7 @@ function renderResourceRows(resources, listEl, emptyMessage, { savedView = false
     a.addEventListener("click", () => bumpResourceOpenCount(a.dataset.resOpenId));
   });
 
-  if (savedView) return; // nothing else to wire — unsaving is the only action in this view
+  if (savedView) return;
 
   wireKebabMenus(listEl, {
     edit: (resId) => openEditResourceModal(resId),
@@ -288,14 +252,13 @@ function renderResourceRows(resources, listEl, emptyMessage, { savedView = false
       confirmLabel: "Delete",
       onConfirm: async () => {
         await deleteDoc(doc(db, "resources", resId));
-        deleteActivityForResource(resId); // best-effort: drop the "shared a note/sheet" notification too
+        deleteActivityForResource(resId);
         showToast("Resource deleted.");
       }
     })
   });
 }
 
-/** Every resource a given student has contributed — shared by "My Profile" and a classmate's profile "Notes" tab. */
 export async function loadUserResources(uid, listEl) {
   if (!listEl) return;
   try {
@@ -312,7 +275,6 @@ export async function loadUserResources(uid, listEl) {
   }
 }
 
-/** Glyph shown in the leading icon slot — a file-type badge for an uploaded file, otherwise the category's initial. */
 function fileGlyph(r) {
   if (r.sourceType === "upload" && r.fileExt) {
     return escapeHtml(r.fileExt.slice(0, 4).toUpperCase());
@@ -357,7 +319,6 @@ function openAddResourceModal() {
   document.getElementById("res-submit-btn").addEventListener("click", submitResource);
 }
 
-/** Wires the "Add a Link" / "Upload a File" segmented toggle shared by the Add Resource modal. */
 function wireResourceSourceToggle() {
   const toggleBtns = document.querySelectorAll(".res-source-btn");
   const linkWrap = document.getElementById("res-link-wrap");

@@ -13,15 +13,8 @@
 // ============================================================
 import { escapeHtml, showToast } from "./ui-utils.js";
 
-// Guardrails applied before a picked file is ever handed to Cloudinary.
-// This runs BEFORE compression (js/cloudinary.js resizes/re-encodes valid
-// images), so it exists purely to reject the wrong kind of file early —
-// e.g. someone renaming a video/PDF to look like an image, or a huge
-// original photo straight off a phone camera that would otherwise sit in
-// memory as a full-size <img> + <canvas> for no reason.
-const MAX_RAW_FILE_BYTES = 15 * 1024 * 1024; // 15MB — generous for an unedited phone photo
+const MAX_RAW_FILE_BYTES = 15 * 1024 * 1024;
 
-/** True (and lets it through) if this File looks like a real, reasonably-sized image. Exported for the profile-photo picker in app.js. */
 export function isAcceptableImageFile(file) {
   if (!file.type || !file.type.startsWith("image/")) {
     showToast(`"${file.name}" isn't an image — skipped.`);
@@ -42,7 +35,6 @@ const addTileIcon = `
 
 const removeIcon = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>`;
 
-/** Markup for the hidden file input + the (initially empty, JS-rendered) photo grid. `inputId` must be unique per modal instance. */
 export function imagePickerHtml(inputId) {
   return `
     <div class="media-picker" data-picker="${inputId}">
@@ -51,16 +43,6 @@ export function imagePickerHtml(inputId) {
     </div>`;
 }
 
-/**
- * Wires the file input + live add-tile/thumbnail grid for a picker created
- * with imagePickerHtml(). Pass `existingImages` (already-uploaded URLs) when
- * wiring an Edit Post modal — they render as removable thumbnails right
- * alongside newly-picked files, sharing one grid and one max count.
- *
- * Returns { getRemainingUrls, getFiles } read at submit/save time:
- * getRemainingUrls() -> existing URLs the user didn't remove (edit mode only)
- * getFiles()         -> newly-picked File[] still to be uploaded
- */
 export function wireImagePicker(root, inputId, { max = 6, existingImages = [] } = {}) {
   const input = root.querySelector(`#${inputId}`);
   const grid = root.querySelector(`[data-picker-grid="${inputId}"]`);
@@ -113,7 +95,6 @@ export function wireImagePicker(root, inputId, { max = 6, existingImages = [] } 
   return { getRemainingUrls: () => remaining, getFiles: () => files };
 }
 
-/** Grid of a post's already-uploaded image URLs, shown in the feed card. Tap to view full-size. */
 export function postImagesHtml(images = []) {
   if (!images || !images.length) return "";
   const countClass = images.length === 1 ? "one" : images.length === 2 ? "two" : images.length === 3 ? "three" : "many";
@@ -127,14 +108,9 @@ export function postImagesHtml(images = []) {
     </div>`;
 }
 
-// Single-photo posts show the photo at (a clamped version of) its own
-// aspect ratio instead of always being force-cropped into a fixed box —
-// these bounds keep an extreme portrait/landscape photo from blowing up
-// the feed card too tall or too short, matching the cap most feeds use.
-const SINGLE_IMAGE_MIN_RATIO = 0.66; // tallest allowed (portrait)
-const SINGLE_IMAGE_MAX_RATIO = 1.91; // widest allowed (landscape)
+const SINGLE_IMAGE_MIN_RATIO = 0.66;
+const SINGLE_IMAGE_MAX_RATIO = 1.91;
 
-/** Set each single-photo post's card to its real (clamped) aspect ratio once the image has loaded. Idempotent — safe to call on every re-render. */
 export function applyPostImageRatios(root) {
   root.querySelectorAll(".post-image-grid.one .post-image-item").forEach(item => {
     if (item.dataset.ratioApplied) return;
@@ -152,7 +128,6 @@ export function applyPostImageRatios(root) {
   });
 }
 
-/** Wires tap-to-enlarge for every `[data-view-image]` under `root` (idempotent — safe to call on every re-render). */
 export function wirePostImageViewer(root) {
   root.querySelectorAll("[data-view-image]").forEach(btn => {
     if (btn.dataset.wiredView) return;
@@ -161,7 +136,6 @@ export function wirePostImageViewer(root) {
   });
 }
 
-/** Opens the same full-screen tap-to-enlarge viewer used for post photos — exported for the profile-photo "View Photo" action in app.js. */
 export function openImageViewer(url) {
   const overlay = document.createElement("div");
   overlay.className = "image-viewer-overlay";

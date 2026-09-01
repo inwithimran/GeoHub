@@ -42,19 +42,10 @@ export const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢"];
 const DEFAULT_REACTION = "👍";
 const OUTLINE_LEAF_SVG = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M20 4c-8 0-16 4-16 13 0 1.5.3 2.6.8 3.4C6 15 11 9 18 6c-6 4-10 10-12.4 13.7.5.2 1 .3 1.4.3C16 20 20 12 20 4z"/></svg>`;
 
-/** Read-side reaction map — old posts only ever had a `likes` array, so treat every uid in it as a legacy 👍. */
 function reactionsOf(post) {
   return post.reactions || Object.fromEntries((post.likes || []).map((uid) => [uid, DEFAULT_REACTION]));
 }
 
-/**
- * Wires @mention autocomplete onto a composer/comment field. Returns
- * getMentions(), which reconciles everyone picked from the dropdown
- * against whatever's still actually in the text at submit time — so
- * deleting an "@Name" after picking it doesn't leave a stale mention
- * (and a stale push notification) behind. `initial` seeds already-
- * -known mentions back in (used when re-opening the Edit Post modal).
- */
 export function wireMentions(fieldEl, initial = []) {
   const picked = new Map((initial || []).filter(m => m && m.uid && m.name).map(m => [m.name, m]));
   wireMentionAutocomplete(
@@ -106,10 +97,10 @@ let unsubscribePosts = null;
 // is still safely in Firestore the whole time.
 // ============================================================
 const WALL_PAGE_SIZE = 20;
-let liveDocs = [];      // newest page — kept live by onSnapshot
-let olderDocs = [];     // everything loaded via auto-pagination — static snapshots
-let hasMoreOlder = true; // false once a getDocs() page comes back short (reached the very end)
-let loadingOlder = false; // guards against two overlapping fetches firing at once
+let liveDocs = [];
+let olderDocs = [];
+let hasMoreOlder = true;
+let loadingOlder = false;
 
 // ============================================================
 // AUTO-PAGINATION — replaces the old tap-to-load-more button with a
@@ -124,22 +115,14 @@ let loadingOlder = false; // guards against two overlapping fetches firing at on
 // ============================================================
 let wallScrollObserver = null;
 
-// Reasonable ceiling on a single post's text — long enough for a real
-// question or update, short enough that one runaway post can't blow up
-// the feed's layout for everyone scrolling past it.
 const POST_TEXT_LIMIT = 3000;
 
-/** Resolve a full-enough profile object (for the avatar/badge) from the shared cache, uid, and stored name. */
 export function authorProfile(uid, fallbackName) {
   const cached = getCachedProfile(uid);
-  if (!cached) ensureProfileLoaded(uid); // cache miss — kick off a one-off fetch, refreshAuthorAvatars() will pick it up
+  if (!cached) ensureProfileLoaded(uid);
   return cached || { uid, name: fallbackName };
 }
 
-// Re-draws just the avatar(s) for one author, wherever they appear in the
-// currently-rendered Wall, once their profile lands in the shared cache
-// (whether that's the Directory listener warming up or the ensureProfileLoaded
-// fallback above) — so a photo never has to wait for the next full re-render.
 function refreshAuthorAvatars(uid) {
   const profile = getCachedProfile(uid);
   if (!profile) return;
@@ -148,10 +131,6 @@ function refreshAuthorAvatars(uid) {
   });
 }
 
-/** Wire up the composer + start the realtime post listener. Call once on login.
- *  onSnapshotReceived, if given, fires on every Wall snapshot (not just the
- *  first) — the caller (js/app.js) only acts on the first one, to gate the
- *  login-time loading screen on genuinely-arrived data after a cold start. */
 export function initWall(onSnapshotReceived) {
   composerTrigger.addEventListener("click", openComposerModal);
   subscribeToProfileUpdates(refreshAuthorAvatars);
@@ -171,7 +150,6 @@ function subscribeWall(onSnapshotReceived) {
   });
 }
 
-/** Merge the live page + every "Load earlier" page fetched so far, and (re)draw the feed. */
 function renderWallList() {
   if (!liveDocs.length && !olderDocs.length) {
     wallList.innerHTML = `<p class="empty-state">No posts yet. Be the first to write on the wall.</p>`;
@@ -179,11 +157,6 @@ function renderWallList() {
   }
   wallList.innerHTML = `<div class="flat-list feed-list"></div>`;
   const listEl = wallList.querySelector(".feed-list");
-  // Pinned posts (admin-set) float to the top of everything loaded so far;
-  // everything else keeps newest-first order. Array.prototype.sort is a
-  // stable sort, so within "pinned" and within "not pinned" the existing
-  // newest-first order (live page, then each older page in fetch order)
-  // is preserved exactly.
   const docs = [...liveDocs, ...olderDocs].sort((a, b) => (b.data().pinned ? 1 : 0) - (a.data().pinned ? 1 : 0));
   docs.forEach((docSnap) => renderPost(docSnap.id, docSnap.data(), listEl, { onChanged: () => refreshStaticPost(docSnap.id) }));
 
@@ -198,14 +171,10 @@ function renderWallList() {
     }, { rootMargin: "600px 0px" });
     wallScrollObserver.observe(sentinel);
   } else if (docs.length) {
-    // Reached the actual end of the Wall (not just "nothing loaded yet") —
-    // a short, calm sign-off so scrolling further doesn't feel like it's
-    // just stuck/broken.
     wallList.insertAdjacentHTML("beforeend", `<p class="wall-feed-end">You're all caught up 🌿</p>`);
   }
 }
 
-/** Auto-triggered fetch of the next page of older posts, cursored right after the last post currently loaded — see the sentinel/IntersectionObserver setup in renderWallList(). */
 async function loadOlderPosts() {
   if (loadingOlder || !hasMoreOlder) return;
   const cursor = olderDocs.length ? olderDocs[olderDocs.length - 1] : liveDocs[liveDocs.length - 1];
@@ -225,25 +194,15 @@ async function loadOlderPosts() {
   }
 }
 
-// A post among the "static" older pages has no live listener of its own,
-// so an edit/delete on it (by whoever's viewing it, if they're the owner
-// or an admin — see renderPost's kebab menu) wouldn't otherwise show up
-// until the whole Wall is reloaded. renderWallList() passes this in as
-// every post's `onChanged` so that still happens right away: re-fetch that
-// one doc and either swap in its fresh data (edited) or drop it (deleted).
-// If the post is actually on the live page, the onSnapshot listener above
-// already handles it (usually before this even runs) — that early-return
-// just avoids doing redundant work in that case, never a correctness issue
-// either way.
 async function refreshStaticPost(postId) {
-  if (liveDocs.some((d) => d.id === postId)) return; // the live listener already has this one covered
+  if (liveDocs.some((d) => d.id === postId)) return;
   try {
     const snap = await getDoc(doc(db, "posts", postId));
     olderDocs = snap.exists()
       ? olderDocs.map((d) => (d.id === postId ? snap : d))
       : olderDocs.filter((d) => d.id !== postId);
     renderWallList();
-  } catch { /* best-effort — a manual reload still picks up the change */ }
+  } catch { }
 }
 
 // ============================================================
@@ -293,7 +252,6 @@ function openComposerModal() {
 const POLL_MIN_OPTIONS = 2;
 const POLL_MAX_OPTIONS = 6;
 
-/** Wires the composer's "Add a poll" toggle + dynamic option list. Returns getPoll(), which is null unless the poll is enabled with 2+ filled-in options. */
 function wirePollBuilder() {
   const toggleBtn = document.getElementById("poll-toggle-btn");
   const builder = document.getElementById("poll-builder");
@@ -301,10 +259,6 @@ function wirePollBuilder() {
   const addBtn = document.getElementById("poll-add-option");
   let enabled = false;
 
-  // Every row — including the starting two — gets a remove (×) button, so
-  // a mistaken extra option is never stuck; removing is only ever blocked
-  // (button dimmed, not removed from the layout) once exactly
-  // POLL_MIN_OPTIONS remain, since a poll needs at least two choices.
   function addRow() {
     const row = document.createElement("div");
     row.className = "poll-option-row";
@@ -323,8 +277,6 @@ function wirePollBuilder() {
     renumber();
   }
 
-  // Keep placeholders/index badges ("1", "2", …) and the remove/add
-  // affordances in sync after every add or remove.
   function renumber() {
     const rows = [...optionsWrap.querySelectorAll(".poll-option-row")];
     rows.forEach((row, i) => {
@@ -363,7 +315,7 @@ function wirePollBuilder() {
 async function handleCreatePost(getImageFiles, getMentions, getPoll) {
   const textarea = document.getElementById("post-input");
   const btn = document.getElementById("post-submit");
-  if (btn.disabled) return; // guards against a double-post race (button click + Ctrl/Cmd+Enter)
+  if (btn.disabled) return;
   const errorEl = document.getElementById("post-error");
   const text = textarea.value.trim();
   errorEl.textContent = "";
@@ -375,10 +327,6 @@ async function handleCreatePost(getImageFiles, getMentions, getPoll) {
   const mentions = getMentions ? getMentions() : [];
   const files = getImageFiles ? getImageFiles() : [];
 
-  // Already offline — don't even attempt the round trip (which would just
-  // fail the same way a moment later). Queue it now so it's waiting the
-  // instant the connection comes back; see the network-failure branch
-  // below for the mid-attempt version of this same path.
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
     await queuePost({ text, images: files, mentions, poll, authorName: currentProfile.name });
     closeModal();
@@ -394,10 +342,6 @@ async function handleCreatePost(getImageFiles, getMentions, getPoll) {
       images = await uploadImages(files, { maxDim: 1600, quality: 0.78, folder: "geohub/posts" });
       setBtnLoading(btn, true, "Posting…");
     }
-    // Validated + written server-side (api/create-post.js) — see that file
-    // for why: it re-derives hashtags from `text` itself, checks each image
-    // URL is really this app's own Cloudinary upload, and checks mentions
-    // against real profiles, none of which firestore.rules alone can do.
     const { id: postId } = await callApi("create-post", { text, images, mentions, poll });
     closeModal();
     showToast("Posted to the Student Wall.");
@@ -405,11 +349,6 @@ async function handleCreatePost(getImageFiles, getMentions, getPoll) {
     triggerPush({ type: "post", text, actorName: currentProfile.name, postId });
     notifyMentions(mentions, text, postId);
   } catch (err) {
-    // The upload/API call genuinely couldn't reach the network (dropped
-    // wifi mid-post, etc.) rather than reaching the server and getting a
-    // real answer back — queue the ORIGINAL files/text so nothing typed
-    // (or picked) is lost, instead of showing an error there's nothing the
-    // user can do about right now.
     if (isNetworkError(err)) {
       await queuePost({ text, images: files, mentions, poll, authorName: currentProfile.name });
       closeModal();
@@ -421,16 +360,10 @@ async function handleCreatePost(getImageFiles, getMentions, getPoll) {
   }
 }
 
-/** Persist a post to the offline write queue (see js/write-queue.js). */
 function queuePost({ text, images, mentions, poll, authorName }) {
   return enqueueWrite("create-post", { text, images, mentions, poll, authorName });
 }
 
-// Performs a previously-queued post the same way handleCreatePost does
-// (upload images, then the validated server call), once the connection is
-// back. Registered once at module load; run by write-queue.js's
-// syncPendingWrites(), which is itself triggered on the browser's 'online'
-// event and once at login (see initWriteQueueSync() in app.js).
 registerWriteHandler("create-post", async (payload) => {
   let images = [];
   if (payload.images && payload.images.length) {
@@ -445,7 +378,6 @@ registerWriteHandler("create-post", async (payload) => {
   notifyMentions(payload.mentions, payload.text, postId);
 });
 
-/** Fires a "mentioned you" push + activity entry for everyone @mentioned, except the author themself. */
 function notifyMentions(mentions, text, postId) {
   (mentions || []).forEach((m) => {
     if (!m.uid || m.uid === auth.currentUser.uid) return;
@@ -535,9 +467,6 @@ async function reportPost(postId, post) {
       });
       closeModal();
       showToast("Report sent to the admin. Thanks for flagging it.");
-      // Live bell/report-button badges pick this up via the "reports"
-      // listener in routine.js; this push is what reaches the admin even
-      // when GeoHub isn't currently open on their device.
       triggerPush({ type: "report", text: reason, actorName: currentProfile ? currentProfile.name : "A classmate", reportId: reportRef.id });
     } catch (err) {
       document.getElementById("report-error").textContent = "Couldn't send report: " + err.message;
@@ -546,12 +475,11 @@ async function reportPost(postId, post) {
   });
 }
 
-/** Deletes every comment first (so nothing orphaned lingers server-side), then the post itself. */
 export async function deletePost(postId, onDeleted) {
   const commentsSnap = await getDocs(collection(db, "posts", postId, "comments"));
   await Promise.all(commentsSnap.docs.map(c => deleteDoc(c.ref)));
   await deleteDoc(doc(db, "posts", postId));
-  deleteActivityForPost(postId); // best-effort: drop the "posted"/"liked"/"commented" notifications this post generated
+  deleteActivityForPost(postId);
   showToast("Post deleted.");
   onDeleted?.();
 }
@@ -574,10 +502,6 @@ export function renderPost(postId, post, listEl, { onChanged } = {}) {
 
   const author = authorProfile(post.authorUid, post.authorName);
   const isOwnPost = post.authorUid === uid;
-  // An admin (CR) can remove any post as a moderation action — e.g. after
-  // a report — even one they didn't write, and can pin/unpin ANY post
-  // (including their own). A student who didn't write the post (and isn't
-  // the admin) gets a "Report" option instead of edit/delete.
   const isAdmin = isAdminEmail(auth.currentUser.email);
   const el = document.createElement("article");
   el.className = "feed-post" + (post.pinned ? " feed-post-pinned" : "");
@@ -617,6 +541,7 @@ export function renderPost(postId, post, listEl, { onChanged } = {}) {
       <button class="post-action-btn comment-toggle-btn" data-id="${postId}">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
         <span>Comment</span>
+        ${post.commentCount ? `<span class="action-count-badge">${post.commentCount}</span>` : ""}
       </button>
       <button type="button" class="post-like-count ${reactionCount ? "" : "hidden"}" data-id="${postId}">
         ${reactionSummaryHtml(reactions)}
@@ -635,9 +560,6 @@ export function renderPost(postId, post, listEl, { onChanged } = {}) {
     const { openPostDetailPage } = await import("./post-detail.js");
     openPostDetailPage(postId, { focusComment: true });
   });
-  // Any other tap on the card (text, photos, empty space) opens the Post
-  // Detail page — Facebook-style. The controls above are excluded here so
-  // they keep doing their own thing instead of also navigating.
   el.addEventListener("click", async (e) => {
     if (e.target.closest(".reaction-control, .post-like-count, .kebab-menu, [data-author], .comment-toggle-btn, .clamp-toggle, .mention-chip, .hashtag-chip, .poll-block")) return;
     const { openPostDetailPage } = await import("./post-detail.js");
@@ -664,7 +586,6 @@ export function renderPost(postId, post, listEl, { onChanged } = {}) {
   listEl.appendChild(el);
 }
 
-/** Small "👍❤️😂 12" summary pill — top 3 emoji used, by how many people used them, then the total count. */
 function reactionSummaryHtml(reactions) {
   const counts = {};
   Object.values(reactions).forEach((e) => { counts[e] = (counts[e] || 0) + 1; });
@@ -673,11 +594,6 @@ function reactionSummaryHtml(reactions) {
   return `<span class="reaction-summary-emojis">${top.join("")}</span> ${total} ${total === 1 ? "reaction" : "reactions"}`;
 }
 
-/**
- * Paint a reaction button + its summary pill to match `post`'s reactions.
- * Pulled out of reactToPost() so both it (optimistic update) and any
- * listener-driven re-render can reach the exact same visual result.
- */
 export function paintReactionButton(btnEl, countEl, post) {
   const uid = auth.currentUser.uid;
   const reactions = reactionsOf(post);
@@ -724,15 +640,10 @@ export function wireReactionControl(root, postId, post) {
   btn.addEventListener("pointerdown", startPress);
   btn.addEventListener("pointerup", cancelPress);
   btn.addEventListener("pointerleave", cancelPress);
-  // Belt-and-braces alongside the global `button { user-select:none }` rule —
-  // some Android browsers still offer their own "Copy" callout on a held
-  // press regardless of CSS, which fights with the long-press-to-pick-a-
-  // reaction gesture below. Suppressing the native context menu here keeps
-  // the long press exclusively ours.
   btn.addEventListener("contextmenu", (e) => e.preventDefault());
   btn.addEventListener("click", (e) => {
     e.stopPropagation();
-    if (longPressed) { longPressed = false; return; } // the long-press already opened the picker
+    if (longPressed) { longPressed = false; return; }
     const mine = reactionsOf(post)[auth.currentUser.uid] || null;
     reactToPost(postId, post, mine ? null : DEFAULT_REACTION, btn, countEl);
   });
@@ -745,14 +656,6 @@ export function wireReactionControl(root, postId, post) {
   });
 }
 
-/**
- * Set/change/clear this student's reaction on a post. Updates the button +
- * summary pill immediately (rather than waiting on a re-render), so this
- * looks and feels identical whether it's tapped from the Wall's realtime
- * feed or from a one-shot list like a profile's Posts tab or the Post
- * Detail page. Passing the same emoji the student already has removes it
- * (un-react); `emoji: null` always removes it.
- */
 export async function reactToPost(postId, post, emoji, btnEl, countEl) {
   const uid = auth.currentUser.uid;
   const current = reactionsOf(post)[uid] || null;
@@ -772,14 +675,11 @@ export async function reactToPost(postId, post, emoji, btnEl, countEl) {
       likes: next ? arrayUnion(uid) : arrayRemove(uid),
       [`reactions.${uid}`]: next ? next : deleteField()
     });
-    // Only notify on a fresh reaction (not on removing one), and only if
-    // someone else's post — never notify a student about their own post.
     if (next && !current && authorUid && authorUid !== uid) {
       logActivity({ type: "like", targetUid: authorUid, postId });
       triggerPush({ type: "like", actorName: currentProfile.name, targetUid: authorUid, postId });
     }
   } catch (err) {
-    // Revert the optimistic change if the write actually failed.
     post.reactions = { ...reactionsOf(post) };
     if (current) post.reactions[uid] = current; else delete post.reactions[uid];
     post.likes = Object.keys(post.reactions);
@@ -804,7 +704,7 @@ export async function openReactionsModal(reactions) {
   const people = await Promise.all(uids.map(async (uid) => {
     let p = getCachedProfile(uid);
     if (!p) {
-      try { p = await fetchProfile(uid); if (p) cacheUserProfile(uid, p); } catch { /* ignore */ }
+      try { p = await fetchProfile(uid); if (p) cacheUserProfile(uid, p); } catch { }
     }
     return p ? { ...p, uid, emoji: reactions[uid] } : { uid, name: "Classmate", emoji: reactions[uid] };
   }));
@@ -823,10 +723,6 @@ export async function openReactionsModal(reactions) {
   `);
   document.querySelectorAll(".likes-row").forEach(row =>
     row.addEventListener("click", () => {
-      // Close the modal WITHOUT letting it pop its own history entry
-      // (keepHistory) — otherwise that history.back() races the profile page's
-      // own history.pushState and the navigation can silently fail. Instead we
-      // replace the modal's entry with the profile page's ({ replace: true }).
       closeModal({ keepHistory: true });
       openUserProfilePage(row.dataset.uid, { replace: true });
     }));
@@ -951,7 +847,6 @@ export async function openHashtagResults(tag) {
   });
 }
 
-/** Detach the realtime listener (call on logout to avoid leaks). */
 export function teardownWall() {
   if (unsubscribePosts) unsubscribePosts();
   unsubscribePosts = null;
@@ -959,6 +854,6 @@ export function teardownWall() {
   wallScrollObserver = null;
   liveDocs = [];
   olderDocs = [];
-  hasMoreOlder = true; // fresh pagination state on next login
+  hasMoreOlder = true;
   loadingOlder = false;
 }

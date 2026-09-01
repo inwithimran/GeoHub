@@ -26,7 +26,7 @@ import { collection, getDocs, query, orderBy, limit } from "https://www.gstatic.
 import { escapeHtml, timeAgo, showToast, skeletonRowsHtml, avatarInner, nameWithBadge } from "./ui-utils.js";
 import { getAllStudents } from "./directory.js";
 
-const FETCH_CAP = 300; // per collection
+const FETCH_CAP = 300;
 
 const input = document.getElementById("global-search-input");
 const resultsEl = document.getElementById("global-search-results");
@@ -51,7 +51,6 @@ export function initGlobalSearch() {
   });
 }
 
-/** Called by app.js's router right before showing the Search page — lazy-loads the searchable data on first visit only. */
 export function ensureSearchDataLoaded() {
   if (dataLoaded || loading || !auth.currentUser) return;
   loading = true;
@@ -89,7 +88,7 @@ function truncate(text = "", max = 100) {
 }
 
 function runSearch() {
-  if (!dataLoaded) return; // still loading — ensureSearchDataLoaded()'s .then() will call this once ready
+  if (!dataLoaded) return;
   const raw = input.value.trim();
   if (!raw) { resultsEl.innerHTML = `<p class="empty-state">Search across the Student Wall, Notes &amp; Sheets, Notice Board, and Classmate Directory.</p>`; return; }
 
@@ -115,9 +114,6 @@ function runSearch() {
     (d.title || "").toLowerCase().includes(q) || (d.course || "").toLowerCase().includes(q) || (d.notes || "").toLowerCase().includes(q)
   ).slice(0, 25);
 
-  // Classmates: read live off the Directory's always-warm roster (see the
-  // header comment) rather than anything cached by this file, so a new
-  // signup or a profile edit is searchable immediately, no reload needed.
   const matchedStudents = isHashtag ? [] : getAllStudents().filter(s =>
     (s.name || "").toLowerCase().includes(q) ||
     (s.roll || "").toLowerCase().includes(q) ||

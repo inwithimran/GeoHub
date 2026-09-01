@@ -33,26 +33,10 @@ import { openImageCropper } from "./image-cropper.js";
 import { initPush, unregisterPushToken } from "./push.js";
 import { getThemePreference, setThemePreference, initTheme } from "./theme.js";
 
-// The inline script at the top of index.html's <head> already painted
-// the right theme before first paint (avoiding a flash) — this just
-// starts the "System" preference following the OS live from here on.
 initTheme();
 
-// This app is a single page (routes are just <section> toggles + our own
-// scrollPositions tracking below) but every route change still does a real
-// history.pushState/replaceState so the device back button works. That's
-// enough for the browser to think it should ALSO do its own native scroll
-// restoration on popstate — and it tries to restore whatever window.scrollY
-// was at the moment each history entry was first created (for the "wall"
-// entry, that's 0, since it's created at login before the user has scrolled
-// at all). The two systems fighting over scrollY — ours restoring the real
-// per-tab position, the browser's snapping back to that stale 0 — is why
-// returning from Post Detail could land back at the very top of the Wall
-// instead of where the user actually left off. Turning this off hands scroll
-// position entirely to goToRoute()'s own restoreY logic below.
 if ("scrollRestoration" in history) history.scrollRestoration = "manual";
 
-// ---------- Element references ----------
 const loadingScreen = document.getElementById("loading-screen");
 const loadingLabel = document.getElementById("loading-label");
 const loadingBarFill = document.querySelector(".loading-bar-fill");
@@ -73,29 +57,28 @@ const appShell = document.getElementById("app-shell");
 // ============================================================
 let loadingProgress = 0;
 function setLoadingProgress(pct) {
-  loadingProgress = Math.max(loadingProgress, pct); // never animate backwards
+  loadingProgress = Math.max(loadingProgress, pct);
   if (loadingBarFill) loadingBarFill.style.width = loadingProgress + "%";
 }
-/** Back to an initial sliver — used each time the overlay is freshly shown (startup, and again on logout). */
 function resetLoadingProgress() {
   loadingProgress = 0;
   if (loadingBarFill) {
     loadingBarFill.style.transition = "none";
     loadingBarFill.style.width = "6%";
-    void loadingBarFill.offsetWidth; // force the reset to apply before re-enabling the transition
+    void loadingBarFill.offsetWidth;
     loadingBarFill.style.transition = "";
     loadingProgress = 6;
   }
 }
 resetLoadingProgress();
-setLoadingProgress(15); // this script is parsed and running
+setLoadingProgress(15);
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => setLoadingProgress(35), { once: true });
 } else {
   setLoadingProgress(35);
 }
 if (document.readyState === "complete") {
-  setLoadingProgress(60); // every page resource (styles, scripts, icons) has already finished downloading
+  setLoadingProgress(60);
 } else {
   window.addEventListener("load", () => setLoadingProgress(60), { once: true });
 }
@@ -117,58 +100,36 @@ function updateOfflineBanner() {
 }
 window.addEventListener("online", updateOfflineBanner);
 window.addEventListener("offline", updateOfflineBanner);
-updateOfflineBanner(); // reflect the real state immediately on load, not just on the next change
+updateOfflineBanner();
 
-/** Swap the loading-screen's message ("Loading GeoHub" / "Logging out"). */
 function setLoadingLabel(text) {
   if (loadingLabel) loadingLabel.textContent = text;
 }
 
-/** Just enough time for the bar's final jump to 100% to visibly render and
- *  fade out smoothly — NOT an artificial hold. A fast/warm load reaches
- *  100% (and this timer) almost immediately; a slow one is however long
- *  the real milestones above actually take, this only pads the very end. */
 const LOADING_MIN_DISPLAY_MS = 300;
 
-/**
- * Bring the loading overlay up. Shown INSTANTLY (transition disabled for a
- * beat, then re-enabled) so it fully covers the screen before anything
- * underneath it changes — otherwise the CSS fade-in lets the just-swapped
- * screen (home page / login page) flash through the translucent overlay
- * for a moment before it becomes opaque.
- */
 function showLoadingScreen(text) {
-  // Only reset the progress bar if the overlay was actually dismissed
-  // before this call (e.g. re-showing it for a fresh logout) — the very
-  // first login continues the SAME sequence already tracked above
-  // (script → DOM → page load → this call), so it should keep climbing
-  // from wherever it already is instead of snapping back down.
   if (loadingScreen.classList.contains("hidden")) resetLoadingProgress();
   setLoadingLabel(text);
   loadingScreen.classList.add("no-transition");
   loadingScreen.classList.remove("hidden");
-  void loadingScreen.offsetWidth; // force a reflow so the instant show is applied first
+  void loadingScreen.offsetWidth;
   loadingScreen.classList.remove("no-transition");
 }
 
-/** Dismiss the loading overlay — this one IS animated (a smooth fade-out). */
 function hideLoadingScreen() {
   loadingScreen.classList.add("hidden");
 }
 
-// True while a user-initiated logout is in flight, so the auth-state
-// listener knows to show the "Logging out" transition instead of
-// instantly snapping to the login screen.
 let loggingOut = false;
 
 const loginForm = document.getElementById("login-form");
 const signupForm = document.getElementById("signup-form");
 const authTabsWrap = document.getElementById("auth-tabs");
 const authTabButtons = authTabsWrap.querySelectorAll(".auth-tab");
-// Both the real tabs AND the "New here? / Already a member?" text links switch forms
 const allTabTriggers = document.querySelectorAll("[data-tab]");
 
-let featuresInitialized = false; // guards against re-subscribing on hot reload / re-login
+let featuresInitialized = false;
 
 // ============================================================
 // COLD-START PRELOAD GATE — see resetCacheOnColdStart() in
@@ -187,16 +148,6 @@ let featuresInitialized = false; // guards against re-subscribing on hot reload 
 // ============================================================
 let isColdStart = false;
 
-/**
- * Wraps an initFn(onSnapshotReceived) (initWall / initDirectory) and
- * resolves once its first snapshot we're willing to trust arrives —
- * immediately on a warm start, or after the first non-cached snapshot on
- * a cold start. A generous timeout is the backstop: if a listener never
- * confirms (e.g. genuinely offline), the app shows whatever it has rather
- * than blocking the loading screen forever. Resolves `true` only when a
- * real confirmation was seen (used to decide whether it's safe to mark
- * this session "established" — see markSessionEstablished() usage below).
- */
 function waitForTrustedSnapshot(initFn, timeoutMs = 12000) {
   return new Promise((resolve) => {
     let settled = false;
@@ -265,7 +216,6 @@ async function handleGoogleSignIn(btn) {
   setBtnLoading(btn, true, "Connecting to Google…");
   try {
     await signInWithGoogle();
-    // no need to restore the button — a successful sign-in swaps the whole screen
   } catch (err) {
     const msg = friendlyAuthError(err);
     if (errorEl) errorEl.textContent = msg;
@@ -322,7 +272,6 @@ forgotPasswordBtn.addEventListener("click", async () => {
   }
 });
 
-/** A slightly-stronger-than-Firebase-default password rule: 8+ chars, at least one letter and one number. */
 function passwordStrengthError(password) {
   if (password.length < 8) return "Password must be at least 8 characters.";
   if (!/[A-Za-z]/.test(password)) return "Password must include at least one letter.";
@@ -371,39 +320,15 @@ const routeTitles = {
   reports: "Reported Posts",
   search: "Search",
   settings: "Settings",
-  "user-profile": "Profile", // overwritten with the classmate's name once loaded
-  "post-detail": "Post", // overwritten with "<name>'s Post" once loaded
-  "dm-thread": "Private Message" // overwritten with the classmate's name once loaded
-};
+  "user-profile": "Profile",
+  "post-detail": "Post",
+  "dm-thread": "Private Message"};
 
 let currentRoute = "wall";
 
-// Remembers, for each from-tracked route, the tab its OWN back button
-// should return to (see goBackToRoute below). This is what lets Back
-// stay correct when a drill-down page is reached from another
-// drill-down page — e.g. Search (opened from Wall) then Notices
-// (opened from Search) — instead of the two swapping "from" back and
-// forth into an infinite loop. See goBackToRoute for why this is
-// needed in addition to the ?from= already baked into the hash.
 let routeFromMap = {};
 
-// Search / Notices / Settings / Reports / a classmate's Profile / Post
-// Detail are all "drill-down" pages (tapped INTO from somewhere else, no
-// persistent nav item of their own) that used to each carry their own
-// page-local "Back" pill as a second header row under the app bar. That
-// pill sat alone with nothing else on its row, which read as an orphaned
-// floating element rather than a real navigation control. It's replaced
-// by a single shared back button INSIDE the app bar itself (#topbar-back-btn,
-// swapped in for the brand mark) — the standard native/Android app-bar
-// pattern of one bar carrying either the brand or a back arrow, never both,
-// and never a bar of its own underneath. Direct Messages and Class Chat
-// keep their own inline header (back+avatar+name together) since that row
-// already carries real content, not just a lone button.
 const TOPBAR_BACK_ROUTES = new Set(["search", "user-profile", "post-detail", "notices", "reports", "settings"]);
-// Drill-down pages that DO carry a "from" (see buildHash/goToRoute below).
-// Direct Messages threads aren't in TOPBAR_BACK_ROUTES (they get their own
-// inline header, not the shared #topbar-back-btn) but its own Back button
-// still needs to know which tab to return to, so it's included here too.
 const FROM_TRACKED_ROUTES = new Set([...TOPBAR_BACK_ROUTES, "dm-thread"]);
 
 // ============================================================
@@ -439,17 +364,8 @@ function parseHash(hash) {
   return { route, id: params.get("id") || null, from: params.get("from") || null };
 }
 
-// Each of the 5 bottom-nav tabs (plus Notices/Settings) shares one page-level
-// scroll container (see .content's CSS), so switching between them used to
-// always snap back to the top — annoying if you were scrolled deep into the
-// Wall and just wanted to check Notices for a second. This remembers each
-// route's own scrollY and restores it on the way back, so every tab keeps
-// its own independent scroll position, like it had its own scroll container.
-// Post Detail / a classmate's Profile are excluded — those are drill-down
-// pages opened fresh each time (from a tap), not persistent tabs, so they
-// intentionally always open at the top.
 const SCROLL_MEMORY_EXCLUDED_ROUTES = new Set(["post-detail", "user-profile", "dm-thread"]);
-let scrollPositions = {}; // route -> last scrollY
+let scrollPositions = {};
 
 // ============================================================
 // ROUTE <-> BACK BUTTON — every section change pushes a history
@@ -463,31 +379,15 @@ let scrollPositions = {}; // route -> last scrollY
 // ============================================================
 function goToRoute(route, { fromPopstate = false, replace = false, state = {} } = {}) {
   if (!routeTitles[route]) return;
-  // Figure out which tab "back" should return to for this route (only
-  // routes in FROM_TRACKED_ROUTES ever show a back button). Resolved here,
-  // once, so it can be baked straight into the hash URL below instead of
-  // living only in memory:
-  //  - Reacting to the browser back/forward button: the address bar has
-  //    already been updated to the entry we're landing ON by the time this
-  //    runs, so trust whatever ?from= is already sitting in THAT hash.
-  //  - Re-opening the same drill-down route for a different entity (e.g.
-  //    tapping a link to another post while already on Post Detail): keep
-  //    the original ?from= rather than recomputing it as "post-detail".
-  //  - A genuinely new navigation into a from-tracked route: wherever we're
-  //    navigating away from right now is the answer.
   const trackFrom = FROM_TRACKED_ROUTES.has(route);
   let from = null;
   if (trackFrom) {
     if (state.from) from = state.from;
     else if (fromPopstate || route === currentRoute) from = parseHash(location.hash)?.from || null;
     else from = currentRoute;
-    // Remember this route's own back-destination for goBackToRoute to
-    // reuse later — see the routeFromMap comment above.
     routeFromMap[route] = from;
   }
   const id = state.profileUid || state.postId || state.dmUid || null;
-  // Remember exactly where we're scrolled to on the tab we're leaving,
-  // before its section gets hidden, so coming back restores it.
   if (currentRoute !== route && !SCROLL_MEMORY_EXCLUDED_ROUTES.has(currentRoute)) {
     scrollPositions[currentRoute] = window.scrollY;
   }
@@ -499,22 +399,9 @@ function goToRoute(route, { fromPopstate = false, replace = false, state = {} } 
     btn.classList.toggle("active", active);
     if (active) btn.setAttribute("aria-current", "page"); else btn.removeAttribute("aria-current");
   });
-  // An open DM thread has its own composer AND its own Back button, so
-  // hiding the floating pill bottom-nav there loses nothing (unlike the
-  // Direct Messages LIST, which IS a bottom-nav destination and needs the
-  // nav to navigate away) — it just gives the composer the full width of
-  // the screen to breathe instead of squeezing in above the nav. Class
-  // Chat is the same kind of full live-room + composer surface as a DM
-  // thread (just reached via a sub-tab instead of a drill-down page), so
-  // it hides the nav too whenever that sub-tab is the one showing — see
-  // .app-shell.chat-mode in the CSS, and messages.js's own
-  // syncMessageChatMode() for the same toggle on a sub-tab click without
-  // a full route change.
   document.getElementById("app-shell")?.classList.toggle("chat-mode", route === "dm-thread" || (route === "message" && isClassChatSubtabActive()));
   document.getElementById("topbar-title").textContent = routeTitles[route] || "GeoHub";
   document.getElementById("topbar-subtitle").textContent = route === "user-profile" ? "Classmate Profile" : route === "dm-thread" ? "Private Message" : route === "settings" ? "App preferences & account" : route === "reports" ? "Admin only" : "Geography & Environment";
-  // Swap the app bar's brand mark for a back arrow on drill-down pages —
-  // see TOPBAR_BACK_ROUTES above.
   const showTopbarBack = TOPBAR_BACK_ROUTES.has(route);
   document.getElementById("topbar-back-btn")?.classList.toggle("hidden", !showTopbarBack);
   document.getElementById("topbar-left")?.classList.toggle("has-back", showTopbarBack);
@@ -522,18 +409,8 @@ function goToRoute(route, { fromPopstate = false, replace = false, state = {} } 
   if (route === "profile") renderProfile();
   if (route === "settings") renderSettingsPage();
   if (route === "search") ensureSearchDataLoaded();
-  // Post Detail and a classmate's Profile are opened fresh each time (a new
-  // post or a different classmate is a brand-new page underneath the same
-  // route name), so they always start at the top. Every other route restores
-  // wherever it was last left — see the scrollPositions comment above.
   const restoreY = SCROLL_MEMORY_EXCLUDED_ROUTES.has(route) ? 0 : (scrollPositions[route] || 0);
   window.scrollTo({ top: restoreY, behavior: "auto" });
-  // NOTE: opening the Notices & Notifications page (or either of its tabs)
-  // deliberately does NOT clear the bell/tab badges anymore — only reading
-  // (or deleting) the specific notice/notification behind the count does,
-  // via markNoticeRead()/markActivityRead() inside routine.js.
-  // Leaving the Post Detail page — drop its live post/comments listeners
-  // rather than leaving them subscribed in the background.
   if (currentRoute === "post-detail" && route !== "post-detail") teardownPostDetail();
   if (currentRoute === "user-profile" && route !== "user-profile") teardownProfilePage();
   if (currentRoute === "dm-thread" && route !== "dm-thread") teardownDmThread();
@@ -547,20 +424,6 @@ function goToRoute(route, { fromPopstate = false, replace = false, state = {} } 
     history.pushState(historyState, "", hash);
   }
 }
-// Used by any page-local "Back" control (the shared #topbar-back-btn
-// below, and DM thread's own back button in messages.js) instead of
-// calling goToRoute(target) directly. goToRoute on its own treats
-// every call as a fresh forward navigation and — when no explicit
-// state.from is given — sets the target's "from" to whichever route
-// is being LEFT. That's correct for a genuine drill (tapping the bell
-// icon while on Search really should make Notices' back button return
-// to Search), but wrong for a Back tap: it would overwrite the
-// target's own already-recorded "from" with the page we're leaving,
-// and going back and forth between two drill-down pages would keep
-// re-pointing them at each other forever. Passing the target's
-// previously-recorded "from" (routeFromMap) as state.from instead
-// preserves it unchanged, so Back always walks toward the original
-// bottom-nav tab instead of looping.
 function goBackToRoute(route) {
   if (!route || !routeTitles[route]) { history.back(); return; }
   goToRoute(route, { state: { from: routeFromMap[route] } });
@@ -571,12 +434,6 @@ registerPostDetailRouter(goToRoute);
 registerDmThreadRouter(goToRoute, goBackToRoute);
 registerSearchRouter(goToRoute);
 
-// Reads the current hash URL and opens whatever it points to, in place of
-// the fixed goToRoute("wall", ...) this app used to always start on. Used
-// right after login/reload (see watchAuthState below) — a plain route just
-// goes through goToRoute itself; an entity route (a classmate's Profile, a
-// Post, a DM thread) goes through its own opener so the real content gets
-// fetched too, not just the empty section shell.
 function restoreRouteFromHash() {
   const parsed = parseHash(location.hash);
   if (!parsed || !routeTitles[parsed.route]) {
@@ -603,39 +460,14 @@ document.getElementById("topbar-search-btn").addEventListener("click", () => {
 document.getElementById("topbar-settings-btn").addEventListener("click", () => {
   if (currentRoute !== "settings") goToRoute("settings");
 });
-// Search / Notices / Settings / Reports / a classmate's Profile / Post
-// Detail are all reached the same way: tapped INTO from somewhere else, no
-// persistent nav item of their own — so they get an on-screen Back button
-// (the shared #topbar-back-btn, see TOPBAR_BACK_ROUTES) rather than relying
-// on the device/browser back button being the only way out. history.back()
-// (not a fixed goToRoute("wall")) so it always lands wherever the person
-// actually came from.
-// Prefer navigating straight to the tab recorded in ?from= over a blind
-// history.back(): back() depends on the browser's own back-stack, which
-// is empty right after a reload or when this page was opened fresh from
-// a shared link/notification — ?from= survives both since it's baked
-// into the URL itself (see buildHash/goToRoute above), so the back button
-// reliably lands on the right tab either way.
 document.getElementById("topbar-back-btn")?.addEventListener("click", () => {
   const from = history.state?.from || parseHash(location.hash)?.from;
   if (from && routeTitles[from]) goBackToRoute(from);
   else history.back();
 });
 
-// Device/browser back button: step back to whichever section is recorded
-// in that history entry (a modal's own popstate handling, in ui-utils.js,
-// runs independently and takes care of closing an open modal first).
-//
-// A closed modal pops its own history entry, which fires this same
-// popstate — even though nothing about the page underneath actually
-// changed. Re-running openPostDetailPage()/openUserProfilePage()/goToRoute()
-// for that case used to reset scroll position and re-fetch/re-render the
-// whole page from scratch (e.g. every time a comment's delete-confirm modal
-// closed), which is jarring. So: if the state we're landing on is the exact
-// route+entity already on screen, this popstate is just a modal closing —
-// leave the page alone.
 window.addEventListener("popstate", (e) => {
-  if (appShell.classList.contains("hidden")) return; // not logged in — nothing to route
+  if (appShell.classList.contains("hidden")) return;
   if (e.state && e.state.geohubRoute) {
     if (e.state.geohubRoute === "user-profile" && e.state.profileUid) {
       if (e.state.geohubRoute === currentRoute && e.state.profileUid === getOpenProfileUid()) return;
@@ -773,11 +605,6 @@ function renderProfile() {
       </div>
     </div>
   `;
-  // The camera badge on the avatar opens a small "View Photo / Change
-  // Photo" action sheet instead of jumping straight to the edit form —
-  // Edit Profile now lives in the action row below (the same slot a
-  // classmate's Message button sits in), so it's no longer only reachable
-  // by tapping the photo. The Settings page also links to the same form.
   document.getElementById("profile-photo-badge").addEventListener("click", () => openAvatarActionSheet(p));
   document.getElementById("profile-edit-btn").addEventListener("click", () => openProfileDetailsModal(false));
 
@@ -821,8 +648,6 @@ function renderSettingsPage() {
 
   document.getElementById("settings-edit-profile-btn").onclick = () => openProfileDetailsModal(false);
 
-  // Appearance — System / Light / Dark. Reflects whatever's actually
-  // stored (defaulting to "system" the first time someone opens this).
   const themeToggle = document.getElementById("settings-theme-toggle");
   const themeStatus = document.getElementById("settings-theme-status");
   const themeStatusText = {
@@ -846,8 +671,6 @@ function renderSettingsPage() {
     };
   });
 
-  // Password reset only makes sense for an email/password account — a
-  // Google-only sign-in has no GeoHub password to reset.
   const hasPasswordProvider = !!auth.currentUser?.providerData?.some(p => p.providerId === "password");
   resetPwBtn.classList.toggle("hidden", !hasPasswordProvider);
   resetPwBtn.onclick = async () => {
@@ -864,9 +687,6 @@ function renderSettingsPage() {
     }
   };
 
-  // Push notifications — reflects real browser support/permission rather
-  // than an arbitrary in-app flag, so the switch never lies about whether
-  // notifications will actually arrive.
   const pushSupported = ("Notification" in window) && ("serviceWorker" in navigator);
   if (!pushSupported) {
     pushToggle.disabled = true;
@@ -938,9 +758,6 @@ function openAvatarActionSheet(p) {
   });
 }
 
-/** "Change Photo" from the avatar action sheet — pick, crop, upload, and
- *  save just the photo (reusing the same crop/upload pipeline as the full
- *  Edit Profile form) rather than reopening that whole form. */
 function changeProfilePhotoQuick() {
   const input = document.createElement("input");
   input.type = "file";
@@ -949,7 +766,7 @@ function changeProfilePhotoQuick() {
     const file = input.files?.[0];
     if (!file || !isAcceptableImageFile(file)) return;
     const cropped = await openImageCropper(file);
-    if (!cropped) return; // cancelled
+    if (!cropped) return;
     const photoFile = new File([cropped], "avatar.jpg", { type: "image/jpeg" });
     try {
       const photoURL = await uploadImage(photoFile, { maxDim: 600, quality: 0.85, folder: "geohub/avatars" });
@@ -977,10 +794,6 @@ function changeProfilePhotoQuick() {
 // "Edit" button on My Profile.
 // ============================================================
 function openProfileDetailsModal(isFirstTime = false) {
-  // First-time completion (right after a Google sign-in) is mandatory —
-  // no close button, and it can't be dismissed until it's saved.
-  // A brand-new profile has never changed its name before (nameChangedAt
-  // is null), so this is always editable during first-time completion.
   const nameStatus = isFirstTime ? { canChange: true, daysRemaining: 0 } : nameChangeStatus();
   openModal(`
     <h3>${isFirstTime ? "Finish setting up your profile" : "Edit your details"}</h3>
@@ -1076,7 +889,6 @@ function openProfileDetailsModal(isFirstTime = false) {
     <button type="button" class="btn-primary full" id="pd-save-btn">Save Details</button>
   `, { closable: !isFirstTime });
 
-  // ---------- Photo picker: pick -> instant local preview -> uploaded only on Save ----------
   let selectedPhotoFile = null;
   const photoInput = document.getElementById("pd-photo-input");
   const photoPreview = document.getElementById("pd-photo-preview");
@@ -1086,8 +898,8 @@ function openProfileDetailsModal(isFirstTime = false) {
     photoInput.value = "";
     if (!file) return;
     if (!isAcceptableImageFile(file)) return;
-    const cropped = await openImageCropper(file); // move/zoom to a 1:1 crop before it's ever uploaded
-    if (!cropped) return; // user cancelled — keep whatever photo was showing
+    const cropped = await openImageCropper(file);
+    if (!cropped) return;
     selectedPhotoFile = new File([cropped], "avatar.jpg", { type: "image/jpeg" });
     photoPreview.innerHTML = `<span class="avatar-fill"><img src="${URL.createObjectURL(cropped)}" alt="" /></span>`;
   });
@@ -1128,7 +940,7 @@ async function saveProfileDetails(isFirstTime, getSelectedPhotoFile) {
       setBtnLoading(btn, true, "Saving…");
     }
     await updateProfileDetails({ name, roll, blood, gender, phone, year, session, hometown, address, socialLink, bio, hidePhone, hideEmail, photoURL });
-    closeModal({ force: true }); // needed for the mandatory first-time flow, harmless otherwise
+    closeModal({ force: true });
     showToast(isFirstTime ? "Profile complete — welcome aboard!" : "Profile updated.");
     if (!document.getElementById("section-profile").classList.contains("hidden")) renderProfile();
   } catch (err) {
@@ -1155,20 +967,12 @@ if ("serviceWorker" in navigator) {
 // ============================================================
 // AUTH STATE — the single switch between auth-screen and app-shell
 // ============================================================
-// Must resolve BEFORE watchAuthState below ever gets a chance to call
-// initWall/initDirectory/etc. — see resetCacheOnColdStart() in
-// firebase-config.js. Nothing before this point touches Firestore, so
-// this is early enough.
 isColdStart = await resetCacheOnColdStart();
 
 watchAuthState(
   async (user, profile) => {
-    // Bring the loading overlay back up (it may already be hidden from a
-    // previous screen) and swap the screens right away, but keep the
-    // overlay up for a beat longer so the jump from the auth screen into
-    // the Wall feels like one deliberate transition instead of an abrupt cut.
     showLoadingScreen("Loading GeoHub");
-    setLoadingProgress(85); // Firebase has resolved who's signed in
+    setLoadingProgress(85);
     authScreen.classList.add("hidden");
     appShell.classList.remove("hidden");
 
@@ -1176,11 +980,6 @@ watchAuthState(
     const composerAvatar = document.getElementById("composer-avatar");
     if (composerAvatar) composerAvatar.innerHTML = avatarInner(displayProfile);
 
-    // Wall + Directory are the two views students actually judge "did
-    // everything load" by (a missing post, a short classmate count), so
-    // those two specifically get the cold-start "wait for a trusted
-    // snapshot" treatment below. The rest keep initializing right away as
-    // before — they paint from cache/listeners on their own normal schedule.
     let wallReady = Promise.resolve(true);
     let directoryReady = Promise.resolve(true);
     if (!featuresInitialized) {
@@ -1192,44 +991,30 @@ watchAuthState(
       initGlobalSearch();
       initPresence();
       initMessages();
-      // After auth is established (a queued write's handler needs a signed-in
-      // user to get an ID token) — drains anything left queued from before a
-      // reload, then keeps draining automatically on every 'online' event.
       initWriteQueueSync();
       featuresInitialized = true;
     }
-    // Land on whatever section/entity the hash URL points to, not always
-    // the Wall — so reloading the tab (or a PWA relaunch) keeps you right
-    // where you were, and a shared post/profile link opens straight there.
     restoreRouteFromHash();
-    initPush(); // best-effort: registers this device for background push notifications
+    initPush();
 
-    // First-time Google sign-ins land without roll/blood/phone — ask for them once.
     if (profile && profile.profileIncomplete) {
       openProfileDetailsModal(true);
     }
 
-    setLoadingProgress(92); // waiting on confirmed Wall + Directory data before the reveal
+    setLoadingProgress(92);
     const [wallConfirmed, directoryConfirmed] = await Promise.all([wallReady, directoryReady]);
     if (isColdStart && wallConfirmed && directoryConfirmed) {
-      // Both listeners genuinely proved themselves against the server after
-      // the reset — safe to trust this browser's cache again from now on.
       markSessionEstablished();
     }
 
-    setLoadingProgress(100); // the shell is routed and rendering — genuinely ready
+    setLoadingProgress(100);
     setTimeout(hideLoadingScreen, LOADING_MIN_DISPLAY_MS);
   },
   () => {
     appShell.classList.add("hidden");
     authScreen.classList.remove("hidden");
-    // Clear the app's route history so a re-login starts a fresh back-stack
-    // instead of carrying over section entries from the previous session.
-    // Also strip the hash — otherwise a next login (possibly as a different
-    // student) would try to restore whatever section/entity this session
-    // was last looking at via restoreRouteFromHash().
     history.replaceState({ geohubAuthScreen: true }, "", location.pathname + location.search);
-    scrollPositions = {}; // next login's tabs each start fresh, not at this session's scroll spots
+    scrollPositions = {};
     currentRoute = "wall";
 
     if (featuresInitialized) {
@@ -1243,7 +1028,6 @@ watchAuthState(
       teardownMessages();
       featuresInitialized = false;
     }
-    // Reset auth forms (and any stuck loading buttons) for the next login
     switchAuthTab("login");
     loginForm.reset();
     signupForm.reset();
@@ -1252,10 +1036,6 @@ watchAuthState(
     document.querySelectorAll("#google-signin-btn, .google-signin-trigger").forEach(btn => setBtnLoading(btn, false));
 
     if (loggingOut) {
-      // A user-initiated logout: keep the "Logging out" overlay up for a
-      // beat so it reads as a deliberate transition, mirroring the login flow.
-      // This isn't tracking real page-load milestones (there's nothing left
-      // to load), so it just fills determinately over that same beat.
       showLoadingScreen("Logging out");
       setLoadingProgress(100);
       setTimeout(() => {
@@ -1264,20 +1044,11 @@ watchAuthState(
         loggingOut = false;
       }, LOADING_MIN_DISPLAY_MS);
     } else {
-      // First page load with no existing session — the overlay is already
-      // showing from startup, so just fill the rest of the way and dismiss
-      // right away (no session to fetch, so there's genuinely nothing left
-      // to wait on).
       setLoadingProgress(100);
       hideLoadingScreen();
     }
   },
   (message) => {
-    // Same-email-different-uid collision caught in watchAuthState (see
-    // js/auth.js) — the person's already been signed out again at this
-    // point, so this just surfaces why instead of silently landing them
-    // on a fresh blank profile. onLogout() above still runs its own
-    // firebase-side callback right after this and restores the auth screen.
     showToast(message, { duration: 6000 });
   }
 );

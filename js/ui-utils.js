@@ -10,13 +10,6 @@ const toastEl = document.getElementById("toast");
 let toastTimer = null;
 let toastDetailsId = 0;
 
-/**
- * Show a brief bottom toast message (auto-hides after `duration`ms, default 2.5s).
- * Pass `{ details }` to attach a collapsed "Details" line with the raw/technical
- * text (an error code, a stack message, …) for anyone who wants it — the headline
- * `message` itself should always be plain, non-technical language. Opening the
- * details pauses the auto-hide timer until it's collapsed again.
- */
 export function showToast(message, { details, duration = 2500 } = {}) {
   clearTimeout(toastTimer);
   toastEl.innerHTML = "";
@@ -84,14 +77,6 @@ const FRIENDLY_ERROR_MESSAGES = {
   "data-loss": "Something went wrong loading that data. Please try again.",
 };
 
-/**
- * Turns a raw Firestore/Firebase error into { message, technical } —
- * `message` is safe and friendly enough to show as a toast headline,
- * `technical` is the original code/message for an optional "Details"
- * expander (see showToast above). Falls back to `fallback` for any
- * error code not in the map, and calls out being offline specifically
- * since that's the single most common real-world cause.
- */
 export function friendlyError(err, fallback = "Something went wrong. Please try again.") {
   const code = err?.code ? String(err.code).replace(/^firestore\//, "") : "";
   const technical = err ? [err.code, err.message].filter(Boolean).join(" — ") || String(err) : "";
@@ -121,15 +106,14 @@ const modalCloseBtn = document.getElementById("modal-close-btn");
 // button entirely and can't be dismissed until the flow calls
 // closeModal({ force: true }) itself.
 // ============================================================
-let modalHistoryOpen = false;   // true while the current history entry represents an open modal
-let closingFromPopstate = false; // true while we're reacting to a back-navigation, to avoid a double history.back()
-let modalClosable = true;       // false while a mandatory, non-dismissable modal is open
+let modalHistoryOpen = false;
+let closingFromPopstate = false;
+let modalClosable = true;
 
-/** Open the shared bottom-sheet modal with the given inner HTML. Pass { closable: false } for a modal that must be completed rather than dismissed. */
 export function openModal(html, { closable = true } = {}) {
   const wasHidden = modalOverlay.classList.contains("hidden");
   modalBody.innerHTML = html;
-  if (modalScroll) modalScroll.scrollTop = 0; // fresh content (or a brand-new modal) always starts scrolled to top
+  if (modalScroll) modalScroll.scrollTop = 0;
   modalClosable = closable;
   modalOverlay.classList.toggle("no-close", !closable);
   modalOverlay.classList.remove("hidden");
@@ -138,14 +122,6 @@ export function openModal(html, { closable = true } = {}) {
     modalHistoryOpen = true;
   }
 }
-/**
- * Close the modal. A non-closable (mandatory) modal ignores this unless { force: true } is passed.
- * Pass { keepHistory: true } when the modal is being closed only because the caller is about to
- * navigate to a full page right after (e.g. tapping a name in the "Liked by" list) — this skips the
- * history.back() call so it can't race the page's own history.pushState/replaceState. The caller is
- * then responsible for using `{ replace: true }` on that navigation so it replaces this modal's
- * history entry instead of stacking on top of it.
- */
 export function closeModal({ force = false, keepHistory = false } = {}) {
   if (modalOverlay.classList.contains("hidden")) return;
   if (!modalClosable && !force) return;
@@ -155,14 +131,10 @@ export function closeModal({ force = false, keepHistory = false } = {}) {
   modalClosable = true;
   if (modalHistoryOpen) {
     modalHistoryOpen = false;
-    if (!closingFromPopstate && !keepHistory) history.back(); // pop the entry this modal pushed
+    if (!closingFromPopstate && !keepHistory) history.back();
   }
 }
-// The close (X) button is the only way to dismiss a modal by hand.
 modalCloseBtn.addEventListener("click", () => closeModal());
-// Device/browser back button: close an open, closable modal instead of
-// navigating away. A mandatory modal re-asserts its history entry so the
-// back button can't be used to slip past it.
 window.addEventListener("popstate", () => {
   if (modalOverlay.classList.contains("hidden")) return;
   if (!modalClosable) {
@@ -189,15 +161,11 @@ window.addEventListener("popstate", () => {
 document.addEventListener("wheel", (e) => {
   const row = e.target.closest?.(".chip-row");
   if (!row || row.scrollWidth <= row.clientWidth) return;
-  if (Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return; // already a horizontal gesture — let the row handle it natively
+  if (Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
   e.preventDefault();
   row.scrollLeft += e.deltaY;
 }, { passive: false });
 
-/** Shared shimmer placeholder for any list that's still loading (Notice
- *  board, Notification tab, Classmate Directory, a profile's Posts/Notes
- *  tabs, …) — an avatar + a couple of lines per row, repeated `count` times,
- *  so lists get the same skeleton feel as the Wall instead of plain text. */
 export function skeletonRowsHtml(count = 3) {
   const row = `
     <div class="skeleton-row" aria-hidden="true">
@@ -207,14 +175,12 @@ export function skeletonRowsHtml(count = 3) {
   return row.repeat(count);
 }
 
-/** Escape user-entered text before injecting into innerHTML (XSS guard). */
 export function escapeHtml(str = "") {
   const div = document.createElement("div");
   div.textContent = str;
   return div.innerHTML;
 }
 
-/** Two-letter initials — kept for legacy callers, no longer used for avatars. */
 export function initialsOf(name = "?") {
   return name.trim().split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() || "").join("") || "?";
 }
@@ -226,39 +192,27 @@ export function initialsOf(name = "?") {
 // across the Wall, comments, Directory and Profile screens.
 // ============================================================
 
-/** A stable, good-looking palette — colors picked to all read well with a white icon on top. */
 const AVATAR_PALETTE = [
   "#e11d48", "#db2777", "#c026d3", "#9333ea", "#7c3aed",
   "#4f46e5", "#2563eb", "#0ea5e9", "#0891b2", "#0d9488",
   "#059669", "#65a30d", "#ca8a04", "#d97706", "#ea580c", "#dc2626"
 ];
 
-/** Deterministic hash so the same student always gets the same avatar color. */
 function hashSeed(seed = "") {
   let h = 0;
   for (let i = 0; i < seed.length; i++) { h = (h * 31 + seed.charCodeAt(i)) >>> 0; }
   return h;
 }
 
-/** Pick a stable background color for a given uid/name/email seed. */
 export function avatarColorFor(seed) {
   if (!seed) return AVATAR_PALETTE[0];
   return AVATAR_PALETTE[hashSeed(String(seed)) % AVATAR_PALETTE.length];
 }
 
-/**
- * Gender-silhouette icon markup (never initials). Built from a couple of
- * simple, high-contrast layered shapes rather than fussy hand-drawn detail —
- * that's what keeps it reading clearly at avatar sizes as small as 24px.
- * Falls back to a neutral bust for unset/other.
- */
 function genderIconSvg(gender) {
-  // Shoulders/body — shared by every variant.
   const body = `<path d="M12 14.5c-4.53 0-10.05 2.07-10.05 6.25V22h20.1v-1.25c0-4.18-5.52-6.25-10.05-6.25Z" fill="rgba(255,255,255,0.97)"/>`;
 
   if (gender === "male") {
-    // Short, tapered hairline: a slightly larger dim circle behind a smaller
-    // bright face circle, so only a subtle rim of "hair" peeks out at the top.
     return `<svg viewBox="0 0 24 24" width="60%" height="60%" aria-hidden="true">
       <circle cx="12" cy="7.65" r="4.55" fill="rgba(255,255,255,0.5)"/>
       <circle cx="12" cy="8.3" r="4" fill="rgba(255,255,255,0.97)"/>
@@ -267,8 +221,6 @@ function genderIconSvg(gender) {
   }
 
   if (gender === "female") {
-    // Long hair silhouette: one soft, rounded mass behind a smaller, dimmer
-    // face circle (peeking out), plus two flowing strands over the shoulders.
     return `<svg viewBox="0 0 24 24" width="60%" height="60%" aria-hidden="true">
       <path d="M17.55 13.75c1.75.98 2.9 2.6 3.15 4.55.25-1.55.06-2.98-.55-4.15-.75.02-1.6-.13-2.6-.4Z" fill="rgba(255,255,255,0.97)"/>
       <path d="M6.45 13.75c-1.75.98-2.9 2.6-3.15 4.55-.25-1.55-.06-2.98.55-4.15.75.02 1.6-.13 2.6-.4Z" fill="rgba(255,255,255,0.97)"/>
@@ -278,7 +230,6 @@ function genderIconSvg(gender) {
     </svg>`;
   }
 
-  // "others" / not set — neutral bust with a small identity mark, no hairstyle.
   return `<svg viewBox="0 0 24 24" width="60%" height="60%" aria-hidden="true">
     <circle cx="12" cy="7.65" r="4.4" fill="rgba(255,255,255,0.97)"/>
     <circle cx="12" cy="4.55" r="1.15" fill="rgba(255,255,255,0.55)"/>
@@ -286,11 +237,6 @@ function genderIconSvg(gender) {
   </svg>`;
 }
 
-/**
- * Build a full avatar element's inner markup (icon on a colored circle).
- * Pass whatever profile-ish object you have — {uid, name, gender, email}.
- * Only `uid` (or name as fallback) is required for a consistent color.
- */
 export function avatarInner(profile = {}) {
   const seed = profile.uid || profile.name || "?";
   const color = avatarColorFor(seed);
@@ -300,30 +246,20 @@ export function avatarInner(profile = {}) {
   return `<span class="avatar-fill" style="background:${color}">${genderIconSvg(profile.gender)}</span>`;
 }
 
-/** True if this email belongs to a GeoHub admin (CR / class admin). */
 export function isAdminEmail(email) {
   return !!email && ADMIN_EMAILS.includes(email);
 }
 
-/** The small purple "verified" seal shown next to the admin's name everywhere (scalloped badge shape, like the well-known social-app verified marks, with an "A" mark inside). */
 export function adminBadgeHtml() {
   return `<svg class="admin-badge" viewBox="0 0 24 24" role="img" aria-label="Verified Admin" aria-hidden="false"><title>Founder & Admin</title><path d="M23 12l-2.44-2.79.34-3.69-3.61-.82-1.89-3.2L12 2.96 8.6 1.5 6.71 4.69 3.1 5.5l.34 3.7L1 12l2.44 2.79-.34 3.7 3.61.82L8.6 22.5l3.4-1.47 3.4 1.46 1.89-3.19 3.61-.82-.34-3.69L23 12z"/><text x="12" y="15.7" text-anchor="middle" font-size="10" font-weight="800" fill="#fff" font-family="Arial, Helvetica, sans-serif">A</text></svg>`;
 }
 
-/**
- * A student's display name, with the admin badge appended when applicable.
- * For the class admin's email, the canonical ADMIN_NAME is always shown
- * (instead of whatever name happens to be stored on the account) — so the
- * admin's identity is consistent everywhere: Wall posts, comments, the
- * Notice Board, Directory, and Profile.
- */
 export function nameWithBadge(name, email) {
   const admin = isAdminEmail(email);
   const displayName = admin ? ADMIN_NAME : (name || "Classmate");
   return `${escapeHtml(displayName)}${admin ? adminBadgeHtml() : ""}`;
 }
 
-/** Turn a Firestore Timestamp (or null, while pending) into "3m ago" style text. */
 export function timeAgo(timestamp) {
   if (!timestamp || !timestamp.toDate) return "just now";
   const seconds = Math.floor((Date.now() - timestamp.toDate().getTime()) / 1000);
@@ -337,7 +273,6 @@ export function timeAgo(timestamp) {
   return timestamp.toDate().toLocaleDateString();
 }
 
-/** Full readable date, used in detail modals (notices, profile "joined" date, etc). */
 export function fullDate(timestamp) {
   if (!timestamp || !timestamp.toDate) return "";
   return timestamp.toDate().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
@@ -350,11 +285,6 @@ export function fullDate(timestamp) {
 // ============================================================
 const spinnerHtml = `<span class="btn-spinner" aria-hidden="true"></span>`;
 
-/**
- * Toggle a busy/spinner state on a button.
- * setBtnLoading(btn, true, "Posting…") -> disables it, shows a spinner + label
- * setBtnLoading(btn, false) -> restores exactly what was there before
- */
 export function setBtnLoading(btn, loading, label) {
   if (!btn) return;
   if (loading) {
@@ -432,30 +362,19 @@ export function getCachedProfile(uid) {
   return userCache.get(uid) || null;
 }
 
-/** Call `callback(uid)` whenever a profile is added/updated in the shared cache. Returns an unsubscribe function. */
 export function subscribeToProfileUpdates(callback) {
   profileListeners.add(callback);
   return () => profileListeners.delete(callback);
 }
 
-/**
- * If `uid` isn't cached yet, start following it directly (covers a
- * classmate outside the Directory's loaded page — e.g. a DM thread with
- * someone beyond the first 60 students). This is a LIVE listener, not a
- * one-off fetch: a one-off used to leave that student's name/avatar AND
- * online status frozen forever at whatever they were the moment the
- * thread opened, which is why presence could look badly stale (or never
- * update at all) outside the Directory. Safe to call repeatedly — once
- * subscribed for a uid, it stays live for the rest of the session. */
 export function ensureProfileLoaded(uid) {
   if (!uid || subscribedProfiles.has(uid)) return;
   subscribedProfiles.add(uid);
   onSnapshotWithRetry(doc(db, "users", uid), (snap) => {
     if (snap.exists()) cacheUserProfile(uid, snap.data());
-  }, () => { /* best-effort — avatar/presence just falls back to the generic state */ });
+  }, () => { });
 }
 
-/** Long posts / notices collapse behind a "See more" toggle instead of stretching the feed. */
 export function attachClampToggle(container) {
   container.querySelectorAll(".clamp-toggle").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -466,7 +385,6 @@ export function attachClampToggle(container) {
   });
 }
 
-/** Renders body text with a "See more" affordance when it's long — shared by posts & notices. */
 export function clampableHtml(rawText, extraClass = "") {
   const safe = escapeHtml(rawText);
   const isLong = rawText.length > 260;
@@ -488,7 +406,6 @@ function escapeRegExp(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** Extract lowercase, deduped hashtags (no "#") from raw post text — used when saving a post. */
 export function extractHashtags(rawText = "") {
   const found = new Set();
   for (const m of rawText.matchAll(HASHTAG_RE)) found.add(m[1].toLowerCase());
@@ -498,7 +415,6 @@ export function extractHashtags(rawText = "") {
 export function richTextHtml(rawText, mentions = []) {
   let safe = escapeHtml(rawText);
 
-  // Longest name first, so "Sam" can't eat into the middle of "Samantha Rahman".
   const uniqueMentions = [...new Map((mentions || []).filter(m => m && m.uid && m.name).map(m => [m.uid, m])).values()]
     .sort((a, b) => b.name.length - a.name.length);
   uniqueMentions.forEach((m) => {
@@ -513,14 +429,12 @@ export function richTextHtml(rawText, mentions = []) {
   return safe;
 }
 
-/** Like clampableHtml, but also linkifies @mentions and #hashtags. */
 export function clampableRichHtml(rawText, mentions = [], extraClass = "") {
   const html = richTextHtml(rawText, mentions);
   const isLong = rawText.length > 260;
   return `<p class="clampable ${extraClass} ${isLong ? "is-clampable" : ""}">${html}</p>${isLong ? `<button type="button" class="clamp-toggle"> See more</button>` : ""}`;
 }
 
-/** Wire up every not-yet-wired mention/hashtag chip under `root`. Safe to call on every re-render. */
 export function wireRichTextClicks(root) {
   root.querySelectorAll(".mention-chip").forEach((btn) => {
     if (btn.dataset.wired) return;
@@ -562,12 +476,6 @@ export function wireMentionAutocomplete(fieldEl, getCandidates, onPick) {
   dropdown.className = "mention-dropdown hidden";
   host.appendChild(dropdown);
 
-  // Anchor the dropdown to the FIELD's own box, not the host container's —
-  // the host is sometimes a whole modal (composer, edit-post) with a poll
-  // builder, image picker, and submit button below the textarea, and
-  // `top:100%` on the host would drop the list under all of that instead
-  // of right under what the person is typing. fieldEl is always a direct
-  // child of `host`, so its offsetTop/offsetLeft are already relative to it.
   function reposition() {
     dropdown.style.top = `${fieldEl.offsetTop + fieldEl.offsetHeight + 4}px`;
     dropdown.style.left = `${fieldEl.offsetLeft}px`;
@@ -622,7 +530,6 @@ export function wireMentionAutocomplete(fieldEl, getCandidates, onPick) {
     ).join("");
     dropdown.classList.remove("hidden");
     dropdown.querySelectorAll(".mention-option").forEach((btn, i) => {
-      // mousedown (not click) so the field never loses focus before we act.
       btn.addEventListener("mousedown", (e) => { e.preventDefault(); pick(currentMatches[i]); });
       btn.addEventListener("mouseenter", () => { activeIndex = i; paintActive(); });
     });
@@ -662,7 +569,6 @@ export function wireMentionAutocomplete(fieldEl, getCandidates, onPick) {
 // screen behaves identically and only one dropdown is ever open.
 // ============================================================
 
-/** Build the three-dot trigger + its dropdown of actions. `id` is handed back to your handler untouched. */
 export function kebabMenuHtml(id, actions, extraClass = "") {
   return `
     <div class="kebab-menu ${extraClass}" data-kebab-id="${escapeHtml(String(id))}">
@@ -675,37 +581,18 @@ export function kebabMenuHtml(id, actions, extraClass = "") {
     </div>`;
 }
 
-/**
- * Close every open kebab dropdown in the document, and un-elevate whatever
- * row it had been lifted above its siblings (see wireKebabMenus below).
- */
 export function closeAllKebabMenus() {
   document.querySelectorAll(".kebab-dropdown").forEach(d => d.classList.add("hidden"));
   document.querySelectorAll(".kebab-stack-top").forEach(el => el.classList.remove("kebab-stack-top"));
 }
 document.addEventListener("click", closeAllKebabMenus);
 
-/**
- * Wire up every not-yet-wired `.kebab-menu` under `root`.
- * `handlers` is a map of action name -> function(id). Re-safe to call
- * on every re-render since already-wired menus are skipped.
- */
 export function wireKebabMenus(root, handlers) {
   root.querySelectorAll(".kebab-menu").forEach(menu => {
     const btn = menu.querySelector(".kebab-btn");
     const dd = menu.querySelector(".kebab-dropdown");
     if (!btn || !dd || btn.dataset.wired) return;
     btn.dataset.wired = "1";
-    // Some cards (notice-row, in particular) apply a CSS transform, which
-    // creates its own stacking context — that traps the dropdown's z-index
-    // inside it, so the *next* card (painted after it in normal doc order)
-    // can still cover the open dropdown. Elevating the whole card above its
-    // siblings while its own menu is open fixes that for every card type.
-    // .dm-thread-header-row is the same situation: its `backdrop-filter`
-    // creates its own stacking context, which traps this menu's dropdown
-    // inside it — so #dm-thread-list's message bubbles (a later sibling,
-    // painted after the header in normal doc order) end up covering the
-    // open "Block this classmate" dropdown as soon as they scroll under it.
     const stackHost = menu.closest(".notice-row, .feed-post, .resource-row, .comment-item, .directory-row, .dm-thread-header-row") || menu;
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -727,7 +614,6 @@ export function wireKebabMenus(root, handlers) {
   });
 }
 
-/** Shared "are you sure?" confirmation sheet — used for every delete action in the app. */
 export function confirmDialog({ title, text, confirmLabel = "Delete", danger = true, onConfirm }) {
   openModal(`
     <div class="confirm-modal">
@@ -757,12 +643,6 @@ export function confirmDialog({ title, text, confirmLabel = "Delete", danger = t
   });
 }
 
-/**
- * Fix for tab panels sharing one page-level scroll container: switching
- * tabs used to leave the window at whatever scrollTop the previous tab
- * left behind, so a short tab could open already "scrolled" out of view.
- * Call this right after toggling `.active` on the tab panels.
- */
 export function resetScrollForTabs(anchorEl) {
   if (!anchorEl) return;
   const topbar = document.querySelector(".topbar");

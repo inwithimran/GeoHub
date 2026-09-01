@@ -7,15 +7,10 @@
 // square (1:1) JPEG blob, sized for an avatar.
 // ============================================================
 
-const OUTPUT_SIZE = 640; // px — the square JPEG we actually upload
-const MIN_ZOOM = 1;      // 1 = image just covers the frame (like object-fit:cover)
+const OUTPUT_SIZE = 640;
+const MIN_ZOOM = 1;
 const MAX_ZOOM = 3.2;
 
-/**
- * Opens the full-screen cropper for `file`. Resolves a square JPEG Blob if
- * the user taps "Use Photo", or `null` if they cancel — either way the
- * overlay is fully cleaned up before resolving.
- */
 export function openImageCropper(file) {
   return new Promise((resolve) => {
     const objectUrl = URL.createObjectURL(file);
@@ -50,9 +45,9 @@ export function openImageCropper(file) {
     const cancelBtn = overlay.querySelector(".cropper-cancel");
 
     let viewportSize = 0;
-    let baseScale = 1;   // scale at which the image just covers the viewport
-    let zoom = MIN_ZOOM;  // user zoom multiplier on top of baseScale
-    let offsetX = 0, offsetY = 0; // pan, in viewport px, relative to center
+    let baseScale = 1;
+    let zoom = MIN_ZOOM;
+    let offsetX = 0, offsetY = 0;
     let naturalW = 0, naturalH = 0;
     let settled = false;
 
@@ -64,15 +59,6 @@ export function openImageCropper(file) {
       URL.revokeObjectURL(objectUrl);
       resolve(result);
     }
-    // Swallow a tap that lands on the overlay's own bare backdrop (so it
-    // doesn't leak through to whatever's behind it) — but ONLY when the
-    // click's target IS the overlay itself, and only in the bubble phase
-    // (default, no capture). The previous version ran in the capture
-    // phase and called stopPropagation() unconditionally for every click
-    // anywhere inside the overlay; stopping propagation during capture
-    // halts the event before it ever reaches a descendant's own listener,
-    // which silently broke both "Use Photo" and "Cancel" (their click
-    // handlers, below, never fired).
     function onStageClickGuard(e) { if (e.target === overlay) e.stopPropagation(); }
     overlay.addEventListener("click", onStageClickGuard);
 
@@ -132,7 +118,6 @@ export function openImageCropper(file) {
       const prev = zoom;
       zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, nextZoom));
       if (aroundCenter && prev !== 0) {
-        // Keep the same image point under the viewport center while zooming.
         const ratio = zoom / prev;
         offsetX *= ratio;
         offsetY *= ratio;
@@ -145,9 +130,8 @@ export function openImageCropper(file) {
       setZoom(MIN_ZOOM + t * (MAX_ZOOM - MIN_ZOOM));
     });
 
-    // ---------- Drag to pan (mouse / touch / pen, via Pointer Events) + pinch to zoom ----------
-    const pointers = new Map(); // pointerId -> {x, y}
-    let dragLast = null;        // {x, y} of the single active pointer
+    const pointers = new Map();
+    let dragLast = null;
     let pinchStartDist = null;
     let pinchStartZoom = 1;
 
@@ -201,7 +185,6 @@ export function openImageCropper(file) {
     stage.addEventListener("pointercancel", endPointer);
     stage.addEventListener("pointerleave", (e) => { if (pointers.size < 2) endPointer(e); });
 
-    // ---------- Desktop mouse wheel to zoom ----------
     stage.addEventListener("wheel", (e) => {
       if (!naturalW) return;
       e.preventDefault();

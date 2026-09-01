@@ -23,29 +23,17 @@ import { openDmThread, getBlockState, setDmBlocked } from "./messages.js";
 
 const cardEl = document.getElementById("user-profile-card");
 
-// app.js hands us its router (goToRoute) so this page participates in the
-// normal section/back-button history exactly like the 5 main sections do.
-// (The page's own Back button now lives in the shared app bar —
-// #topbar-back-btn in app.js — rather than on this page.)
 let goToRouteRef = null;
 export function registerProfilePageRouter(goToRoute) { goToRouteRef = goToRoute; }
 
 let currentUid = null;
-/** The uid currently open on this page (null if the page isn't open). Lets app.js's
- *  popstate handler tell "closing a modal that was sitting on top of this page" apart
- *  from "actually navigating to a different classmate's profile", so it only reloads
- *  for the latter. */
 export function getOpenProfileUid() {
   return currentUid;
 }
-/** Call whenever navigating away from this page (mirrors teardownPostDetail()). */
 export function teardownProfilePage() {
   currentUid = null;
 }
 
-/** Skeleton placeholder shown while a profile page's data is being fetched
- *  (first open, or a cache miss) — mirrors the shape of the real card below
- *  so nothing "jumps" once the content swaps in. */
 function profileSkeletonHtml() {
   const row = () => `<div class="skeleton-line sk-90" style="height:13px"></div>`;
   return `
@@ -61,13 +49,6 @@ function profileSkeletonHtml() {
     </div>`;
 }
 
-/**
- * Open the full-page profile view for the given uid. Own profile routes to
- * "My Profile" instead of duplicating it here. Pass { replace: true } when
- * navigating here right after closing a modal (e.g. from a "Liked by" list)
- * so this page's history entry replaces the modal's instead of racing it —
- * see the { keepHistory } note on closeModal() in ui-utils.js.
- */
 export async function openUserProfilePage(uid, { fromPopstate = false, replace = false } = {}) {
   if (!uid) return;
 
@@ -115,7 +96,6 @@ function renderProfilePage(profile, uid) {
   const joined = fullDate(profile.createdAt);
   if (joined) rows.push(["Joined GeoHub", joined]);
 
-  // Update the top bar to name the classmate being viewed, now that we know who they are.
   const topbarTitle = document.getElementById("topbar-title");
   if (topbarTitle) topbarTitle.textContent = profile.name || "Classmate Profile";
 
@@ -189,17 +169,11 @@ function renderProfilePage(profile, uid) {
 
   cardEl.querySelector("#user-profile-message-btn")?.addEventListener("click", () => openDmThread(uid));
 
-  // ---- Block/unblock, now tucked behind the "more" (⋮) menu instead of
-  // sitting out as its own always-visible button (see js/messages.js —
-  // DM-only, scoped to this one classmate's conversation). Mirrors the DM
-  // thread header's own three-dot menu exactly: starts in its default
-  // (not-blocked) label while the real status loads, then the dropdown
-  // item's own text/danger-styling flips once it resolves. ----
   const moreMenu = cardEl.querySelector("#user-profile-more-menu");
   const blockItem = cardEl.querySelector("#user-profile-block-item");
   if (moreMenu && blockItem) {
     getBlockState(uid).then(({ blockedByMe }) => {
-      if (cardEl.querySelector("#user-profile-block-item") !== blockItem) return; // page navigated away/re-rendered meanwhile
+      if (cardEl.querySelector("#user-profile-block-item") !== blockItem) return;
       blockItem.textContent = blockedByMe ? "Unblock this classmate" : "Block this classmate";
       blockItem.classList.toggle("danger", !blockedByMe);
       blockItem.dataset.blocked = blockedByMe ? "1" : "0";
@@ -283,9 +257,6 @@ export async function loadUserPosts(uid, listEl) {
       .map(d => ({ id: d.id, ...d.data() }))
       .sort((a, b) => (b.createdAt?.toDate?.().getTime() || 0) - (a.createdAt?.toDate?.().getTime() || 0));
 
-    // Reuse the exact same card renderer as the Student Wall itself, so a
-    // profile's Posts tab gets full like / comment / "who liked this"
-    // interactivity instead of a static read-only summary.
     listEl.innerHTML = `<div class="flat-list feed-list"></div>`;
     const innerListEl = listEl.querySelector(".feed-list");
     posts.forEach(post => renderPost(post.id, post, innerListEl, { onChanged: () => loadUserPosts(uid, listEl) }));

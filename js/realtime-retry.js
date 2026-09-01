@@ -40,10 +40,6 @@ export function onSnapshotWithRetry(refOrQuery, onNext, onError, { baseDelayMs =
 
   function scheduleRetry() {
     if (disposed) return;
-    // Full jitter: a random delay in [0, cappedDelay] rather than a fixed
-    // exponential value, so a page with several retrying listeners (Wall,
-    // Directory, notifications, …) doesn't hammer Firestore in lockstep the
-    // instant connectivity returns.
     const cappedDelay = Math.min(maxDelayMs, baseDelayMs * 2 ** attempt);
     attempt++;
     retryTimer = setTimeout(start, Math.random() * cappedDelay);
@@ -54,7 +50,7 @@ export function onSnapshotWithRetry(refOrQuery, onNext, onError, { baseDelayMs =
     retryTimer = null;
     if (unsub) { unsub(); unsub = null; }
     unsub = onSnapshot(refOrQuery, (snap) => {
-      attempt = 0; // a healthy snapshot means the backoff resets — the next real error starts short again
+      attempt = 0;
       onNext(snap);
     }, (err) => {
       if (onError) onError(err);
@@ -63,7 +59,7 @@ export function onSnapshotWithRetry(refOrQuery, onNext, onError, { baseDelayMs =
   }
 
   function onReconnect() {
-    if (!retryTimer) return; // not currently in a backoff wait — either healthy already, or the very first attempt hasn't run yet
+    if (!retryTimer) return;
     clearTimeout(retryTimer);
     retryTimer = null;
     attempt = 0;

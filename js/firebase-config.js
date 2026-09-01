@@ -21,7 +21,6 @@ import {
   initializeFirestore, persistentLocalCache, persistentSingleTabManager, clearIndexedDbPersistence
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
-// TODO: replace with your own Firebase project credentials
 const firebaseConfig = {
   apiKey: "AIzaSyANw4D4Y-Be7R3Jctg5uNKnRa2AtG8dHGs",
   authDomain: "geohub-geo-env.firebaseapp.com",
@@ -32,7 +31,6 @@ const firebaseConfig = {
   measurementId: "G-E8XXFVJHVQ"
 };
 
-// Initialize once, export everywhere else needs it
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
@@ -79,35 +77,17 @@ export const db = initializeFirestore(app, {
 // ============================================================
 const SESSION_MARKER_KEY = "geohub_session_established";
 
-/**
- * Call once, early, before anything else touches `db`. Returns true if
- * this is a cold start (no session marker found — most likely just after
- * "Clear site data"), having also asked Firestore to reset its local
- * persistence for a clean slate. Returns false on an ordinary reload,
- * where the existing cache is trusted and left alone (the "professional
- * apps still paint instantly from disk" case).
- */
 export async function resetCacheOnColdStart() {
   if (localStorage.getItem(SESSION_MARKER_KEY)) return false;
   try {
     await clearIndexedDbPersistence(db);
   } catch {
-    // Most likely "failed-precondition" (something already touched `db`
-    // before this ran) or persistence unsupported in this browser/mode
-    // (e.g. private browsing). Either way there's nothing more to safely
-    // do here — js/app.js's own "wait for a confirmed, non-cached
-    // snapshot" gate is the real backstop regardless of whether this
-    // reset itself succeeded.
   }
   return true;
 }
 
-/** Call once a cold start's initial data has genuinely been confirmed from
- *  the server (see js/app.js) — marks this browser as having a healthy
- *  session, so the next ordinary reload skips the reset above and paints
- *  instantly from cache again, the way a healthy session always should. */
 export function markSessionEstablished() {
-  try { localStorage.setItem(SESSION_MARKER_KEY, "1"); } catch { /* storage disabled — non-fatal */ }
+  try { localStorage.setItem(SESSION_MARKER_KEY, "1"); } catch { }
 }
 
 // ============================================================
@@ -122,11 +102,9 @@ export function markSessionEstablished() {
 // ============================================================
 export const VAPID_KEY = "BD9lAKJwaHRwTaSMqD6sYWs40rfsEhUW0rxuyZtOgBsWm4jhdAgMCS4aLCIpcvFmtpIvnn_klw9IdwWrP2tp7rc";
 
-// Department constant — used across the app (post metadata, empty states, etc.)
 export const DEPARTMENT_NAME = "Geography & Environment";
 export const COLLEGE_NAME = "Govt. Michael Madhusudan College, Jessore";
 
-// Resource categories shown in the Notes & Sheet Hub
 export const RESOURCE_CATEGORIES = [
   "Physical Geography",
   "Climatology",
@@ -135,17 +113,8 @@ export const RESOURCE_CATEGORIES = [
   "General / Others"
 ];
 
-// Emails allowed to post to the Notice Board (CR / Class Admins).
-// Add your CR's/co-CR's login email(s) here. Mirror this list in your
-// Firestore security rules so it's enforced server-side, not just in the UI.
-// Any email in this list also gets the special admin badge next to their
-// name everywhere in the app (wall posts, comments, directory, notices…).
 export const ADMIN_EMAILS = [
   "in.with.imran@gmail.com"
 ];
 
-// The class admin's real, canonical name — shown everywhere their email
-// appears (Wall posts, comments, Notice Board, Directory, Profile), with
-// the admin badge, regardless of whatever name string is stored on the
-// account itself. Keeps the admin identity consistent across the app.
 export const ADMIN_NAME = "Tabib Imran";

@@ -46,7 +46,6 @@ function openDb() {
   return dbPromise;
 }
 
-/** Wraps an IDBRequest in a Promise. */
 function requested(req) {
   return new Promise((resolve, reject) => {
     req.onsuccess = () => resolve(req.result);
@@ -54,9 +53,6 @@ function requested(req) {
   });
 }
 
-/** Queue a write. `payload` can include Blob/File values (e.g. images picked
- *  before going offline) — IndexedDB structured-clones those directly, no
- *  base64 round-trip needed. Returns the queued entry's id. */
 export async function enqueueWrite(kind, payload) {
   const db = await openDb();
   const tx = db.transaction(STORE, "readwrite");
@@ -76,31 +72,22 @@ async function removeWrite(id) {
   await requested(tx.objectStore(STORE).delete(id));
 }
 
-/** How many writes are currently queued (e.g. for a small "1 post pending" badge, if ever wanted). */
 export async function countPendingWrites() {
   const db = await openDb();
   const tx = db.transaction(STORE, "readonly");
   return requested(tx.objectStore(STORE).count());
 }
 
-// kind -> async (payload) => void. Should throw on failure — a thrown
-// network-shaped error (see isNetworkError) is treated as "still offline,
-// try again later"; any other thrown error is treated as unrecoverable and
-// the write is dropped (with a console.error) rather than retried forever.
 const handlers = new Map();
 
-/** Register the function that actually performs a queued write of this kind. Call once at module load (see js/wall.js). */
 export function registerWriteHandler(kind, handler) {
   handlers.set(kind, handler);
 }
 
-/** Best-effort classification of "this failed because the network is down/
- *  unreachable" vs. a real server answer (validation error, auth error,
- *  etc.) — only the former is safe to silently retry later. */
 export function isNetworkError(err) {
   if (typeof navigator !== "undefined" && navigator.onLine === false) return true;
   if (!err) return false;
-  if (err.name === "TypeError") return true; // fetch()'s own signal for "the request never reached the network"
+  if (err.name === "TypeError") return true;
   const msg = String(err.message || "").toLowerCase();
   return msg.includes("failed to fetch") || msg.includes("network") || msg.includes("load failed");
 }
@@ -108,10 +95,6 @@ export function isNetworkError(err) {
 let syncing = false;
 let resyncRequested = false;
 
-/** Drain the queue in order (oldest first). Safe to call anytime — it's a
- *  no-op re-entrantly (a call while already syncing just requests another
- *  pass once the current one finishes, so a write queued mid-drain doesn't
- *  have to wait for the next 'online' event). */
 export async function syncPendingWrites() {
   if (syncing) { resyncRequested = true; return; }
   syncing = true;
@@ -120,15 +103,15 @@ export async function syncPendingWrites() {
       resyncRequested = false;
       const writes = await getAllWrites();
       for (const w of writes) {
-        if (typeof navigator !== "undefined" && navigator.onLine === false) return; // went back offline mid-drain — stop, the next 'online' event resumes
+        if (typeof navigator !== "undefined" && navigator.onLine === false) return;
         const handler = handlers.get(w.kind);
-        if (!handler) { await removeWrite(w.id); continue; } // no handler registered for this kind — shouldn't happen, but don't jam the queue on it forever
+        if (!handler) { await removeWrite(w.id); continue; }
         try {
           await handler(w.payload);
           await removeWrite(w.id);
         } catch (err) {
-          if (isNetworkError(err)) return; // still offline / flaky — leave it queued, stop for now
-          await removeWrite(w.id); // a real, non-network failure (e.g. rejected by the server) — drop it so it doesn't block everything queued after it
+          if (isNetworkError(err)) return;
+          await removeWrite(w.id);
           console.error(`geohub write-queue: dropped a queued "${w.kind}" write after a non-network failure`, err);
         }
       }
@@ -140,10 +123,6 @@ export async function syncPendingWrites() {
 
 let wired = false;
 
-/** Call once per login (after auth is established — a queued write's
- *  handler needs a signed-in user to get an ID token from). Wires
- *  automatic draining on reconnect and makes one attempt right away, in
- *  case the queue already has writes left over from before a reload. */
 export function initWriteQueueSync() {
   if (wired) return;
   wired = true;
