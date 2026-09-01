@@ -1308,6 +1308,10 @@
     color: var(--color-ink-faint);
   }
   .post-like-count:hover, .post-like-count:active { color: var(--color-forest-700); }
+  .action-count-badge {
+    @apply inline-flex items-center justify-center shrink-0 rounded-full font-extrabold;
+    min-width:17px; height:17px; padding:0 5px; font-size:.68rem; background: var(--color-forest-100); color: var(--color-forest-700);
+  }
 
   /* ---- Reactions (emoji, not just Like) ---- */
   .reaction-control { @apply relative shrink-0; }
@@ -1407,6 +1411,9 @@
   .comment-send-btn { @apply shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-colors text-white; background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800)); }
   .comment-send-btn:active { transform:scale(.94); }
   .comment-send-btn.is-loading { @apply opacity-60; }
+  .comment-item-pending { @apply opacity-55; }
+  .comment-pending-status { @apply inline-flex items-center gap-1.5; }
+  .comment-pending-spinner { @apply inline-block rounded-full shrink-0 animate-ring; width:9px; height:9px; border:1.5px solid var(--color-ink-faint); border-top-color: var(--color-forest-600); }
 
   /* ---------- Chips / Notes card ("field-file" tile) ---------- */
   .chip-scroller { @apply w-full max-w-full overflow-hidden; }

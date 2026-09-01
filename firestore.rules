@@ -181,6 +181,13 @@ service cloud.firestore {
       // any other edit power over it.
       allow update: if (isOwner(resource.data.authorUid) && textWithinLimit("text", 3000)) ||
         (isSignedIn() && onlyChangedFields(["likes", "reactions"])) ||
+        // commentCount is decremented client-side when a comment is deleted
+        // (js/post-detail.js) — deletion is allowed for the comment's own
+        // author, the post's author, or an admin (see the comments match
+        // below), so any of those three needs to be able to touch this
+        // single field on the parent post. It's only ever incremented
+        // server-side, by api/create-comment.js via the Admin SDK.
+        (isSignedIn() && onlyChangedFields(["commentCount"])) ||
         (isSignedIn() && pollVoteOnly()) ||
         (isAdmin() && onlyChangedFields(["pinned", "pinnedAt"]));
       // The author can delete their own post; an admin can remove any post
