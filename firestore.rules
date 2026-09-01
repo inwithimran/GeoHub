@@ -39,28 +39,20 @@ service cloud.firestore {
         request.resource.data.poll.options == resource.data.poll.options &&
         request.resource.data.poll.votes.diff(resource.data.poll.votes).affectedKeys().hasOnly([request.auth.uid]);
     }
-    // A student may change their own display name, but only once every 7
-    // days — mirrors js/auth.js's nameChangeStatus()/updateProfileDetails(),
-    // enforced here for real since a client-side check alone can't stop
-    // someone writing to Firestore directly. Either `name` isn't changing
-    // at all, or enough time has passed since `nameChangedAt` (never set =
-    // never blocked) AND the write stamps `nameChangedAt` to right now, so
-    // a client can't change the name while claiming an old timestamp.
-    function nameChangeAllowed() {
-      return request.resource.data.name == resource.data.name ||
-        (
-          (!('nameChangedAt' in resource.data) || resource.data.nameChangedAt == null ||
-            request.time > resource.data.nameChangedAt + duration.value(7, 'd')) &&
-          request.resource.data.nameChangedAt == request.time
-        );
-    }
+    // NOTE: the display-name 7-day cooldown used to be enforced here
+    // (nameChangeAllowed()) as a backstop against writing to Firestore
+    // directly. That's now moot for `users/{uid}`: its `update` rule below
+    // only lets the client touch the "lastActive" field at all, so a name
+    // change can only ever happen through api/update-profile.js's Admin
+    // SDK write (which enforces the cooldown itself, and bypasses these
+    // rules entirely). See that route's comment for the fuller reasoning.
 
     // Server-side backstop for the client's char-limit UI (js/wall.js,
     // post-detail.js, routine.js) — a client-side maxlength can't stop
     // someone writing to Firestore directly, so the real cap has to live
-    // here too, same reasoning as nameChangeAllowed() above. Missing
-    // field passes through (some other rule already requires it where it
-    // matters); present-but-wrong-type or over-length is rejected.
+    // here too. Missing field passes through (some other rule already
+    // requires it where it matters); present-but-wrong-type or
+    // over-length is rejected.
     function textWithinLimit(field, maxLen) {
       return !(field in request.resource.data) ||
         (request.resource.data[field] is string && request.resource.data[field].size() <= maxLen);
@@ -78,7 +70,14 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if isSignedIn();               // any classmate can view the directory
       allow create: if isOwner(uid);              // only during signup, by that student
-      allow update: if isOwner(uid) && nameChangeAllowed(); // students can edit only their own profile
+      // Direct client updates are limited to the "lastActive" presence
+      // heartbeat (js/presence.js) — every other profile field (name,
+      // roll, blood group, bio, privacy toggles, ...) must go through
+      // api/update-profile.js, which validates them properly (enum
+      // checks, phone format, a real Cloudinary avatar URL, the 7-day
+      // name-change cooldown) and writes via the Admin SDK, which
+      // bypasses these rules entirely.
+      allow update: if isOwner(uid) && onlyChangedFields(["lastActive"]);
       allow delete: if false;
 
       // Real, unmasked contact details. Only the student themself (to
@@ -89,7 +88,12 @@ service cloud.firestore {
       // "Hide my phone/email", rather than just hiding it in the UI.
       match /private/{docId} {
         allow read: if isOwner(uid) || isAdmin();
-        allow write: if isOwner(uid);
+        // Only the initial signup write (js/auth.js's signUp()) is a
+        // client "create" — every later change comes from
+        // api/update-profile.js's Admin SDK write, same reasoning as
+        // the parent doc's `update` rule above.
+        allow create: if isOwner(uid);
+        allow update: if false;
       }
 
       // Push-notification device tokens (js/push.js) — a student can only
@@ -161,7 +165,13 @@ service cloud.firestore {
     // ---- Student Wall posts ----
     match /posts/{postId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.authorUid == request.auth.uid && textWithinLimit("text", 3000);
+      // New posts must go through api/create-post.js, which does
+      // everything this line used to (ownership, the 3000-char cap) PLUS
+      // what rules can't cheaply check: image URLs are really this app's
+      // own Cloudinary uploads, mentions are real classmates, hashtags
+      // match the text, and a poll always starts with zero votes. That
+      // route writes via the Admin SDK, which bypasses this rule entirely.
+      allow create: if false;
       // The author can edit anything on their own post. Anyone else who's
       // signed in may ONLY flip the "likes" array + "reactions" map (tapping
       // Like/React) or cast their own poll vote (pollVoteOnly, above) —
@@ -179,7 +189,10 @@ service cloud.firestore {
 
       match /comments/{commentId} {
         allow read: if isSignedIn();
-        allow create: if isSignedIn() && request.resource.data.authorUid == request.auth.uid && textWithinLimit("text", 500);
+        // New comments must go through api/create-comment.js, same
+        // reasoning as posts' `create` rule above — plus it checks the
+        // parent post actually still exists.
+        allow create: if false;
         allow update: if isOwner(resource.data.authorUid) && textWithinLimit("text", 500);
         // A comment's own author, an admin, OR the author of the POST it's
         // on may delete it — that last one lets a post's owner moderate
