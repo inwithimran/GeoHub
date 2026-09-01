@@ -1,36 +1,8 @@
-// ============================================================
-// api/deadline-reminders.js — Vercel Cron job.
-//
-// Runs once a day (see the "crons" entry in vercel.json) and sends a
-// push notification for every deadline (js/deadlines.js) whose due
-// date falls within the next ~24-25 hours and hasn't already been
-// reminded about. This is a SEPARATE code path from api/send-push.js
-// on purpose: every push in send-push.js is triggered by a signed-in
-// student's browser right after an action they just took, but a "due
-// tomorrow" reminder has to fire on a schedule even while nobody has
-// GeoHub open at all — nothing client-side can do that, so it needs
-// its own server-triggered entry point instead of a client call.
-//
-// SETUP (see VERCEL_SETUP.md for the full walkthrough):
-//   1. Needs the same FIREBASE_SERVICE_ACCOUNT env var as send-push.js
-//      (already required for that route, so nothing new to add there).
-//   2. Optionally set a CRON_SECRET env var in the Vercel project. If
-//      set, Vercel automatically sends it back as
-//      "Authorization: Bearer <CRON_SECRET>" on every cron invocation
-//      (https://vercel.com/docs/cron-jobs/manage-cron-jobs#securing-cron-jobs),
-//      and this route checks it below — that's what stops a stranger
-//      from hitting this URL directly to spam a reminder push early.
-//      If you don't set it, the route still works (a small department
-//      app doesn't strictly need this), it's just unauthenticated.
-//   3. The schedule itself lives in vercel.json's "crons" array — edit
-//      the cron expression there to change what time of day this runs.
-//      Vercel Cron schedules are always in UTC.
-// ============================================================
 import { initializeApp, cert, getApps } from "firebase-admin/app";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 
-const REMINDER_WINDOW_START_MS = 20 * 60 * 60 * 1000;
+const REMINDER_WINDOW_START_MS = 20 * 60 * 60 * 1000; 
 const REMINDER_WINDOW_END_MS = 32 * 60 * 60 * 1000;
 
 function getAdminApp() {
@@ -62,7 +34,7 @@ async function sendToTokens(messaging, db, pairs, data = {}) {
     const chunk = pairs.slice(i, i + 500);
     const res = await messaging.sendEachForMulticast({
       tokens: chunk.map((p) => p.token),
-      data,
+      data, 
       webpush: { fcmOptions: { link: data.url || "/" } }
     });
     sent += res.successCount;

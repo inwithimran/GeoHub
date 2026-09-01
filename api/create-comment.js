@@ -1,18 +1,3 @@
-// ============================================================
-// api/create-comment.js — Vercel Serverless Function.
-//
-// Same reasoning as api/create-post.js, applied to comments
-// (js/post-detail.js's submitComment): authorName/authorEmail are
-// looked up server-side (never trusted from the client), mentions are
-// checked against real profiles, and — the one comment-specific check —
-// `postId` must actually exist, so a comment can't be created dangling
-// under a made-up or already-deleted post id.
-//
-// firestore.rules is changed to require every new comment go through
-// here (`allow create: if false` on /posts/{postId}/comments/{commentId}).
-//
-// Needs FIREBASE_SERVICE_ACCOUNT (same as the other API routes).
-// ============================================================
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getAdminApp, verifyCaller, requirePost, sendError, ApiError, enforceRateLimit } from "./_lib/adminApp.js";
 import { requiredText, validateMentions } from "./_lib/validators.js";
@@ -44,9 +29,7 @@ export default async function handler(req, res) {
     const text = requiredText(body.text, "Comment", COMMENT_TEXT_LIMIT);
     const mentions = await validateMentions(db, body.mentions, uid, 20);
 
-    const commentRef = db.collection("posts").doc(postId).collection("comments").doc();
-    const batch = db.batch();
-    batch.set(commentRef, {
+    const commentRef = await db.collection("posts").doc(postId).collection("comments").add({
       authorUid: uid,
       authorName: author.name || "",
       authorEmail: author.email || decoded.email || "",
@@ -54,8 +37,6 @@ export default async function handler(req, res) {
       mentions,
       createdAt: FieldValue.serverTimestamp()
     });
-    batch.update(postSnap.ref, { commentCount: FieldValue.increment(1) });
-    await batch.commit();
 
     return res.status(200).json({ id: commentRef.id, postAuthorUid: postSnap.get("authorUid") || null });
   } catch (err) {

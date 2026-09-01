@@ -1,27 +1,3 @@
-// ============================================================
-// api/update-profile.js — Vercel Serverless Function.
-//
-// js/auth.js's updateProfileDetails() used to write straight to
-// users/{uid} (+ users/{uid}/private/contact) from the browser.
-// firestore.rules already enforces ownership and the 7-day name-change
-// cooldown for real (nameChangeAllowed()) — what it can't cheaply do is
-// check that bloodGroup/gender/year are actually one of the allowed
-// values rather than arbitrary strings, that a phone number is
-// plausible, or that a photoURL is really this student's own Cloudinary
-// avatar upload rather than any URL at all. This route adds that, using
-// the Admin SDK so the whole update (public doc + private contact doc)
-// happens atomically in one transaction — same pattern as
-// api/resolve-profile.js's starter-profile transaction.
-//
-// firestore.rules is changed so /users/{uid} can no longer be updated
-// directly by its owner except for the narrow `lastActive` presence
-// heartbeat (js/presence.js) — every other profile field must come
-// through here. Initial account creation (js/auth.js's signUp(), and
-// the Google-first-login starter profile in api/resolve-profile.js) is
-// unaffected — this route only ever UPDATES an existing profile.
-//
-// Needs FIREBASE_SERVICE_ACCOUNT (same as the other API routes).
-// ============================================================
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getAdminApp, verifyCaller, requirePost, sendError, ApiError } from "./_lib/adminApp.js";
 import { requiredText, optionalText, enumOrEmpty, isOwnCloudinaryUrl } from "./_lib/validators.js";

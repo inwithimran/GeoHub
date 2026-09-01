@@ -1,44 +1,10 @@
-// ============================================================
-// api/send-push.js — Vercel Serverless Function.
-//
-// This is the SERVER side of push notifications. It runs on
-// Vercel, NOT on Firebase — so it needs no Firebase Blaze plan.
-// Firestore reads/writes and sending FCM messages are both free
-// on the Firebase Spark (free) plan; Blaze was only ever required
-// because Firebase *Cloud Functions* need billing enabled to
-// deploy at all. Moving the same logic here sidesteps that.
-//
-// Flow: after a student's browser successfully writes a new post/
-// resource/notice/comment/report/DM/Class Chat message to Firestore (see
-// wall.js, resources.js, routine.js, messages.js), it calls this endpoint
-// with a Firebase ID token +
-// a small payload describing what happened. This function verifies
-// that token (so only a signed-in student can trigger a send),
-// looks up every registered device's FCM token under
-// users/{uid}/fcmTokens/{token}, and pushes the notification out.
-//
-// SECURITY: verifying the ID token only proves someone is SIGNED IN
-// — by itself it doesn't prove the thing they're claiming just
-// happened (a new post/notice/etc.) actually did. Without checking
-// that, any signed-in student could call this endpoint directly
-// (bypassing the UI entirely) with an arbitrary `text` and, worse,
-// `type: "notice", urgent: true` to blast a fake "urgent notice" to
-// the whole department without ever creating a real one. So every
-// request here is checked against Firestore before anything is
-// sent — see verifyClaim() below — and a lightweight per-user
-// cooldown guards against simple spam even from legitimate actions.
-//
-// Needs one environment variable set in the Vercel project:
-//   FIREBASE_SERVICE_ACCOUNT — the full JSON key of a Firebase
-//   service account (see the setup guide for how to get this).
-// ============================================================
 import { initializeApp, cert, getApps } from "firebase-admin/app";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 import { getAuth } from "firebase-admin/auth";
 
 const ADMIN_EMAILS = ["in.with.imran@gmail.com"];
-const MIN_MS_BETWEEN_PUSHES = 5000;
+const MIN_MS_BETWEEN_PUSHES = 5000; 
 const MAX_CLAIM_AGE_MS = 2 * 60 * 1000;
 
 function getAdminApp() {
