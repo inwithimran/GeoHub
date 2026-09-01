@@ -114,7 +114,7 @@ service cloud.firestore {
       allow update: if isSignedIn() &&
         request.auth.uid in resource.data.participants &&
         request.resource.data.participants == resource.data.participants &&
-        onlyChangedFields(["unread", "lastMessageText", "lastMessageAt", "lastSenderUid", "blockedBy"]) &&
+        onlyChangedFields(["unread", "lastMessageText", "lastMessageAt", "lastSenderUid", "blockedBy", "lastReadAt", "typing"]) &&
         blockedByChangeValid();
       allow delete: if false;
 

@@ -658,6 +658,20 @@
   .chat-bubble:active { transform:scale(.97); }
   .chat-bubble-meta { @apply flex items-center gap-1.5 px-1 text-[.65rem] font-semibold; color: var(--color-ink-faint); }
   .chat-bubble-row.mine .chat-bubble-meta { @apply flex-row-reverse; }
+  .chat-seen-label { color: var(--color-forest-600); }
+  .dm-typing-indicator { @apply flex items-center shrink-0; padding:0 14px 6px; }
+  .dm-typing-indicator.hidden { @apply hidden; }
+  .dm-typing-bubble {
+    @apply inline-flex items-center gap-1 rounded-[18px]; padding:9px 13px;
+    background: var(--color-surface); border:1px solid var(--color-line); border-bottom-left-radius:5px;
+    box-shadow: var(--shadow-card);
+  }
+  .dm-typing-bubble span {
+    @apply inline-block rounded-full; width:5px; height:5px;
+    background: var(--color-ink-faint); animation: var(--animate-dot);
+  }
+  .dm-typing-bubble span:nth-child(2) { animation-delay:.15s; }
+  .dm-typing-bubble span:nth-child(3) { animation-delay:.3s; }
   .chat-day-divider { @apply self-center text-[.68rem] font-extrabold uppercase tracking-wide rounded-full; padding:4px 12px; color: var(--color-ink-faint); background: var(--color-surface); box-shadow: var(--shadow-card); margin:6px 0; }
   .chat-empty { @apply flex-1 flex flex-col items-center justify-center text-center gap-2.5; color: var(--color-ink-faint); font-size:.88rem; padding:30px; }
   .chat-empty::before {
@@ -2017,6 +2031,11 @@
           </div>
         </div>
         <div id="dm-thread-list" class="chat-scroll"></div>
+        <div id="dm-typing-indicator" class="dm-typing-indicator hidden" aria-live="polite">
+          <span class="dm-typing-bubble">
+            <span></span><span></span><span></span>
+          </span>
+        </div>
         <form id="dm-thread-form" class="chat-input-bar" autocomplete="off">
           <input type="text" id="dm-thread-input" placeholder="Type a message…" maxlength="2000" />
           <button type="submit" id="dm-thread-send-btn" class="chat-send-btn" aria-label="Send" disabled>
