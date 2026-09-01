@@ -94,8 +94,12 @@ function buildNotification(type, { text, actorName, urgent }) {
       return { title: "⏰ Deadline Tomorrow", body: truncate(text) || "Tap to view the details." };
     case "comment":
       return { title: `${name} commented on your post`, body: truncate(text) };
+    case "reply":
+      return { title: `${name} replied to your comment`, body: truncate(text) };
     case "like":
       return { title: `${name} reacted to your post`, body: "Tap to view." };
+    case "comment-like":
+      return { title: `${name} reacted to your comment`, body: truncate(text) || "Tap to view." };
     case "mention":
       return { title: `${name} mentioned you`, body: truncate(text) || "Tap to view." };
     case "report":
@@ -115,7 +119,7 @@ function isRecent(timestamp) {
 }
 
 async function verifyClaim(db, callerUid, callerEmail, payload) {
-  const { type, targetUid, postId, resourceId, noticeId, reportId, deadlineId, conversationId, messageId } = payload;
+  const { type, targetUid, postId, commentId, resourceId, noticeId, reportId, deadlineId, conversationId, messageId } = payload;
 
   if (type === "deadline") {
     if (!ADMIN_EMAILS.includes(callerEmail || "")) {
@@ -179,6 +183,27 @@ async function verifyClaim(db, callerUid, callerEmail, payload) {
     const likes = snap.get("likes") || [];
     if (!likes.includes(callerUid)) throw { status: 403, message: "You haven't liked that post." };
     if (snap.get("authorUid") !== targetUid) throw { status: 400, message: "targetUid doesn't match the post's author." };
+    return;
+  }
+
+  if (type === "comment-like") {
+    if (!postId || !commentId) throw { status: 400, message: "Missing postId or commentId." };
+    const commentSnap = await db.collection("posts").doc(postId).collection("comments").doc(commentId).get();
+    if (!commentSnap.exists) throw { status: 400, message: "That comment doesn't exist." };
+    const commentReactions = commentSnap.get("reactions") || {};
+    if (commentReactions[callerUid] == null) throw { status: 403, message: "You haven't reacted to that comment." };
+    if (commentSnap.get("authorUid") !== targetUid) throw { status: 400, message: "targetUid doesn't match the comment's author." };
+    return;
+  }
+
+  if (type === "reply") {
+    if (!postId) throw { status: 400, message: "Missing postId." };
+    if (!targetUid) throw { status: 400, message: "Missing targetUid." };
+    const commentsSnap = await db.collection("posts").doc(postId).collection("comments")
+      .where("authorUid", "==", callerUid).limit(20).get();
+    const hasRecentReply = commentsSnap.docs.some((d) =>
+      isRecent(d.get("createdAt")) && d.get("replyTo") && d.get("replyTo").authorUid === targetUid);
+    if (!hasRecentReply) throw { status: 400, message: "No recent reply by you to that person found." };
     return;
   }
 
@@ -283,13 +308,13 @@ export default async function handler(req, res) {
     const callerUid = decoded.uid;
     const callerEmail = decoded.email || "";
 
-    const { type, text, actorName, urgent, targetUid, postId, resourceId, noticeId, reportId, deadlineId, conversationId, messageId } = req.body || {};
+    const { type, text, actorName, urgent, targetUid, postId, commentId, resourceId, noticeId, reportId, deadlineId, conversationId, messageId } = req.body || {};
     if (!type) return res.status(400).json({ error: "Missing 'type'." });
 
     const db = getFirestore(app);
 
     try {
-      await verifyClaim(db, callerUid, callerEmail, { type, targetUid, postId, resourceId, noticeId, reportId, deadlineId, conversationId, messageId });
+      await verifyClaim(db, callerUid, callerEmail, { type, targetUid, postId, commentId, resourceId, noticeId, reportId, deadlineId, conversationId, messageId });
     } catch (claimErr) {
       const status = claimErr.status || 400;
       return res.status(status).json({ error: claimErr.message || "Couldn't verify this request." });
@@ -301,7 +326,7 @@ export default async function handler(req, res) {
     const messaging = getMessaging(app);
     const { title, body } = buildNotification(type, { text, actorName, urgent });
 
-    const pairs = (type === "comment" || type === "like" || type === "mention" || type === "dm")
+    const pairs = (type === "comment" || type === "reply" || type === "like" || type === "comment-like" || type === "mention" || type === "dm")
       ? await collectTokensFor(db, targetUid, callerUid)
       : type === "report"
         ? await collectAdminTokens(db, callerUid)

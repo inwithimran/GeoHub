@@ -29,16 +29,35 @@ export default async function handler(req, res) {
     const text = requiredText(body.text, "Comment", COMMENT_TEXT_LIMIT);
     const mentions = await validateMentions(db, body.mentions, uid, 20);
 
+    let replyTo = null;
+    const replyToRaw = body.replyTo;
+    if (replyToRaw && typeof replyToRaw.id === "string" && replyToRaw.id) {
+      const parentSnap = await db.collection("posts").doc(postId).collection("comments").doc(replyToRaw.id).get();
+      if (!parentSnap.exists) throw new ApiError(400, "That comment no longer exists.");
+      const parentData = parentSnap.data();
+      const topLevelId = parentData.replyTo ? parentData.replyTo.id : parentSnap.id;
+      const topLevelSnap = topLevelId === parentSnap.id
+        ? parentSnap
+        : await db.collection("posts").doc(postId).collection("comments").doc(topLevelId).get();
+      if (!topLevelSnap.exists) throw new ApiError(400, "That comment no longer exists.");
+      replyTo = { id: topLevelId, authorUid: parentData.authorUid, authorName: parentData.authorName || "" };
+    }
+
     const commentRef = await db.collection("posts").doc(postId).collection("comments").add({
       authorUid: uid,
       authorName: author.name || "",
       authorEmail: author.email || decoded.email || "",
       text,
       mentions,
+      ...(replyTo ? { replyTo } : {}),
       createdAt: FieldValue.serverTimestamp()
     });
 
-    return res.status(200).json({ id: commentRef.id, postAuthorUid: postSnap.get("authorUid") || null });
+    return res.status(200).json({
+      id: commentRef.id,
+      postAuthorUid: postSnap.get("authorUid") || null,
+      replyTargetUid: replyTo ? replyTo.authorUid : null
+    });
   } catch (err) {
     return sendError(res, err);
   }
