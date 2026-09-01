@@ -18,7 +18,7 @@ import {
   getAuth
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
-  initializeFirestore, persistentLocalCache, persistentSingleTabManager
+  initializeFirestore, persistentLocalCache, persistentSingleTabManager, clearIndexedDbPersistence
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 // TODO: replace with your own Firebase project credentials
@@ -52,6 +52,63 @@ export const auth = getAuth(app);
 export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
 });
+
+// ============================================================
+// COLD-START CACHE RESET — a "Clear site data" reload doesn't just empty
+// the local cache, it can leave firebase-js-sdk's persistence layer
+// CORRUPTED (github.com/firebase/firebase-js-sdk/issues/8593): the browser
+// deletes the IndexedDB database out from under an already-open Firestore
+// connection, and the connection that opens on the next page load can
+// inherit a half-broken state from that — reads (even ones forced to the
+// server) can then come back wrong: missing documents, incomplete lists,
+// stale counts. That's the "user কম দেখাচ্ছে" / "ডেটা আসছে না" pattern.
+//
+// resetCacheOnColdStart() is the fix the SDK's own maintainers point to
+// for this: instead of trusting whatever state a raw browser-level delete
+// left behind, ask Firestore itself to properly tear down and rebuild its
+// local persistence via clearIndexedDbPersistence() — its own clean
+// reset routine, not a blind wipe. This MUST run before any other read or
+// listener touches `db` (nothing in this app does until after login, so
+// calling this once, early, in js/app.js is enough).
+//
+// "Cold start" here is detected with a plain localStorage marker rather
+// than by inspecting IndexedDB directly (indexedDB.databases() isn't
+// reliably supported everywhere) — "Clear site data" wipes localStorage
+// right alongside IndexedDB, so the marker's absence is exactly the
+// signal we need, no extra API required.
+// ============================================================
+const SESSION_MARKER_KEY = "geohub_session_established";
+
+/**
+ * Call once, early, before anything else touches `db`. Returns true if
+ * this is a cold start (no session marker found — most likely just after
+ * "Clear site data"), having also asked Firestore to reset its local
+ * persistence for a clean slate. Returns false on an ordinary reload,
+ * where the existing cache is trusted and left alone (the "professional
+ * apps still paint instantly from disk" case).
+ */
+export async function resetCacheOnColdStart() {
+  if (localStorage.getItem(SESSION_MARKER_KEY)) return false;
+  try {
+    await clearIndexedDbPersistence(db);
+  } catch {
+    // Most likely "failed-precondition" (something already touched `db`
+    // before this ran) or persistence unsupported in this browser/mode
+    // (e.g. private browsing). Either way there's nothing more to safely
+    // do here — js/app.js's own "wait for a confirmed, non-cached
+    // snapshot" gate is the real backstop regardless of whether this
+    // reset itself succeeded.
+  }
+  return true;
+}
+
+/** Call once a cold start's initial data has genuinely been confirmed from
+ *  the server (see js/app.js) — marks this browser as having a healthy
+ *  session, so the next ordinary reload skips the reset above and paints
+ *  instantly from cache again, the way a healthy session always should. */
+export function markSessionEstablished() {
+  try { localStorage.setItem(SESSION_MARKER_KEY, "1"); } catch { /* storage disabled — non-fatal */ }
+}
 
 // ============================================================
 // PUSH NOTIFICATIONS (Firebase Cloud Messaging)

@@ -145,19 +145,23 @@ function refreshAuthorAvatars(uid) {
   });
 }
 
-/** Wire up the composer + start the realtime post listener. Call once on login. */
-export function initWall() {
+/** Wire up the composer + start the realtime post listener. Call once on login.
+ *  onSnapshotReceived, if given, fires on every Wall snapshot (not just the
+ *  first) — the caller (js/app.js) only acts on the first one, to gate the
+ *  login-time loading screen on genuinely-arrived data after a cold start. */
+export function initWall(onSnapshotReceived) {
   composerTrigger.addEventListener("click", openComposerModal);
   subscribeToProfileUpdates(refreshAuthorAvatars);
-  subscribeWall();
+  subscribeWall(onSnapshotReceived);
 }
 
-function subscribeWall() {
+function subscribeWall(onSnapshotReceived) {
   if (unsubscribePosts) unsubscribePosts();
   const q = query(collection(db, "posts"), orderBy("createdAt", "desc"), limit(WALL_PAGE_SIZE));
   unsubscribePosts = onSnapshot(q, (snap) => {
     liveDocs = snap.docs;
     renderWallList();
+    if (onSnapshotReceived) onSnapshotReceived(snap);
   }, (err) => {
     const { message, technical } = friendlyError(err, "Couldn't load the wall.");
     showToast(message, { details: technical });

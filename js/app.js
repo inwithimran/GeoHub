@@ -4,7 +4,7 @@
 // the auth screen and the app shell, and handles SPA routing
 // between the 5 sections via the sidebar / bottom nav.
 // ============================================================
-import { DEPARTMENT_NAME, COLLEGE_NAME, auth } from "./firebase-config.js";
+import { DEPARTMENT_NAME, COLLEGE_NAME, auth, resetCacheOnColdStart, markSessionEstablished } from "./firebase-config.js";
 import {
   signUp, logIn, logOut, watchAuthState, friendlyAuthError, currentProfile,
   signInWithGoogle, updateProfileDetails, nameChangeStatus
@@ -168,6 +168,50 @@ const authTabButtons = authTabsWrap.querySelectorAll(".auth-tab");
 const allTabTriggers = document.querySelectorAll("[data-tab]");
 
 let featuresInitialized = false; // guards against re-subscribing on hot reload / re-login
+
+// ============================================================
+// COLD-START PRELOAD GATE — see resetCacheOnColdStart() in
+// firebase-config.js for the full story (firebase-js-sdk's IndexedDB
+// persistence can come back corrupted right after "Clear site data",
+// silently returning incomplete lists/missing docs). isColdStart is
+// resolved once, right before watchAuthState is wired up below.
+//
+// On a cold start, the initial Wall/Directory loading screen doesn't get
+// dismissed on a fixed timer — it waits for each listener's first
+// genuinely server-confirmed snapshot (snap.metadata.fromCache === false)
+// before showing the app, same idea as how a professional social app
+// won't flash a half-empty feed/directory after a fresh install. On an
+// ordinary reload (not a cold start), the existing healthy cache is
+// trusted as always, and the app still paints instantly from disk.
+// ============================================================
+let isColdStart = false;
+
+/**
+ * Wraps an initFn(onSnapshotReceived) (initWall / initDirectory) and
+ * resolves once its first snapshot we're willing to trust arrives —
+ * immediately on a warm start, or after the first non-cached snapshot on
+ * a cold start. A generous timeout is the backstop: if a listener never
+ * confirms (e.g. genuinely offline), the app shows whatever it has rather
+ * than blocking the loading screen forever. Resolves `true` only when a
+ * real confirmation was seen (used to decide whether it's safe to mark
+ * this session "established" — see markSessionEstablished() usage below).
+ */
+function waitForTrustedSnapshot(initFn, timeoutMs = 12000) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) { settled = true; resolve(false); }
+    }, timeoutMs);
+    initFn((snap) => {
+      if (settled) return;
+      if (!isColdStart || snap.metadata.fromCache === false) {
+        settled = true;
+        clearTimeout(timer);
+        resolve(true);
+      }
+    });
+  });
+}
 
 // ============================================================
 // AUTH SCREEN — tab switching + form submission. Google sign-in
@@ -1110,8 +1154,14 @@ if ("serviceWorker" in navigator) {
 // ============================================================
 // AUTH STATE — the single switch between auth-screen and app-shell
 // ============================================================
+// Must resolve BEFORE watchAuthState below ever gets a chance to call
+// initWall/initDirectory/etc. — see resetCacheOnColdStart() in
+// firebase-config.js. Nothing before this point touches Firestore, so
+// this is early enough.
+isColdStart = await resetCacheOnColdStart();
+
 watchAuthState(
-  (user, profile) => {
+  async (user, profile) => {
     // Bring the loading overlay back up (it may already be hidden from a
     // previous screen) and swap the screens right away, but keep the
     // overlay up for a beat longer so the jump from the auth screen into
@@ -1125,10 +1175,17 @@ watchAuthState(
     const composerAvatar = document.getElementById("composer-avatar");
     if (composerAvatar) composerAvatar.innerHTML = avatarInner(displayProfile);
 
+    // Wall + Directory are the two views students actually judge "did
+    // everything load" by (a missing post, a short classmate count), so
+    // those two specifically get the cold-start "wait for a trusted
+    // snapshot" treatment below. The rest keep initializing right away as
+    // before — they paint from cache/listeners on their own normal schedule.
+    let wallReady = Promise.resolve(true);
+    let directoryReady = Promise.resolve(true);
     if (!featuresInitialized) {
-      initWall();
+      wallReady = waitForTrustedSnapshot(initWall);
+      directoryReady = waitForTrustedSnapshot(initDirectory);
       initResources();
-      initDirectory();
       initRoutine();
       initDeadlines();
       initGlobalSearch();
@@ -1145,6 +1202,14 @@ watchAuthState(
     // First-time Google sign-ins land without roll/blood/phone — ask for them once.
     if (profile && profile.profileIncomplete) {
       openProfileDetailsModal(true);
+    }
+
+    setLoadingProgress(92); // waiting on confirmed Wall + Directory data before the reveal
+    const [wallConfirmed, directoryConfirmed] = await Promise.all([wallReady, directoryReady]);
+    if (isColdStart && wallConfirmed && directoryConfirmed) {
+      // Both listeners genuinely proved themselves against the server after
+      // the reset — safe to trust this browser's cache again from now on.
+      markSessionEstablished();
     }
 
     setLoadingProgress(100); // the shell is routed and rendering — genuinely ready

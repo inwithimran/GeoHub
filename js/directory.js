@@ -54,13 +54,17 @@ export function getAllStudents() {
   return allStudents;
 }
 
-export function initDirectory() {
+/** onSnapshotReceived, if given, fires on every Directory snapshot (not just
+ *  the first) — the caller (js/app.js) only acts on the first one, to gate
+ *  the login-time loading screen on genuinely-arrived data after a cold
+ *  start (see initWall in js/wall.js for the same pattern). */
+export function initDirectory(onSnapshotReceived) {
   searchInput.addEventListener("input", renderDirectory);
-  subscribeDirectory();
+  subscribeDirectory(onSnapshotReceived);
   if (!onlineRefreshTimer) onlineRefreshTimer = setInterval(renderOnlineNowSection, ONLINE_SECTION_REFRESH_MS);
 }
 
-function subscribeDirectory() {
+function subscribeDirectory(onSnapshotReceived) {
   if (unsubscribeDirectory) unsubscribeDirectory();
   const q = query(collection(db, "users"), limit(directoryPageLimit));
   unsubscribeDirectory = onSnapshot(q, (snap) => {
@@ -73,6 +77,7 @@ function subscribeDirectory() {
     renderOnlineNowSection();
     renderYearChips();
     renderDirectory();
+    if (onSnapshotReceived) onSnapshotReceived(snap);
   }, (err) => {
     const { message, technical } = friendlyError(err, "Couldn't load classmates.");
     showToast(message, { details: technical });
