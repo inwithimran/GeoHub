@@ -577,6 +577,14 @@ function reactionSummaryHtml(reactions) {
   return `<span class="reaction-summary-emojis">${top.join("")}</span> ${total} ${total === 1 ? "reaction" : "reactions"}`;
 }
 
+function reactionBadgeHtml(reactions) {
+  const counts = {};
+  Object.values(reactions).forEach((e) => { counts[e] = (counts[e] || 0) + 1; });
+  const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+  const total = Object.keys(reactions).length;
+  return `<span aria-hidden="true">${top ? top[0] : ""}</span><span>${total || ""}</span>`;
+}
+
 export function paintReactionButton(btnEl, countEl, post) {
   const uid = auth.currentUser.uid;
   const reactions = reactionsOf(post);
@@ -716,7 +724,7 @@ export function paintCommentReactionButton(btnEl, countEl, comment) {
   const total = Object.keys(reactions).length;
   if (countEl) {
     countEl.classList.toggle("hidden", total === 0);
-    countEl.innerHTML = reactionSummaryHtml(reactions);
+    countEl.innerHTML = reactionBadgeHtml(reactions);
   }
 }
 

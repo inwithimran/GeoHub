@@ -346,8 +346,8 @@ function renderPostDetail(postId, post, comments, container, { focusComment, com
     const replying = !replyChip.classList.contains("hidden")
       ? { id: replyChip.dataset.id, authorName: replyChip.dataset.name }
       : null;
-    submitComment(postId, commentsEl, sendBtn, post.authorUid, getMentions, replying);
     setReplyTarget(null, null);
+    submitComment(postId, commentsEl, sendBtn, post.authorUid, getMentions, replying);
   };
   sendBtn.addEventListener("click", doSubmit);
   input.addEventListener("keydown", (e) => {
@@ -378,10 +378,14 @@ function commentItemHtml(c, uid, isPostOwner, contextTag = "") {
         <button type="button" class="avatar avatar-sm avatar-btn" data-author="${c.authorUid}" aria-label="View ${escapeHtml(author.name || c.authorName || "classmate")}’s profile">${avatarInner(author)}</button>
         ${avatarPresenceDotHtml(c.authorUid)}
       </span>
-      <div class="comment-body">
-        ${contextTag}
-        <button type="button" class="comment-author" data-author="${c.authorUid}">${nameWithBadge(c.authorName, c.authorEmail)}</button>
-        <p>${richTextHtml(c.text, c.mentions)}</p>
+      <div class="comment-col">
+        <div class="comment-body ${kebabActions.length ? "has-kebab" : ""}">
+          ${kebabActions.length ? kebabMenuHtml(c.id, kebabActions) : ""}
+          ${contextTag}
+          <button type="button" class="comment-author" data-author="${c.authorUid}">${nameWithBadge(c.authorName, c.authorEmail)}</button>
+          <p>${richTextHtml(c.text, c.mentions)}</p>
+          <button type="button" class="comment-reaction-count comment-reaction-badge ${reactionCount ? "" : "hidden"}" data-id="${c.id}"></button>
+        </div>
         <div class="comment-foot">
           <div class="comment-reaction-control">
             <button type="button" class="comment-reaction-btn ${myReaction ? "liked" : ""}" data-id="${c.id}" aria-pressed="${!!myReaction}">
@@ -391,14 +395,10 @@ function commentItemHtml(c, uid, isPostOwner, contextTag = "") {
               ${REACTION_EMOJIS.map(e => `<button type="button" class="reaction-option" data-emoji="${e}">${e}</button>`).join("")}
             </div>
           </div>
-          <button type="button" class="comment-reaction-count ${reactionCount ? "" : "hidden"}" data-id="${c.id}">
-            ${reactionCount ? reactionCount : ""}
-          </button>
           <button type="button" class="comment-reply-btn" data-id="${c.id}" data-name="${escapeHtml(c.authorName || "Classmate")}">Reply</button>
           <small>${timeAgo(c.createdAt)}${c.editedAt ? " · edited" : ""}</small>
         </div>
       </div>
-      ${kebabActions.length ? kebabMenuHtml(c.id, kebabActions) : ""}
     </div>`;
 }
 
@@ -419,10 +419,14 @@ function replyItemHtml(c, uid, isPostOwner, parentComment) {
         <button type="button" class="avatar avatar-xs avatar-btn" data-author="${c.authorUid}" aria-label="View ${escapeHtml(author.name || c.authorName || "classmate")}’s profile">${avatarInner(author)}</button>
         ${avatarPresenceDotHtml(c.authorUid)}
       </span>
-      <div class="comment-body">
-        ${showReplyTag ? `<div class="reply-context">↳ Replying to ${escapeHtml(c.replyTo.authorName || "")}</div>` : ""}
-        <button type="button" class="comment-author" data-author="${c.authorUid}">${nameWithBadge(c.authorName, c.authorEmail)}</button>
-        <p>${richTextHtml(c.text, c.mentions)}</p>
+      <div class="comment-col">
+        <div class="comment-body ${kebabActions.length ? "has-kebab" : ""}">
+          ${kebabActions.length ? kebabMenuHtml(c.id, kebabActions) : ""}
+          ${showReplyTag ? `<div class="reply-context">↳ Replying to ${escapeHtml(c.replyTo.authorName || "")}</div>` : ""}
+          <button type="button" class="comment-author" data-author="${c.authorUid}">${nameWithBadge(c.authorName, c.authorEmail)}</button>
+          <p>${richTextHtml(c.text, c.mentions)}</p>
+          <button type="button" class="comment-reaction-count comment-reaction-badge ${reactionCount ? "" : "hidden"}" data-id="${c.id}"></button>
+        </div>
         <div class="comment-foot">
           <div class="comment-reaction-control">
             <button type="button" class="comment-reaction-btn ${myReaction ? "liked" : ""}" data-id="${c.id}" aria-pressed="${!!myReaction}">
@@ -432,14 +436,10 @@ function replyItemHtml(c, uid, isPostOwner, parentComment) {
               ${REACTION_EMOJIS.map(e => `<button type="button" class="reaction-option" data-emoji="${e}">${e}</button>`).join("")}
             </div>
           </div>
-          <button type="button" class="comment-reaction-count ${reactionCount ? "" : "hidden"}" data-id="${c.id}">
-            ${reactionCount ? reactionCount : ""}
-          </button>
           <button type="button" class="comment-reply-btn" data-id="${c.replyTo.id}" data-name="${escapeHtml(c.authorName || "Classmate")}">Reply</button>
           <small>${timeAgo(c.createdAt)}${c.editedAt ? " · edited" : ""}</small>
         </div>
       </div>
-      ${kebabActions.length ? kebabMenuHtml(c.id, kebabActions) : ""}
     </div>`;
 }
 
@@ -450,12 +450,14 @@ function pendingCommentItemHtml(p) {
       <span class="avatar-presence-wrap">
         <span class="avatar ${p.replyTo ? "avatar-xs" : "avatar-sm"}">${avatarInner(currentProfile || {})}</span>
       </span>
-      <div class="comment-body comment-body-pending">
-        ${replyTag}
-        <span class="comment-author">${nameWithBadge(currentProfile ? currentProfile.name : "You", currentProfile ? currentProfile.email : "")}</span>
-        <p>${escapeHtml(p.text)}</p>
+      <div class="comment-col">
+        <div class="comment-body comment-body-pending">
+          ${replyTag}
+          <span class="comment-author">${nameWithBadge(currentProfile ? currentProfile.name : "You", currentProfile ? currentProfile.email : "")}</span>
+          <p>${escapeHtml(p.text)}</p>
+        </div>
         <div class="comment-foot" aria-label="Sending comment">
-          <span class="skeleton-line comment-pending-skel"></span>
+          <span class="comment-sending-dots"><span></span><span></span><span></span></span>
         </div>
       </div>
     </div>`;
