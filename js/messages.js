@@ -502,7 +502,7 @@ function renderConversationList() {
       <button type="button" class="dm-conv-row" data-uid="${escapeHtml(uid)}">
         <span class="avatar-presence-wrap">
           <span class="avatar" data-author="${escapeHtml(uid)}">${avatarInner(profile)}</span>
-          ${avatarPresenceDotHtml(uid)}
+          ${avatarPresenceDotHtml(uid, { label: true })}
         </span>
         <div class="dm-conv-info">
           <strong>${nameWithBadge(profile.name || "Classmate", profile.email)}</strong>

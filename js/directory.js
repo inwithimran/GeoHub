@@ -7,7 +7,7 @@
 import { auth, db } from "./firebase-config.js";
 import { collection, onSnapshot, query, limit } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { escapeHtml, showToast, setBtnLoading, cacheUserProfile, avatarInner, nameWithBadge, friendlyError } from "./ui-utils.js";
-import { avatarPresenceDotHtml } from "./presence.js";
+import { avatarPresenceDotHtml, isUserOnline, paintPresenceUI } from "./presence.js";
 import { openUserProfilePage } from "./profile-view.js";
 import { openDmThread } from "./messages.js";
 
@@ -22,6 +22,18 @@ let activeYear = "All";
 
 let allStudents = [];
 let unsubscribeDirectory = null;
+
+// "Online Now" strip — built the same lazy way as yearChipRow above, but
+// inserted first so it always sits above the year filter. Search/year
+// filtering never touches it (it's not part of the filtered results
+// list); it only reflects who's actually online right now, department-
+// wide. Rebuilt on every Directory snapshot (a classmate's own heartbeat
+// write is itself one of those snapshots — see presence.js's file
+// header) plus a periodic tick so someone going stale/offline still
+// drops off the strip even without a fresh snapshot landing.
+let onlineSection = null;
+let onlineRefreshTimer = null;
+const ONLINE_SECTION_REFRESH_MS = 12_000;
 
 // ============================================================
 // PAGINATION — same trade-off as the Wall (see wall.js): reading
@@ -45,6 +57,7 @@ export function getAllStudents() {
 export function initDirectory() {
   searchInput.addEventListener("input", renderDirectory);
   subscribeDirectory();
+  if (!onlineRefreshTimer) onlineRefreshTimer = setInterval(renderOnlineNowSection, ONLINE_SECTION_REFRESH_MS);
 }
 
 function subscribeDirectory() {
@@ -57,6 +70,7 @@ function subscribeDirectory() {
       cacheUserProfile(d.id, data); // keep the shared cache warm for wall.js / profile-view.js
       return data;
     }).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    renderOnlineNowSection();
     renderYearChips();
     renderDirectory();
   }, (err) => {
@@ -89,6 +103,45 @@ function renderYearChips() {
   });
 }
 
+/**
+ * The "who's online right now" strip — a horizontal row of avatars above
+ * the filters, the way a chat-focused app (Slack, Messenger) surfaces
+ * presence up front instead of making you scan the whole roster for
+ * green dots. Excludes the signed-in student themselves. Collapses away
+ * entirely when nobody's online, rather than showing an empty section.
+ */
+function renderOnlineNowSection() {
+  const myUid = auth.currentUser?.uid;
+  const online = allStudents.filter(s => s.uid && s.uid !== myUid && isUserOnline(s));
+
+  if (!online.length) {
+    if (onlineSection) { onlineSection.remove(); onlineSection = null; }
+    return;
+  }
+  if (!onlineSection) {
+    onlineSection = document.createElement("div");
+    onlineSection.className = "directory-online-section";
+    directoryList.parentElement.insertBefore(onlineSection, directoryList);
+  }
+  onlineSection.innerHTML = `
+    <div class="section-heading directory-online-heading">Online Now · ${online.length}</div>
+    <div class="directory-online-scroll">
+      ${online.map(s => `
+        <button type="button" class="directory-online-item" data-uid="${escapeHtml(s.uid)}">
+          <span class="avatar-presence-wrap">
+            <span class="avatar">${avatarInner(s)}</span>
+            ${avatarPresenceDotHtml(s.uid)}
+          </span>
+          <span class="directory-online-name">${escapeHtml((s.name || "Classmate").split(" ")[0])}</span>
+        </button>
+      `).join("")}
+    </div>`;
+  onlineSection.querySelectorAll(".directory-online-item").forEach(btn => {
+    btn.addEventListener("click", () => openUserProfilePage(btn.dataset.uid));
+  });
+  paintPresenceUI();
+}
+
 function renderDirectory() {
   const term = searchInput.value.trim().toLowerCase();
   const filtered = allStudents.filter(s =>
@@ -107,7 +160,7 @@ function renderDirectory() {
     <div class="directory-row" data-uid="${escapeHtml(s.uid || "")}">
       <span class="avatar-presence-wrap">
         <div class="avatar">${avatarInner(s)}</div>
-        ${avatarPresenceDotHtml(s.uid)}
+        ${avatarPresenceDotHtml(s.uid, { label: true })}
       </span>
       <div class="directory-info">
         <strong>${nameWithBadge(s.name || "Unnamed", s.email)}</strong>
@@ -164,4 +217,5 @@ function renderDirectory() {
 
 export function teardownDirectory() {
   if (unsubscribeDirectory) unsubscribeDirectory();
+  if (onlineRefreshTimer) { clearInterval(onlineRefreshTimer); onlineRefreshTimer = null; }
 }

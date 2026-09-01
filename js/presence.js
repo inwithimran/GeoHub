@@ -134,6 +134,28 @@ export function presenceLabel(profile) {
   return `Active ${timeAgo(profile.lastActive)}`;
 }
 
+/**
+ * Compact "5m" / "1h" / "2d" for the profile-photo badge only (see the
+ * `label` option on avatarPresenceDotHtml below) — Facebook-style: swaps
+ * from a plain dot to a short elapsed-time label once someone's gone
+ * offline instead of just going dark. Empty string once it's been a
+ * week+ (or nothing's on file), which the badge treats as "nothing worth
+ * showing" and hides itself.
+ */
+function shortTimeAgo(ts) {
+  const ms = toMillis(ts);
+  if (!ms) return "";
+  const seconds = Math.floor((Date.now() - ms) / 1000);
+  if (seconds < 60) return "now";
+  const mins = Math.floor(seconds / 60);
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d`;
+  return "";
+}
+
 /** A small dot, styled green by CSS only once painted `.online` — drop right after a name. Needs a uid. */
 export function presenceDotHtml(uid) {
   if (!uid) return "";
@@ -154,16 +176,19 @@ export function presenceTextHtml(uid, className = "presence-text") {
  * keeps it in sync automatically; only the CSS differs (see
  * .avatar-presence-badge). Used on the Directory, Messages (conversation
  * list + thread header), Wall/comments, and Profile pages: a solid green
- * dot while online, and nothing at all once offline. Deliberately dot-only
- * everywhere — an elapsed-time label on the badge itself used to double up
- * with text already shown alongside it (e.g. the DM thread header's own
- * "Active 5m ago" line, or a message's own timestamp in the inbox), and at
- * avatar-sm sizes (comment/post authors) a text pill wide enough to read
- * ended up covering a big chunk of the photo. A plain dot avoids both.
+ * dot while online, and nothing at all once offline everywhere *except*
+ * `label: true` (only the Profile page's big photo uses this) — there,
+ * offline swaps the dot for a short elapsed-time pill ("5m", "58m", "1h")
+ * instead of just going dark. Dot-only elsewhere on purpose — a text
+ * label would double up with text already shown alongside it (e.g. the
+ * DM thread header's own "Active 5m ago" line, or a message's own
+ * timestamp in the inbox), and at avatar-sm sizes (comment/post authors)
+ * a pill wide enough to read ends up covering a big chunk of the photo.
  */
-export function avatarPresenceDotHtml(uid) {
+export function avatarPresenceDotHtml(uid, { label = false } = {}) {
   if (!uid) return "";
-  return `<span class="avatar-presence-badge" data-presence-uid="${uid}" aria-hidden="true"></span>`;
+  const cls = label ? "avatar-presence-badge avatar-presence-badge-timed" : "avatar-presence-badge";
+  return `<span class="${cls}" data-presence-uid="${uid}" aria-hidden="true"></span>`;
 }
 
 /**
@@ -177,7 +202,21 @@ export function paintPresenceUI() {
     const profile = getCachedProfile(dot.dataset.presenceUid);
     const online = isUserOnline(profile);
     dot.classList.toggle("online", online);
-    dot.title = online ? "Active Now" : "";
+    const timed = dot.classList.contains("avatar-presence-badge-timed");
+    if (!timed) {
+      dot.title = online ? "Active Now" : "";
+      return;
+    }
+    if (online) {
+      dot.textContent = "";
+      dot.classList.remove("has-label");
+      dot.title = "Active Now";
+      return;
+    }
+    const label = shortTimeAgo(profile?.lastActive);
+    dot.textContent = label;
+    dot.classList.toggle("has-label", !!label);
+    dot.title = profile?.lastActive ? `Active ${timeAgo(profile.lastActive)}` : "";
   });
   document.querySelectorAll("[data-presence-text-uid]").forEach((el) => {
     const profile = getCachedProfile(el.dataset.presenceTextUid);

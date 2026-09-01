@@ -125,7 +125,7 @@ function renderProfilePage(profile, uid) {
       <div class="profile-flow-head">
         <div class="profile-flow-avatar-wrap">
           <span class="avatar avatar-lg profile-flow-avatar">${avatarInner(profile)}</span>
-          ${avatarPresenceDotHtml(uid)}
+          ${avatarPresenceDotHtml(uid, { label: true })}
         </div>
         <h3>${nameWithBadge(profile.name || "Classmate", profile.email)}</h3>
         <div class="profile-meta-row">
