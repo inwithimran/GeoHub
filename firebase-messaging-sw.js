@@ -41,7 +41,21 @@ const CACHE_TIME_HEADER = "x-geohub-cached-at";
 self.addEventListener("install", (event) => {
   self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)).catch(() => {})
+    caches.open(CACHE_NAME).then((cache) =>
+      // NOTE: plain cache.addAll() stores responses with no
+      // CACHE_TIME_HEADER stamp, so cacheAgeMs() treats them as
+      // Infinity (infinitely stale) — meaning the very first reload
+      // right after install would miss the fresh-window check and
+      // still do a full network "preload" instead of serving cache
+      // instantly. Route install-time caching through cachePut() too
+      // so the shell already carries a valid timestamp before the
+      // person ever reloads.
+      Promise.all(
+        APP_SHELL.map((url) =>
+          fetch(url).then((res) => cachePut(cache, url, res)).catch(() => {})
+        )
+      )
+    ).catch(() => {})
   );
 });
 
