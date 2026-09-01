@@ -732,21 +732,27 @@
      getting a chunk of the photo covered. Only badges opted into
      `.avatar-presence-badge-timed` (Directory rows, the DM inbox list,
      and the Profile page's big photo — see the respective .js files)
-     show this indicator once offline — as a short "5m"/"59m"/"23h" label.
-     Deliberately a FIXED-diameter circle (width === height, no
-     `width:auto`/pill), not a growing pill sized to the text — a pill's
-     border-radius has to be recalculated against its height to keep the
-     ends true semicircles, and any mismatch (or a browser rounding a
-     fractional value differently) reads as an oval. A plain circle sized
-     to comfortably fit the longest real label ("59m", 3 characters) has
-     no such failure mode: it's `border-radius: 9999px` (inherited from
-     `.avatar-presence-badge` above, rounded-full) on a square box, which
-     is unconditionally a perfect circle regardless of content or
-     browser. */
+     show this indicator once offline — as a short "5m"/"59m"/"23h" label,
+     always a FIXED-diameter circle (width === height) for the same
+     "never an oval" reason as before.
+     Two changes from the first pass, both to stop it from eating into a
+     medium (40–46px) avatar's face: (1) smaller diameter (18px, down
+     from 22px) — just enough to fit "59m"/"23h" at a small font, not
+     sized for comfort; (2) `border: none` + an outer `box-shadow` ring
+     instead — a border is drawn *inside* the box (eating into the same
+     18px that needs to fit 3 characters), while a box-shadow ring sits
+     outside it for free, so the full diameter stays usable for text
+     without needing to grow the circle to compensate.
+     `right:-2px; bottom:-2px` (a small, whole-pixel — not fractional —
+     negative offset) tucks the circle mostly *outside* the avatar's own
+     edge rather than sinking into it, the way the online-only dot's
+     `right:0;bottom:0` reads fine at 14px but reads as "sunk into the
+     photo" once the circle is big enough to hold text. */
   .avatar-presence-badge-timed.has-label {
-    opacity:1; transform:scale(1); width:22px; height:22px; box-sizing:border-box;
+    opacity:1; transform:scale(1); width:18px; height:18px; box-sizing:border-box;
     background: color-mix(in srgb, var(--color-ink-faint) 85%, black 12%);
-    font-size:.5rem; letter-spacing:-.2px; right:0; bottom:0;
+    border:none; box-shadow:0 0 0 2px var(--color-surface);
+    font-size:.44rem; letter-spacing:-.3px; right:-2px; bottom:-2px;
   }
   .avatar-presence-wrap:has(.avatar-sm) .avatar-presence-badge { width:10px; height:10px; border-width:2px; }
   .section-heading { @apply text-xs font-extrabold uppercase tracking-wider pl-0.5; color: var(--color-ink-faint); margin:4px 0 -4px; }
