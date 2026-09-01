@@ -7,14 +7,6 @@
 <meta name="theme-color" content="#173821" />
 <meta name="description" content="GeoHub — student wall, notes &amp; sheets, classmates directory and routine for the Geography &amp; Environment Dept." />
 
-<!-- ============================================================
-     THEME — resolves the stored System/Light/Dark preference and
-     sets data-theme on <html> synchronously, before anything is
-     painted. Doing this here (rather than waiting for js/app.js,
-     which is a deferred module) is what avoids a flash of the
-     wrong theme on load. The full theme API (get/set preference,
-     react to OS changes) lives in js/theme.js.
-============================================================= -->
 <script>
   (function () {
     try {
@@ -23,13 +15,10 @@
         ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
         : stored;
       document.documentElement.setAttribute("data-theme", resolved);
-    } catch (e) { /* localStorage unavailable — falls back to the light default look */ }
+    } catch (e) {}
   })();
 </script>
 
-<!-- ============================================================
-     PWA — manifest + icons + platform install meta tags
-============================================================= -->
 <link rel="manifest" href="/manifest.json" />
 <link rel="icon" type="image/x-icon" href="/favicon.ico" sizes="any" />
 <link rel="icon" type="image/png" sizes="32x32" href="/icons/geohub-32.png" />
@@ -47,23 +36,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sora:wght@600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
 
-<!-- ============================================================
-     TAILWIND CSS — Play CDN (v4). All visual design lives here:
-     design tokens in @theme, then every component class the app's
-     markup and JS templates already use, defined once with @apply
-     so the whole UI is genuinely built from Tailwind utilities.
-============================================================= -->
 <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 <style type="text/tailwindcss">
 
-/* ============================================================
-   DESIGN TOKENS — "field survey" identity for a Geography &
-   Environment department: deep forest green as the dominant
-   brand tone, with clay (contour-line terracotta) and gold
-   (elevation-tint amber) as sparing accents. Paper/parchment
-   canvas instead of pure white or pure black. Not modeled on
-   any specific social platform's palette.
-============================================================= */
 @theme {
   --font-display: "Sora", ui-sans-serif, system-ui, sans-serif;
   --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
@@ -123,23 +98,6 @@
   --animate-shimmer:   shimmer 1.4s ease-in-out infinite;
 }
 
-/* ============================================================
-   DARK MODE — same semantic token names, re-pointed to a dark
-   palette. Everything in the app is built on top of these
-   variables (bg-surface, bg-paper, text inheriting --color-ink,
-   border-color: var(--color-line), etc.), so re-declaring them
-   here is enough to re-theme the whole app without touching
-   individual component rules. The forest/clay/gold/danger scales
-   keep the same "light tint (50/100/200) + readable text
-   (600/700/800)" pairing used throughout the app — just with the
-   lightness flipped, so every existing pill/chip/badge stays
-   legible instead of going dark-text-on-dark-tint.
-
-   Applied via [data-theme="dark"] on <html>, set by js/theme.js
-   (System/Light/Dark, chosen in Settings → Appearance). A tiny
-   inline script at the top of <head> sets this attribute before
-   first paint so there's no flash of the wrong theme.
-============================================================= */
 :root[data-theme="dark"] {
   --color-ink:        #eef2ec;
   --color-ink-soft:   #b7c2b8;
@@ -184,9 +142,6 @@
   --shadow-fab:   0 12px 24px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.08);
 }
 
-/* A couple of literal (non-token) colors that would otherwise stay
-   light-mode white in dark mode — composer/comment inputs resetting
-   to white on focus, and the small icon scrims on modals/media. */
 :root[data-theme="dark"] .composer-modal-textarea:focus,
 :root[data-theme="dark"] .comment-input-row input:focus,
 :root[data-theme="dark"] .chat-input-bar input:focus {
@@ -197,10 +152,6 @@
 :root[data-theme="dark"] .modal-close-btn { background: rgba(0,0,0,.5); }
 :root[data-theme="dark"] .modal-close-btn:active { background: rgba(0,0,0,.7); }
 
-/* forest-700 is kept light in dark mode for text/icon legibility, but a
-   couple of spots use it as a solid background fill (not a text color) —
-   those need their own dark-mode override so they stay a deep, saturated
-   green instead of turning pale like the token itself. */
 :root[data-theme="dark"] .pd-photo-camera-btn { background: var(--color-forest-600); }
 :root[data-theme="dark"] .pd-photo-camera-btn:active { background: var(--color-forest-800); }
 :root[data-theme="dark"] .call-btn { background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800)); }
@@ -228,12 +179,6 @@
     overscroll-behavior-y: none;
   }
   h1,h2,h3,h4 { font-family: var(--font-display); }
-  /* No native text-selection/callout on buttons anywhere in the app — without
-     this, a press-and-hold on any button (most noticeably the Wall's reaction
-     button, whose long-press already has its own meaning) can trigger the
-     phone's own "Select/Copy" text-selection bubble fighting for the same
-     gesture. Buttons aren't text to select, so this is switched off globally
-     rather than patched one screen at a time. */
   button {
     font-family: inherit; cursor:pointer;
     -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
@@ -248,11 +193,9 @@
 
 @layer components {
 
-  /* ---------- Brand mark (GeoHub logo image) ---------- */
   .brand-mark { @apply relative w-full h-full flex items-center justify-center; }
   .brand-mark img { @apply w-full h-full object-contain select-none pointer-events-none; }
 
-  /* ---------- Loading screen — clean single-ring orb + sweeping bar ---------- */
   .loading-screen {
     @apply fixed inset-0 z-[500] h-screen flex flex-col items-center justify-center gap-6 text-white transition-opacity duration-300;
     background: radial-gradient(130% 150% at 20% 0%, var(--color-forest-600) 0%, var(--color-forest-800) 48%, var(--color-forest-950) 100%);
@@ -279,28 +222,12 @@
   .loading-text-block { @apply flex flex-col items-center gap-3; }
   .loading-screen p { @apply text-sm font-semibold opacity-90 m-0; }
   .loading-bar-track { @apply w-[104px] h-[3px] rounded-full overflow-hidden relative; background: rgba(255,255,255,.16); }
-  /* Determinate fill — width is set directly from JS (app.js's
-     setLoadingProgress) to reflect real load milestones (script running →
-     DOM ready → page fully loaded → auth resolved → app ready), not a
-     decorative loop that runs whether or not anything has actually
-     finished. The transition is what makes each jump read as smooth
-     progress instead of a snap; on a fast/cached load the same jumps just
-     happen in quick succession, so the bar fills (and the screen
-     dismisses) correspondingly fast instead of always taking the same
-     fixed time to "look" like it's loading. */
   .loading-bar-fill {
     @apply absolute inset-y-0 left-0 rounded-full; width:0%;
     background: linear-gradient(90deg, #fff, rgba(255,255,255,.75));
     transition: width .3s cubic-bezier(.22,.8,.4,1);
   }
 
-  /* ============================================================
-     AUTH SCREEN — "Expedition Passport" layout. Deliberately its
-     own design language: a dark map/brand panel paired with a
-     light form panel, split side-by-side on wide screens and
-     stacked (compact brand strip + card) on mobile. Distinct
-     from the card system used everywhere else in the app.
-  ============================================================= */
   .auth-screen { @apply min-h-screen bg-surface; }
   .auth-split { @apply grid min-h-screen; grid-template-columns: 1fr; }
 
@@ -353,11 +280,6 @@
   .auth-form { @apply flex flex-col gap-4 animate-form-in; }
 
   @media (min-width:900px) {
-    /* Lock the split to exactly the viewport height and let each column
-       scroll independently — the brand panel stays put while only the
-       form column (where the actual content can grow, e.g. the Sign Up
-       fields) scrolls. Without this the whole page scrolled together,
-       dragging the brand panel up and out of view with it. */
     .auth-split { grid-template-columns: 44% 56%; height:100vh; overflow:hidden; }
     .auth-panel-brand { padding: 52px 50px; height:100vh; overflow-y:auto; }
     .auth-brand-mid { margin: 36px 0 30px; }
@@ -368,13 +290,10 @@
     .auth-card { padding: 6px 20px 20px; }
   }
 
-  /* ---------- Form fields ---------- */
   .field-line, .field { @apply flex flex-col gap-1.5 relative; }
   .field-line span, .field span { @apply text-[.72rem] font-bold uppercase tracking-wide pl-1; color: var(--color-ink-soft); }
   .field span { @apply text-[.8rem] font-semibold normal-case tracking-normal; }
 
-  /* .field — tonal boxed style, used outside the auth screen (Edit Profile,
-     Add Resource, Notice composer). Unaffected by the auth-form restyle below. */
   .field input, .field select, .field textarea, #notice-input {
     @apply border-0 border-b-[1.5px] rounded-t-[10px] rounded-b-[3px] px-3.5 py-3 w-full transition-colors;
     border-color: var(--color-line); background: var(--color-paper-deep); color: var(--color-ink);
@@ -388,8 +307,6 @@
   }
   .pd-name-hint { @apply text-[.72rem] leading-snug pl-1; color: var(--color-ink-faint); }
 
-  /* .field-line — Log In / Sign Up fields only: no box, transparent
-     background, underline only, with a small leading icon. */
   .field-line-input-wrap { @apply relative flex items-center w-full; }
   .field-line-icon {
     @apply absolute left-0.5 top-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none shrink-0;
@@ -419,17 +336,9 @@
   .auth-forgot-row .link-btn { @apply text-[.8rem]; }
   .link-btn { @apply font-bold underline; color: var(--color-forest-700); }
 
-  /* ---------- Buttons ---------- */
   .btn-primary {
     @apply text-white px-5 py-3.5 rounded-full font-bold tracking-wide transition-transform;
     background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800));
-    /* A fixed line-height + min-height means the button renders at the
-       SAME height whether its content is plain label text (normal state)
-       or a spinner + wrapped <span> (setBtnLoading's "is-loading" state,
-       below) — without this, swapping that inner markup could compute a
-       very slightly different line-box height and nudge the button (and
-       anything below it in the modal) by a pixel or two right as loading
-       starts, which read as the button "growing"/the layout shifting. */
     line-height:1.2; min-height:52px;
   }
   .btn-primary.raised { box-shadow: var(--shadow-btn); }
@@ -444,16 +353,6 @@
   .composer-post-btn:active { transform:scale(.97); }
   button.is-loading { @apply flex items-center justify-center gap-2 opacity-90 cursor-default; }
   .btn-spinner { @apply w-[15px] h-[15px] rounded-full shrink-0 animate-ring; border:2px solid rgba(255,255,255,.4); border-top-color:#fff; }
-  /* setBtnLoading()'s label span, min-w-0 + truncate: a flex item's default
-     min-width is "auto" (its own content width), which blocks it from ever
-     shrinking below that — so a loading label longer than the button's
-     resting label (e.g. confirmDialog's "Please wait…" swapped in for a
-     short "Delete"/"Log Out", inside the half-width .confirm-actions
-     button pair) would wrap onto a second line instead of fitting, and the
-     WHOLE BUTTON would grow taller for as long as the spinner showed. This
-     truncates instead — same fix as .msg-subtab-label above, same root
-     cause: a flex child that needs "let this shrink and ellipsize, don't
-     let it wrap the row taller". */
   .btn-spinner-label { @apply min-w-0 overflow-hidden whitespace-nowrap text-ellipsis; }
   .btn-spinner.dark { @apply w-[17px] h-[17px]; border-color: rgba(26,76,48,.2); border-top-color: var(--color-forest-700); }
   .btn-google.is-loading .btn-spinner { border-color: rgba(26,76,48,.2); border-top-color: var(--color-forest-700); }
@@ -461,7 +360,7 @@
     @apply flex items-center justify-center gap-2 border-[1.5px] px-5 py-3 rounded-full font-bold transition-colors;
     background: var(--color-surface);
     border-color: var(--color-forest-700); color: var(--color-forest-700);
-    line-height:1.2; min-height:50px; /* same fixed-height reasoning as .btn-primary above */
+    line-height:1.2; min-height:50px;
   }
   .btn-outline.full { @apply w-full; }
   .btn-outline.danger { border-color: var(--color-danger-600); color: var(--color-danger-600); }
@@ -471,41 +370,15 @@
   .btn-google {
     @apply flex items-center justify-center gap-2.5 px-4.5 py-3.5 rounded-full font-bold text-[.92rem] transition-transform;
     background:#fff; color:#3c4043; border:1.5px solid var(--color-line); box-shadow:0 1px 2px rgba(23,36,28,.05), 0 4px 12px rgba(23,36,28,.05);
-    /* Same fixed-height reasoning as .btn-primary/.btn-outline above — this
-       one was missing it, so setBtnLoading()'s spinner swap could nudge the
-       line-box height and make the button "grow" for an instant. */
     line-height:1.2; min-height:52px;
   }
   .btn-google:active { background: var(--color-paper-deep); transform:scale(.98); }
   .btn-google.full { @apply w-full; }
 
-  /* ---------- Auth card — Google sign-in always sits above the
-     Log In / Sign Up form (never hidden behind a step), so there's
-     no separate "gate" screen and no Back button to get to it. ---------- */
   .auth-gate-divider { @apply flex items-center gap-3 text-xs font-semibold my-1; color: var(--color-ink-faint); }
   .auth-gate-divider::before, .auth-gate-divider::after { content:""; @apply flex-1 h-px; background: var(--color-line); }
 
-  /* ---------- App shell ---------- */
   .app-shell { @apply grid min-h-screen w-full; grid-template-columns:1fr; grid-template-rows:58px 1fr 68px; }
-  /* Class Chat / DM list / an open DM thread (js/app.js toggles this on
-     route change) — the floating pill bottom-nav is hidden outright
-     instead of squeezing the composer in above it, and its reserved grid
-     row collapses to 0 so the chat panel gets that space back. Desktop
-     already hides .bottom-nav unconditionally and uses a 2-row grid, so
-     this is scoped to the mobile 3-row layout only.
-
-     chat-mode ALSO pins the shell to exactly 100dvh + overflow:hidden
-     (instead of the shell's normal min-h-screen, which grows with
-     content and is anchored to the *large* viewport that some mobile
-     browsers never shrink for an on-screen keyboard). Without this, a
-     tap into the composer's input made the shell taller than the
-     keyboard-shrunk visual viewport, so the browser fell back to
-     scrolling the whole document to keep the input visible — and since
-     .topbar is `position:sticky`, it stayed pinned at the top while the
-     chat-header scrolled up and disappeared behind it. Matching the
-     shell's own height to the same 100dvh unit the routes below already
-     use (see .msg-route/.dm-thread-route) removes the document-level
-     scroll entirely, so the sticky topbar has nothing left to cover. */
   .app-shell.chat-mode { min-height:0; height:100dvh; overflow:hidden; }
   body:has(.app-shell.chat-mode) { overflow:hidden; }
   @media (max-width:899px) {
@@ -517,24 +390,7 @@
     grid-row:1; background: linear-gradient(120deg, var(--color-forest-900) 0%, var(--color-forest-700) 55%, var(--color-forest-600) 100%);
     box-shadow: 0 4px 18px rgba(15,46,29,.2);
   }
-  /* min-w-0 above matters more than it looks: .topbar is a direct child of
-     the .app-shell CSS grid (grid-row:1), and grid items default to
-     min-width:auto — which for a flex container is the width its content
-     would take up UNWRAPPED, ignoring any white-space:nowrap +
-     text-overflow:ellipsis further down the tree (#topbar-title). Without
-     this, a long title (e.g. "Notices & Notifications", or a classmate's
-     full name on Profile/DM/Post pages) silently forced the whole 1fr grid
-     column wider than the viewport — the title itself still *looked*
-     truncated, but the page gained real horizontal scroll/overflow,
-     which on mobile shows up as an odd side-to-side "zoomed" scroll.
-     min-w-0 collapses that min-content contribution to 0, so the grid
-     column stays pinned to the viewport width and the ellipsis truncation
-     further down actually holds. */
   .topbar-left { @apply flex items-center gap-2.5 min-w-0; }
-  /* ---- Back button lives in the same slot as the brand mark: only one
-     of the two is ever showing (see .topbar-left.has-back below), the
-     way a native Android app bar swaps its nav icon for a back arrow on
-     a drill-down screen instead of running a second bar underneath. ---- */
   .topbar-back-btn {
     @apply flex items-center justify-center shrink-0 rounded-full transition-transform;
     width:38px; height:38px; background: rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.16); color:#fff;
@@ -543,10 +399,6 @@
   @media (hover:hover) { .topbar-back-btn:hover { background: rgba(255,255,255,.2); } }
   .topbar-left.has-back .topbar-logo { display:none; }
   @media (min-width:900px) {
-    /* Desktop has the room to spell the button out, matching the
-       icon+label pill this app already uses for DM/Profile back
-       buttons elsewhere — consistent "smart back button" treatment,
-       just relocated into the bar itself instead of the page body. */
     .topbar-back-btn { width:auto; height:38px; gap:7px; padding:0 16px 0 12px; }
     .topbar-back-btn:active { transform:scale(.96); }
   }
@@ -555,7 +407,6 @@
   #topbar-title { @apply text-[1rem] font-extrabold whitespace-nowrap overflow-hidden text-ellipsis; }
   #topbar-subtitle { @apply text-[.68rem] opacity-80 font-semibold whitespace-nowrap overflow-hidden text-ellipsis; }
 
-  /* ---------- Header notification bell + settings gear (replaces the old profile button) ---------- */
   .topbar-actions { @apply flex items-center shrink-0; gap:8px; }
   .topbar-notif-btn {
     @apply relative flex items-center justify-center shrink-0 rounded-full transition-transform;
@@ -570,7 +421,6 @@
     border:2px solid var(--color-forest-800); box-shadow:0 2px 6px rgba(0,0,0,.3);
   }
 
-  /* ---------- Owner "kebab" (three-dot) menu — edit/delete for your own posts, comments, resources & notices ---------- */
   .kebab-menu { @apply relative shrink-0; }
   .kebab-btn { @apply flex items-center justify-center rounded-full transition-colors; width:30px; height:30px; color: var(--color-ink-faint); }
   .kebab-btn:active { background: var(--color-paper-deep); }
@@ -582,11 +432,6 @@
   .kebab-item:active { background: var(--color-paper-deep); }
   .kebab-item.danger { color: var(--color-danger-600); }
 
-  /* ---------- Press-and-hold message actions (Copy/Delete) — messages.js's
-     openMessageActionMenu. A fixed-position popup anchored to the held
-     bubble, over a soft dimmed backdrop that closes it on tap — the same
-     "hold a message, a small menu appears" gesture as Messenger/WhatsApp,
-     used instead of a permanent three-dot icon sitting on every bubble. ---------- */
   .msg-action-backdrop {
     position:fixed; inset:0; z-index:60; background: rgba(15,20,15,.28);
     animation: msg-action-fade .12s ease-out;
@@ -638,11 +483,6 @@
       @apply flex flex-col text-white;
       grid-row: 1 / span 2; grid-column:1; padding:20px 14px;
       background: linear-gradient(180deg, var(--color-forest-900), var(--color-forest-950));
-      /* Pin the sidebar to the viewport instead of stretching to the full
-         (scrollable) page height — without this, the sidebar's box was as
-         tall as the whole Student Wall feed, which both dragged it along
-         when the feed scrolled AND pushed the logout button (bottom of
-         this flex column) way down past the fold. */
       position: sticky; top:0; align-self:start; height:100vh; overflow-y:auto;
     }
     .sidebar-brand { @apply flex items-center gap-2.5 pb-6 px-2; }
@@ -659,23 +499,12 @@
     .bottom-nav { @apply hidden; }
   }
 
-  /* ---------- Card / list system ---------- */
   .flat-list { @apply flex flex-col gap-3; }
   .list-block { @apply flex flex-col gap-2.5; }
   .empty-state { @apply text-center bg-surface rounded-2xl shadow-[var(--shadow-card)]; padding:44px 20px; color: var(--color-ink-faint); font-size:.88rem; }
-  /* Auto-pagination sentinel (Wall) — an invisible trigger strip with a
-     centered spinner; IntersectionObserver in wall.js loads the next page
-     as soon as this scrolls near the viewport, so it reads as the feed
-     "just keeps going" instead of a tap-to-load-more button. */
   .wall-load-sentinel { @apply flex items-center justify-center; padding:18px 0 6px; }
   .wall-feed-end { @apply text-center; padding:20px 0 8px; color: var(--color-ink-faint); font-size:.82rem; font-weight:600; }
 
-  /* ---------- Online presence (js/presence.js) ---------- */
-  /* A small dot dropped right after a name (post author, comment author,
-     directory row, profile header) — invisible until paintPresenceUI()
-     marks it `.online`, rather than an avatar-corner badge, since the
-     avatars here are clipped circles (overflow:hidden) and a corner badge
-     would just get cut off by that clip. */
   .presence-dot {
     @apply inline-block rounded-full align-middle shrink-0;
     width:8px; height:8px; margin-left:5px; margin-bottom:1px;
@@ -689,92 +518,7 @@
   .presence-text { @apply text-xs font-semibold; color: var(--color-ink-faint); }
   .presence-text:empty { display:none; }
 
-  /* A Messenger/WhatsApp-style corner badge on the avatar itself, used for
-     Directory, Messages (Direct Messages list, DM thread header), Wall/
-     comments, and Profile pages — instead of the plain dot-after-name
-     above — reads as "professional" chat-app presence at a glance. Wrap
-     the avatar in .avatar-presence-wrap (plain inline-flex, no clipping)
-     so the badge isn't cut off by the avatar's own overflow:hidden
-     circle, then drop the badge right after it. On Profile pages the
-     avatar wrapper is .profile-flow-avatar-wrap instead (see below),
-     which needs its own explicit stacking-order fix — see that rule.
-
-     Positioning rule used everywhere below: `right:0; bottom:0;` with
-     `box-sizing:border-box`, on avatar boxes whose rendered size is
-     never inflated by a real border (the photo ring is a box-shadow,
-     which doesn't add to layout size) — so the badge's own box always
-     sits at *exactly* the avatar's bottom-right corner, no matter the
-     browser. Whole-pixel sizes and border-widths only (no .5px) for the
-     same reason: a fractional border/offset gets rounded to the nearest
-     device pixel differently by different rendering engines, which is
-     what made the badge look shifted a pixel or two in some browsers and
-     not others. And the transition list below intentionally excludes
-     `width`/`border-radius` — animating to/from an `auto` width (the
-     text pill growing in) isn't defined consistently across browsers,
-     so transitioning it was itself a source of the inconsistency; only
-     opacity/transform/background animate now, and width/radius apply
-     instantly. */
   .avatar-presence-wrap { @apply relative inline-flex shrink-0 align-top; }
-  /* POSITIONING — anchor-point technique (same fix as the Profile page's
-     .profile-flow-avatar-wrap override below, now applied everywhere else
-     this badge is used: Directory rows, the DM conversation list, the DM
-     thread header, Wall/comments, and Post-detail). The old approach
-     positioned with `right:_;bottom:_`, which anchors the badge's own
-     *edge* — fine only if every badge sharing that spot is the same size.
-     The plain online dot (14px, fixed) and the offline elapsed-time pill
-     (auto-width: "5m" vs "23h" vs "125h" are all different widths) do NOT
-     share a size, so anchoring by a growing box's edge means its *center*
-     — and therefore how it visually sits against the round avatar's ring
-     — silently moved depending on the label's length. Fix: pick ONE fixed
-     point per avatar size and center *every* badge on that exact point
-     with `transform: translate(-50%,-50%)`, regardless of the badge's own
-     width/height.
-
-     IMPORTANT — where that point comes from: NOT the old `right:0;bottom:0`
-     dot spot. An earlier pass here tried reusing that position directly
-     (reasoning it was already "tuned"), but on inspection against the
-     actual rendered ring it sits ~7-10px too far inward — the badge's own
-     edge merely touches the avatar's true box edge, never reaching the
-     box-shadow ring drawn *outside* that edge, so the badge reads as sunk
-     into the photo rather than sitting on the ring. It also broke the DM
-     thread header specifically: that context's avatar is 44px (see
-     `.dm-thread-header .avatar` below), a size nothing here had an anchor
-     for, so it silently inherited the 40px anchor and drifted even
-     further inward than the rest.
-
-     The anchor actually used below was derived from the one spot already
-     confirmed correct — the Profile page's own `left:82px;top:82px` on
-     its 96px avatar (untouched by this fix, still right). Reverse-solving
-     that point shows its badge *center* sits exactly on the avatar's true
-     box-edge circle (i.e. radius = avatar size ÷ 2, measured from the
-     avatar's center) — geometrically: anchor = avatar_size × (½ + √2⁄4) ≈
-     avatar_size × 0.8536, along the same bottom-right diagonal the corner
-     sits on. That formula reproduces 82 for the 96px profile avatar
-     exactly, so the same formula (not a fresh guess) gives every other
-     avatar size its point: 40×0.8536≈34, 46×0.8536≈39, 44×0.8536≈38,
-     30×0.8536≈26. Each was then rendered for real (headless Chromium) —
-     first the bare avatar+ring alone, pixel-sampled outward from center
-     to confirm exactly where the ring's color band actually falls for
-     that box-shadow spread, then the badge added at its computed anchor
-     — and checked that the badge straddles that measured ring band the
-     same way the Profile page's badge straddles its own border/ring, not
-     assumed from the CSS spec numbers alone.
-       • default 40px .avatar (Directory rows, Wall post author, Post-
-         detail post author) → left:34px; top:34px — set below, shared by
-         every context that doesn't override avatar size, since it's the
-         same avatar box in each case.
-       • .dm-conv-row's 46px .avatar (DM conversation list) → left:39px;
-         top:39px — see override further down.
-       • .dm-thread-header's 44px .avatar (DM thread header's dot-only
-         badge — this context had NO anchor override before, which was
-         the actual cause of it looking badly sunk in) → left:38px;
-         top:38px — see override further down.
-       • avatar-sm 30px (Post-detail comments, 10px dot) → left:26px;
-         top:26px — folded into the existing `:has(.avatar-sm)` override
-         below (no pill is ever shown at this size, so only the dot needs
-         it — see the `label` docs in presence.js).
-     Whole-pixel anchor values only (no .5px), for the same cross-browser
-     rounding reason as before. */
   .avatar-presence-badge {
     @apply absolute rounded-full pointer-events-none flex items-center justify-center;
     left:34px; top:34px; right:auto; bottom:auto; width:14px; height:14px; box-sizing:border-box;
@@ -786,33 +530,6 @@
     opacity:1; transform:translate(-50%,-50%) scale(1); background: var(--color-forest-500);
     box-shadow:0 0 0 2px color-mix(in srgb, var(--color-forest-500) 22%, transparent);
   }
-  /* Offline: hidden (opacity:0 above) for every plain badge — no elapsed-
-     time indicator. That avoids duplicating text already shown elsewhere
-     (a DM thread's own "Active 5m ago" line, an inbox row's own message
-     timestamp) and keeps small avatars (comments, post authors) from
-     getting a chunk of the photo covered. Only badges opted into
-     `.avatar-presence-badge-timed` (Directory rows, the DM inbox list,
-     and the Profile page's big photo — see the respective .js files)
-     show this indicator once offline — as a short "5m"/"59m"/"23h" pill,
-     Messenger-style: light surface fill, a green outline/text (not a
-     solid fill) so it visually reads as "last-seen" rather than a second
-     "online" dot, and an auto width that grows with the text instead of
-     a fixed circle — a real Messenger badge is a rounded *pill*, not a
-     circle, and forcing 2-3 characters into a fixed-diameter circle is
-     what made the old version cramped. `rounded-full` on a non-square
-     box still renders as a pill (fully round ends), so this stays a
-     stable shape at any label length without needing JS to measure text.
-     Anchored on the same `left:34px;top:34px` point as the dot above (see
-     the anchor-point comment on `.avatar-presence-wrap`) instead of its
-     own separate `right/bottom` — that mismatch was exactly what let the
-     pill drift off-center from the dot as its label got wider. Border
-     kept hairline-thin (1px) rather than the heavier 1.5-2px used on the
-     plain online dot — the dot's border is doing real work (cutting a gap
-     against the photo behind a *solid* fill), but this pill's fill is
-     already the light surface color, so a thick outline just reads as
-     heavy/clunky rather than adding contrast. Directory rows and the DM
-     inbox list use this smaller size (14px tall) — see the Profile-page
-     override below for the larger one used on that page's big photo. */
   .avatar-presence-badge-timed.has-label {
     opacity:1; transform:translate(-50%,-50%) scale(1); box-sizing:border-box;
     width:auto; height:14px; min-width:14px; padding:0 4px;
@@ -821,25 +538,14 @@
     color: var(--color-forest-500); font-size:.42rem; letter-spacing:-.2px;
     left:34px; top:34px; right:auto; bottom:auto;
   }
-  /* DM conversation list's avatar is 46px (see `.dm-conv-row .avatar`
-     below), not the 40px default above, so it needs its own anchor point
-     — same formula, its own ring (left:39px;top:39px). */
   .dm-conv-row .avatar-presence-badge { left:39px; top:39px; }
   .dm-conv-row .avatar-presence-badge-timed.has-label { left:39px; top:39px; }
-  /* DM thread header's avatar is 44px (see `.dm-thread-header .avatar`
-     below) — its own distinct size, previously left with no anchor
-     override at all, which is why it drifted furthest inward of any
-     context. Dot-only here (no label), same as Wall/Post-detail. */
   .dm-thread-header .avatar-presence-badge { left:38px; top:38px; }
   .avatar-presence-wrap:has(.avatar-sm) .avatar-presence-badge {
     width:10px; height:10px; border-width:2px; left:26px; top:26px;
   }
   .section-heading { @apply text-xs font-extrabold uppercase tracking-wider pl-0.5; color: var(--color-ink-faint); margin:4px 0 -4px; }
 
-  /* ---------- "Online Now" strip (js/directory.js) — a horizontal row of
-     avatars above the Directory's search/year filters, Slack/Messenger-
-     style, so presence is visible up front instead of scanning the whole
-     roster for green dots. Collapses away entirely when nobody's online. */
   .directory-online-section { @apply flex flex-col gap-2; margin:2px 0 2px; }
   .directory-online-heading { margin:0 0 -2px; }
   .directory-online-scroll {
@@ -855,48 +561,12 @@
     color: var(--color-ink-faint);
   }
 
-  /* ============================================================
-     MESSAGES (js/messages.js) — Class Chat + Direct Messages.
-     The whole page is height-locked to the viewport (topbar height,
-     and on mobile the reserved bottom-nav row too, subtracted)
-     instead of using the app's normal window-scroll pattern, so the
-     message list scrolls INSIDE its own box while the composer stays
-     pinned near the bottom — a real chat layout instead of a long
-     page you scroll past. The negative margins cancel out .content's
-     own padding so this section can claim the full viewport width;
-     chat-input-bar's small bottom margin then clears the floating
-     pill bottom-nav on mobile (hidden entirely on desktop, so no
-     clearance needed there).
-  ============================================================= */
   .msg-route, .dm-thread-route {
     margin:-16px -14px -96px;
     display:flex; flex-direction:column; min-width:0; gap:0 !important;
-    /* These two routes manage their own internal scrolling (chat-scroll /
-       dm-list-wrap below) and are meant to stay perfectly viewport-locked —
-       overflow:hidden here is a safety net so nothing inside can ever push
-       the whole PAGE into scrolling. Window-level scroll here is exactly
-       what let the header peek under the sticky topbar and the composer
-       drift on mobile; this keeps both pinned in place. */
     overflow:hidden;
   }
   @media (min-width:900px) {
-    /* Desktop gets its own "messenger card" treatment instead of the
-       mobile full-bleed strip: a bounded, centered panel with a visible
-       edge (border + shadow + rounded corners) so the chat reads as a
-       deliberate app surface on a wide screen rather than a narrow
-       column of loose rows floating in empty space.
-
-       The card's explicit height (driven off 100dvh, ignoring .content's
-       own padding) is what actually decides how much empty space is
-       left under it — margin-bottom alone does NOT, because the card's
-       bottom edge always lands at exactly:
-         (.content's padding-top, 26px) + (margin-top) + height
-       So the height's subtracted amount is kept equal to
-       26(content padding-top) + margin-top + margin-bottom, which makes
-       the visible gap under the card come out equal to margin-bottom —
-       here a small 16px. If you want more/less gap, just change BOTH
-       the 16px in margin AND the matching 52px in the height calc
-       (52 = 26 + 10 + 16) together, keeping that same relationship. */
     .msg-route, .dm-thread-route {
       margin:10px auto 16px; max-width:680px; width:100%;
       height:calc(100dvh - 64px - 52px);
@@ -904,44 +574,17 @@
       border-radius:26px; box-shadow: var(--shadow-cardhover);
       overflow:hidden;
     }
-    /* .content's own bottom padding (40px, meant for ordinary feed routes
-       like Wall/Resources that need breathing room above the page's own
-       end) doesn't get absorbed by the card's explicit height above — it
-       sits *outside* the card, so it was quietly making .content's real
-       box 40px taller than the row actually has room for. A grid row
-       doesn't clip that overflow, so the whole page (not just the card)
-       gained an extra 40px of vertical scroll — which visually looked
-       like "the whole card scrolls" even though the card itself has
-       overflow:hidden and never needed to move. Dropping .content's
-       bottom padding specifically while a Messages/DM-thread card is the
-       one showing removes that leftover space, so the card's own sizing
-       above is the only thing deciding the page's height and it stays
-       fixed in place, centered, exactly as tall as the viewport allows. */
     .content:has(> .msg-route:not(.hidden)),
     .content:has(> .dm-thread-route:not(.hidden)) {
       padding-bottom: 0;
     }
   }
   @media (max-width:899px) {
-    /* Class Chat / DM list (.msg-route) is normally a bottom-nav
-       destination, so it leaves room for it: topbar (58px) + the reserved
-       bottom-nav grid row (68px). Class Chat specifically hides the nav
-       too (see app.js's chat-mode toggle) since it's a full live room +
-       composer just like a DM thread — when that's the case, the section
-       reclaims the nav's row instead of leaving a dead gap under the
-       composer, same as .dm-thread-route below. */
     .msg-route { height:calc(100dvh - 58px - 68px); }
     .app-shell.chat-mode .msg-route { height:calc(100dvh - 58px); }
-    /* An open DM thread (.dm-thread-route) hides the nav via .chat-mode
-       above and reclaims its row, so it only needs to clear the topbar. */
     .dm-thread-route { height:calc(100dvh - 58px); }
   }
 
-  /* A single pill-shaped "segmented control" housing both sub-tabs (like a
-     native iOS switcher) reads as one deliberate control, rather than two
-     separate button chips floating side by side — the active side gets the
-     brand gradient + a lifted shadow, the inactive side just sits flush
-     inside the shared track. */
   .msg-subtabs {
     @apply flex shrink-0 gap-1; padding:5px; margin:12px 14px 10px;
     background: var(--color-paper-deep); border-radius:999px; border:1px solid var(--color-line);
@@ -952,11 +595,6 @@
   .msg-subtab-btn {
     @apply relative flex-1 flex items-center justify-center gap-1.5 text-sm font-extrabold rounded-full transition-colors;
     padding:10px 10px; color: var(--color-ink-soft); background:transparent; border:none;
-    /* Fixed line-height + a nowrap/truncating label (below) means this bar
-       renders at the SAME height whether its unread badge is hidden or
-       showing — without this, the badge appearing eats into the row's
-       width, "Private Messages"/"Department Chat" wraps onto a second
-       line, and the whole bar grows taller right as the badge lights up. */
     line-height:1.2;
   }
   .msg-subtab-btn.active { @apply text-white; background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800)); box-shadow: var(--shadow-btn); }
@@ -979,10 +617,6 @@
   .chat-header-sub { @apply block text-[.72rem] font-semibold; color: var(--color-ink-faint); }
   .chat-header-sub.online-now { color: var(--color-forest-600); }
 
-  /* Class Chat's header gets its own small "shared room" identity — a
-     people-icon chip + an "Everyone" tag next to the title — so it never
-     reads as just another 1:1 thread at a glance. Direct Messages keeps
-     the plain per-person header style (avatar + name, set in JS). */
   .chat-header-class { @apply gap-2.5 justify-start; }
   .chat-header-class-icon {
     @apply flex items-center justify-center rounded-full shrink-0; width:34px; height:34px;
@@ -997,16 +631,12 @@
     @apply flex-1 min-h-0 flex flex-col gap-2.5; overflow-y:auto; -webkit-overflow-scrolling:touch;
     overscroll-behavior:contain;
     padding:14px 14px 14px;
-    /* Faint "field survey" dot-grid wallpaper instead of a flat panel —
-       same paper/forest palette as the rest of the app, just enough
-       texture that the message list doesn't read as a bare list view. */
     background-image: radial-gradient(circle, color-mix(in srgb, var(--color-forest-600) 16%, transparent) 1px, transparent 1px);
     background-size: 20px 20px;
     background-color: var(--color-paper);
   }
   @media (min-width:900px) { .chat-scroll { padding:18px 18px; } }
 
-  /* ---- chat bubbles (Class Chat + DM thread share this) ---- */
   .chat-bubble-row { @apply flex items-end gap-2 max-w-[86%]; }
   @media (min-width:900px) { .chat-bubble-row { max-width:440px; } }
   .chat-bubble-row.mine { @apply self-end flex-row-reverse; }
@@ -1018,10 +648,6 @@
     @apply relative text-[.87rem] leading-snug rounded-[18px] break-words transition-transform; padding:9px 13px;
     background: var(--color-surface); color: var(--color-ink); border:1px solid var(--color-line); border-bottom-left-radius:5px;
     box-shadow: var(--shadow-card);
-    /* No native text-selection/callout here — a press-and-hold on the bubble
-       is our own Copy/Delete gesture (see wireMessageLongPress in
-       js/messages.js); without this, the phone's own text-selection bubble
-       pops up at the same time and fights it for the same press. */
     -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
   }
   .chat-bubble-row.mine .chat-bubble {
@@ -1029,8 +655,6 @@
     border-color:transparent; border-bottom-left-radius:18px; border-bottom-right-radius:5px;
     box-shadow: 0 4px 14px rgba(26,76,48,.24);
   }
-  /* Tiny "settle" on press so holding a bubble down actually feels like it's
-     doing something in the moment before the Copy/Delete menu appears. */
   .chat-bubble:active { transform:scale(.97); }
   .chat-bubble-meta { @apply flex items-center gap-1.5 px-1 text-[.65rem] font-semibold; color: var(--color-ink-faint); }
   .chat-bubble-row.mine .chat-bubble-meta { @apply flex-row-reverse; }
@@ -1041,13 +665,8 @@
     background: var(--color-forest-100) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23226241' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'/%3E%3C/svg%3E") no-repeat center/22px;
   }
 
-  /* ---- fixed-feeling composer at the very bottom of the panel ---- */
   .chat-input-bar {
     @apply flex items-center gap-2 shrink-0; padding:10px 12px; margin:8px 12px;
-    /* Class Chat's composer (.msg-route) still needs to clear the visible
-       floating bottom-nav; a DM thread's composer (.dm-thread-route,
-       nav hidden) doesn't strictly need this much but it's a harmless
-       amount of breathing room either way. */
     margin-bottom: calc(16px + env(safe-area-inset-bottom));
     background: var(--color-surface); border-radius:26px; box-shadow: var(--shadow-card); border:1px solid var(--color-line);
   }
@@ -1069,7 +688,6 @@
   .chat-send-btn:disabled { opacity:.45; box-shadow:none; }
   .chat-send-btn:not(:disabled):active { transform:scale(.92); }
 
-  /* ---- Direct Messages: conversation list ---- */
   .dm-list-wrap { @apply flex-1 min-h-0 flex flex-col gap-2.5; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding:12px 14px 24px; }
   @media (min-width:900px) { .dm-list-wrap { padding:14px 16px 20px; } }
   .dm-list-wrap .empty-state { @apply flex-1 flex flex-col items-center justify-center gap-3; box-shadow:none; background:transparent; padding:40px 20px; }
@@ -1083,9 +701,6 @@
   }
   .dm-conv-row:active { transform:scale(.985); }
   @media (hover:hover) { .dm-conv-row:hover { box-shadow: var(--shadow-cardhover); border-color: var(--color-forest-200); transform:translateY(-1px); } }
-  /* A slightly bigger avatar than the app's usual 40px default — the DM list
-     is a directory of *people*, so the photo carries more of the row's
-     weight than it does in a dense feed. */
   .dm-conv-row .avatar { width:46px; height:46px; box-shadow:0 0 0 2.5px var(--color-surface), 0 0 0 4px var(--color-forest-200); }
   .dm-conv-info { @apply flex-1 min-w-0; }
   .dm-conv-info strong { @apply block text-[.92rem] font-extrabold tracking-tight; }
@@ -1098,18 +713,11 @@
     background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800));
     box-shadow:0 2px 6px rgba(26,76,48,.35);
   }
-  /* A conversation with unread messages gets a soft tinted card + left
-     accent bar instead of blending in with already-read rows — the list
-     used to give unread rows no visual weight beyond the small dot. */
   .dm-conv-row:has(.dm-unread-dot) {
     background: var(--color-forest-50); border-color: var(--color-forest-200);
     box-shadow: var(--shadow-card), inset 3px 0 0 var(--color-forest-600);
   }
 
-  /* ---- Direct Messages: thread header (avatar + name + presence, on the drill-down page) ---- */
-  /* Back icon + avatar/name/presence all on one line — the back button is
-     a plain sibling of #dm-thread-header (see the HTML comment above the
-     section) so it survives every header re-render untouched. */
   .dm-thread-header-row {
     @apply flex items-center gap-1 shrink-0; padding:10px 10px 12px;
     background: color-mix(in srgb, var(--color-paper) 92%, transparent);
@@ -1130,13 +738,6 @@
   }
   .dm-thread-back-btn:active { background: var(--color-paper-deep); }
   @media (hover:hover) { .dm-thread-back-btn:hover { background: var(--color-paper-deep); color: var(--color-ink); } }
-  /* The label span only exists for desktop — on mobile it's display:none so
-     the button renders exactly as it always has (a plain circular icon
-     button, left untouched per spec). On desktop, "just an icon" read as
-     unfinished/unlabeled against the width of the new card header, so it
-     grows into a proper icon+label pill matching #topbar-back-btn's
-     styling in the app bar — the same "smart back button" treatment
-     on every drill-down surface. */
   .back-label { @apply hidden; }
   @media (min-width:900px) {
     .dm-thread-back-btn {
@@ -1151,51 +752,28 @@
   }
   .dm-thread-header { @apply flex items-center gap-2.5 min-w-0 flex-1; }
   .dm-thread-header .avatar { width:44px; height:44px; }
-  /* ---- "More options" trigger in the thread header row (js/messages.js) —
-     currently just Block/Unblock, styled to match the old dedicated button
-     it replaced (same circular footprint) so the header's rhythm doesn't
-     change, but tucked behind a tap instead of sitting out on its own. ---- */
   .dm-thread-more-menu .kebab-btn {
     width:34px; height:34px; color: var(--color-ink-faint); background: var(--color-paper-deep); border:1px solid var(--color-line);
   }
   .dm-thread-more-menu .kebab-btn:active { transform:scale(.92); }
-  /* A quiet red tint on the trigger itself while you currently have this
-     classmate blocked — the one hint of that state left outside the menu. */
   .dm-thread-more-menu.is-blocking .kebab-btn { color: var(--color-danger-600); background: var(--color-clay-100); border-color:transparent; }
   .dm-thread-more-menu .kebab-dropdown { min-width:190px; }
-  /* ---- "Blocked" bar — swaps in for the composer (.chat-input-bar) whenever
-     either side has blocked the other in this conversation. ---- */
   .dm-blocked-bar {
     @apply flex items-center justify-center gap-2 shrink-0 text-center text-[.82rem] font-semibold;
     padding:14px 16px; background: var(--color-paper-deep); border-top:1px solid var(--color-line); color: var(--color-ink-faint);
   }
-  /* Name + presence chip sit in a plain sibling <div> (see js/messages.js
-     renderDmThreadHeader) — targeted here by direct-child selector so the
-     two lines stack with one small, exact gap instead of two separate
-     margins that could add up to a bigger-than-intended gap. */
   .dm-thread-header > div { @apply flex flex-col justify-center; gap:3px; }
   .dm-thread-header-name { @apply block text-[1.08rem] font-extrabold; margin:0; }
-  /* A plain presence line under the thread name — the green light itself
-     lives only on the avatar photo (avatarPresenceDotHtml, the corner
-     badge above), so this used to also carry its own dot inside a
-     pill/button-looking background, which duplicated it. Simplified to
-     just text — grey while away, green once the classmate's active —
-     matching how Department Chat's own "X online now" line
-     (.chat-header-sub) already looks. Scoped to its own class (not the
-     shared .presence-text used on Profile pages) so it doesn't affect
-     other screens. */
   .dm-thread-presence-chip { @apply block text-[.72rem] font-semibold; color: var(--color-ink-faint); }
   .dm-thread-presence-chip:empty { display:none; }
   .dm-thread-presence-chip.online-now { color: var(--color-forest-600); }
 
-  /* ---- Message button (Directory row + a classmate's Profile) ---- */
   .msg-btn {
     @apply flex items-center justify-center shrink-0 rounded-full transition-transform; width:32px; height:32px;
     background: var(--color-forest-100); color: var(--color-forest-700);
   }
   .msg-btn:active { transform:scale(.9); background: var(--color-forest-200); }
 
-  /* ---- unread badge on the Message nav item (bottom-nav pill + sidebar) ---- */
   .nav-icon-wrap { @apply relative inline-flex; }
   .nav-icon-badge {
     @apply absolute flex items-center justify-center text-white font-extrabold rounded-full;
@@ -1206,10 +784,6 @@
   .bottom-nav .nav-item[data-route="message"] .nav-icon-badge { border-color: var(--color-forest-800); }
   .sidebar-nav .nav-item .nav-icon-badge { border-color: var(--color-forest-900); }
 
-  /* ---------- Add Post — same "gradient promo button" family as Add Note
-     (below), but in the forest palette with the student's own avatar
-     standing in for a plain icon, and a folded paper corner tying it to
-     the Wall's field-note motif — related, not identical. ---------- */
   .composer-trigger {
     @apply relative w-full flex items-center gap-3 text-left rounded-[22px] overflow-hidden transition-transform;
     padding:12px 16px 12px 12px; background: linear-gradient(120deg, var(--color-forest-600) 0%, var(--color-forest-900) 100%);
@@ -1241,8 +815,6 @@
   }
   .composer-modal-textarea:focus { outline:none; border-color: var(--color-forest-600); background:#fff; }
 
-  /* ---------- Post card — quiet, well-spaced card, no left rail; a soft
-     top gradient seam + folded corner give it its own identity instead ---------- */
   .feed-post {
     @apply relative bg-surface shadow-[var(--shadow-card)] transition-shadow overflow-hidden rounded-[20px];
     padding:20px 16px 16px;
@@ -1257,8 +829,6 @@
   }
   @media (hover:hover) { .feed-post:hover { box-shadow: var(--shadow-cardhover); } }
 
-  /* Brief highlight ring — used to draw the eye to the post/resource a
-     Notification-tab click just scrolled to. */
   .post-flash { animation: post-flash-ring 1.6s ease; }
   @keyframes post-flash-ring {
     0%   { box-shadow: 0 0 0 3px var(--color-gold-500), var(--shadow-card); }
@@ -1290,10 +860,8 @@
 
   .leaf-mini { @apply w-[13px] h-[13px] inline-block; background: var(--color-forest-600); border-radius:50% 0; transform:rotate(-45deg); }
 
-  /* Stat rail replaces the old full-width equal-split action bar: like/comment
-     read as compact pill counters on a slim rail, with the like count folded
-     directly into the like pill instead of a separate stats line. */
-  .post-stats { @apply hidden; }
+  .post-stats { @apply flex items-center justify-between gap-2 text-[.76rem] pt-0.5 pb-1; }
+  .post-stats.hidden { @apply hidden; }
   .post-actions { @apply flex items-center gap-2 pt-2.5 mt-1; border-top:1px dashed var(--color-line); }
   .post-action-btn {
     @apply inline-flex items-center gap-1.5 text-[.82rem] font-bold rounded-full transition-colors shrink-0;
@@ -1304,16 +872,17 @@
   .leaf-like-btn.liked { @apply text-white; background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800)); }
   .leaf-like-btn.like-pop .leaf-icon { @apply animate-leaf-pop; }
   .post-like-count {
-    @apply inline-flex items-center gap-1 text-[.76rem] font-bold ml-auto shrink-0;
+    @apply inline-flex items-center gap-1 text-[.76rem] font-bold shrink-0;
     color: var(--color-ink-faint);
   }
   .post-like-count:hover, .post-like-count:active { color: var(--color-forest-700); }
-  .action-count-badge {
-    @apply inline-flex items-center justify-center shrink-0 rounded-full font-extrabold;
-    min-width:17px; height:17px; padding:0 5px; font-size:.68rem; background: var(--color-forest-100); color: var(--color-forest-700);
+  .stats-comment-count {
+    @apply inline-flex items-center gap-1 text-[.76rem] font-bold ml-auto shrink-0;
+    color: var(--color-ink-faint);
   }
+  .stats-comment-count:hover, .stats-comment-count:active { color: var(--color-forest-700); }
+  .stats-comment-count.hidden, .post-like-count.hidden { @apply hidden; }
 
-  /* ---- Reactions (emoji, not just Like) ---- */
   .reaction-control { @apply relative shrink-0; }
   .reaction-btn .reaction-icon { @apply flex items-center justify-center transition-transform; width:16px; height:16px; font-size:14px; line-height:1; }
   .reaction-btn.liked { @apply text-white; background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800)); }
@@ -1328,13 +897,9 @@
   .reaction-summary-emojis { @apply text-[.85rem] tracking-tighter; }
   .reaction-emoji-tag { @apply ml-auto text-lg shrink-0; }
 
-  /* ---- @mentions & #hashtags (inline in post/comment text) ---- */
   .mention-chip, .hashtag-chip { @apply font-bold; color: var(--color-forest-700); }
   .mention-chip:hover, .mention-chip:active, .hashtag-chip:hover, .hashtag-chip:active { @apply underline; }
   .mention-dropdown {
-    /* top/left/width are set inline in JS, anchored to the field itself
-       rather than to whatever container happens to hold it — see the
-       `reposition()` comment in wireMentionAutocomplete. */
     @apply absolute z-20 flex flex-col rounded-2xl bg-surface overflow-hidden;
     box-shadow: var(--shadow-cardhover); border:1px solid var(--color-line); max-height:220px; overflow-y:auto;
   }
@@ -1343,7 +908,6 @@
   .mention-option:hover, .mention-option:active, .mention-option.active { background: var(--color-paper-deep); }
   .mention-option.active { color: var(--color-forest-700); }
 
-  /* ---- Poll builder (composer) ---- */
   .composer-poll-toggle {
     @apply inline-flex items-center gap-1.5 text-[.82rem] font-bold rounded-full mt-2; color: var(--color-ink-soft);
     background: var(--color-paper-deep); padding:7px 14px;
@@ -1372,14 +936,8 @@
   .poll-add-option-btn { @apply self-start text-sm font-bold; color: var(--color-forest-700); }
   .poll-add-option-btn.is-disabled { @apply opacity-40 pointer-events-none; }
 
-  /* ---- Poll (rendered on a post) ---- */
   .poll-block { @apply flex flex-col gap-2 mt-1 mb-2.5; }
   .poll-option {
-    /* z-index:0 (alongside position:relative) gives each option its OWN
-       stacking context, so its internal z-10 label/pct spans (below) stay
-       trapped inside it instead of leaking out to compete with unrelated
-       z-10 elements elsewhere on the card — like the post's kebab-dropdown
-       menu, which they'd otherwise sometimes paint on top of. */
     @apply relative w-full flex items-center justify-between text-left text-[.87rem] font-semibold rounded-xl overflow-hidden;
     padding:10px 12px; background: var(--color-paper-deep); border:1px solid var(--color-line); color: var(--color-ink); z-index:0;
   }
@@ -1390,10 +948,8 @@
   .poll-option-pct { @apply relative z-10 shrink-0 font-bold; color: var(--color-forest-700); }
   .poll-total-votes { @apply text-[.72rem] font-bold uppercase tracking-wide; color: var(--color-ink-faint); font-family: var(--font-mono); }
 
-  /* ---- Pinned post ---- */
   .feed-post-pinned { border:1px solid var(--color-gold-300); }
 
-  /* ---- Hashtag results modal ---- */
   .hashtag-result-row { @apply items-center; }
   .hashtag-result-snippet { @apply block truncate; color: var(--color-ink-faint); max-width:220px; }
 
@@ -1411,11 +967,17 @@
   .comment-send-btn { @apply shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-colors text-white; background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800)); }
   .comment-send-btn:active { transform:scale(.94); }
   .comment-send-btn.is-loading { @apply opacity-60; }
-  .comment-item-pending { @apply opacity-55; }
-  .comment-pending-status { @apply inline-flex items-center gap-1.5; }
-  .comment-pending-spinner { @apply inline-block rounded-full shrink-0 animate-ring; width:9px; height:9px; border:1.5px solid var(--color-ink-faint); border-top-color: var(--color-forest-600); }
 
-  /* ---------- Chips / Notes card ("field-file" tile) ---------- */
+  .comment-item-pending { @apply opacity-80; }
+  .comment-body-pending p { color: var(--color-ink-faint); }
+  .comment-sending-dots { @apply flex items-center gap-1; margin-top:3px; }
+  .comment-sending-dots span {
+    @apply inline-block rounded-full; width:5px; height:5px;
+    background: var(--color-ink-faint); animation: var(--animate-dot);
+  }
+  .comment-sending-dots span:nth-child(2) { animation-delay:.15s; }
+  .comment-sending-dots span:nth-child(3) { animation-delay:.3s; }
+
   .chip-scroller { @apply w-full max-w-full overflow-hidden; }
   .chip-row { @apply flex gap-2 overflow-x-auto py-0.5 pb-1.5 w-full [&::-webkit-scrollbar]:hidden; scrollbar-width:none; }
   .chip { @apply shrink-0 px-4.5 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-colors; background: var(--color-paper-deep); color: var(--color-ink-soft); }
@@ -1463,7 +1025,6 @@
   a.res-link svg { @apply shrink-0; }
   a.res-link:active { transform:scale(.94); }
 
-  /* ---------- Notes & Sheet Hub — "Save for later" bookmark toggle ---------- */
   .bookmark-toggle-btn {
     @apply flex items-center justify-center rounded-full shrink-0 transition-colors;
     width:34px; height:34px; color: var(--color-ink-faint); background: var(--color-paper-deep); border:1px solid var(--color-line);
@@ -1471,7 +1032,6 @@
   .bookmark-toggle-btn.active { color: var(--color-gold-600); background: var(--color-gold-50); border-color: rgba(156,117,38,.3); }
   .bookmark-toggle-btn:active { transform:scale(.9); }
 
-  /* ---------- Notes & Sheet Hub — Link/Upload source toggle (Add Resource modal) ---------- */
   .res-source-toggle { @apply flex gap-2 -mt-1; }
   .res-source-btn {
     @apply flex-1 text-center text-[.82rem] font-bold rounded-full transition-colors;
@@ -1480,7 +1040,6 @@
   .res-source-btn.active { @apply text-white border-transparent; background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800)); }
   .res-file-trigger { @apply flex items-center justify-center gap-2; }
 
-  /* ---------- Deadline tracker ("Upcoming Deadlines", on the Routine page) ---------- */
   .deadlines-header-row { @apply flex items-center justify-between; }
   .deadline-add-btn {
     @apply inline-flex items-center gap-1.5 text-[.74rem] font-extrabold rounded-full text-white transition-transform;
@@ -1510,7 +1069,6 @@
   }
   .deadline-due-badge.overdue { background: linear-gradient(135deg, var(--color-danger-500), var(--color-danger-600)); }
 
-  /* ---------- Global search ---------- */
   .search-result-section-title { @apply text-xs font-extrabold uppercase tracking-wider pl-0.5; color: var(--color-ink-faint); margin:14px 0 6px; }
   .search-result-section-title:first-child { margin-top:2px; }
   .search-result-row {
@@ -1523,13 +1081,12 @@
     @apply w-9 h-9 rounded-full flex items-center justify-center text-[.95rem] shrink-0;
     background: var(--color-gold-50); color: var(--color-gold-600);
   }
-  .search-result-avatar.avatar { @apply w-9 h-9; } /* match the other result kinds' .search-result-icon size */
+  .search-result-avatar.avatar { @apply w-9 h-9; }
   .search-result-info { @apply flex-1 min-w-0; }
   .search-result-info strong { @apply block text-[.88rem] whitespace-nowrap overflow-hidden text-ellipsis; }
   .search-result-info strong.search-result-title-full { @apply whitespace-normal break-words leading-snug; }
   .search-result-info small { @apply block text-[.72rem] mt-0.5; color: var(--color-ink-faint); }
 
-  /* ---------- Classmate directory / User card ("contact index card") ---------- */
   .search-bar { @apply flex items-center gap-2.5 rounded-full bg-surface shadow-[var(--shadow-card)]; padding:0 16px; color: var(--color-ink-faint); border:1px solid var(--color-line); }
   .search-bar input { @apply flex-1 border-0 bg-transparent; padding:13px 0; }
   .search-bar input:focus { outline:none; }
@@ -1552,7 +1109,6 @@
   .call-btn-disabled { @apply text-ink-faint pointer-events-none; background: var(--color-paper-deep); box-shadow:none; color: var(--color-ink-faint); }
   .likes-list .likes-row { @apply cursor-pointer; }
 
-  /* ---------- Notice board / Notice card ---------- */
   .notice-flat-list { @apply flex flex-col gap-2.5; }
   .notice-row {
     @apply relative block w-full text-left transition-colors shadow-[var(--shadow-card)];
@@ -1568,9 +1124,6 @@
   @media (hover:hover) { .notice-row:hover { box-shadow: var(--shadow-cardhover); } }
   .notice-row:active { background: var(--color-gold-100); }
 
-  /* Urgent notices get their own unmistakable treatment: a warm danger
-     wash, a slow breathing glow around the card, a pulsing pin, and a
-     bolder icon badge — so it reads as "stop and read this" at a glance. */
   .notice-row.urgent {
     background: linear-gradient(150deg, var(--color-clay-50) 0%, var(--color-danger-100) 130%);
     border:1.5px solid rgba(180,64,45,.32);
@@ -1609,7 +1162,6 @@
   .notice-detail-tag { @apply inline-flex text-[.68rem] font-extrabold rounded-full tracking-wide mb-2.5; background: var(--color-gold-100); color: var(--color-gold-600); padding:4px 10px; }
   .notice-detail-text { @apply text-[.95rem] leading-relaxed whitespace-pre-wrap; color: var(--color-ink); margin-bottom:4px; }
 
-  /* ---------- Add Notice — admin composer card ---------- */
   .admin-notice-box {
     @apply flex flex-col gap-3 rounded-[18px] bg-surface shadow-[var(--shadow-card)] mb-1;
     padding:16px; border:1px solid var(--color-line);
@@ -1625,7 +1177,6 @@
   .notice-row-top .kebab-menu { @apply ml-auto -mr-1.5 -mt-1; }
   .notice-row { @apply cursor-pointer; }
 
-  /* ---------- Admin — Reported Posts modal ---------- */
   .btn-outline.small { @apply text-[.78rem] w-auto; padding:7px 13px; min-height:35px; }
   .btn-outline.small.danger-solid { border-color: var(--color-danger-600); color: var(--color-danger-600); }
   .btn-outline.small.danger-solid:active { background: var(--color-danger-600); color:#fff; }
@@ -1638,7 +1189,6 @@
   .report-row small { @apply text-xs; color: var(--color-ink-faint); }
   .report-row-actions { @apply flex gap-2 mt-1.5 flex-wrap; }
 
-  /* ---------- Directory — Year filter chips ---------- */
   .directory-year-chips { @apply mb-2.5; }
 
   .routine-day { @apply relative bg-surface rounded-2xl shadow-[var(--shadow-card)] border overflow-hidden; padding:0 16px 8px; border-color: var(--color-line); }
@@ -1651,7 +1201,6 @@
   .routine-slot span:first-child { @apply font-bold shrink-0; color: var(--color-ink); font-family: var(--font-mono); }
   .routine-slot span:last-child { @apply text-right; }
 
-  /* ---------- Admin — Weekly Routine editor (modal) ---------- */
   .routine-editor-day { @apply rounded-2xl bg-surface mb-3; padding:12px 12px 4px; border:1px solid var(--color-line); }
   .routine-editor-day-head { @apply flex items-center justify-between mb-2 px-0.5; }
   .routine-editor-day-head h4 { @apply text-[.74rem] font-extrabold uppercase tracking-wide; color: var(--color-forest-700); }
@@ -1673,7 +1222,6 @@
   .routine-editor-remove-btn:active { background: var(--color-danger-100); }
   .routine-editor-hint { @apply text-[.78rem] leading-snug; color: var(--color-ink-faint); margin:-6px 0 4px; }
 
-  /* ---------- Profile — "field ID card" hero + notebook details ---------- */
   .profile-flow { @apply relative; }
   .profile-flow-banner {
     @apply absolute top-0 z-0 overflow-hidden; left:-14px; right:-14px; height:150px; border-radius:0 0 34px 34px;
@@ -1685,45 +1233,6 @@
   }
   .profile-flow-head { @apply relative z-[1] text-center; padding-top:38px; }
   .profile-flow-avatar-wrap { @apply relative mx-auto; width:96px; height:96px; margin-bottom:18px; }
-  /* The big profile-photo header is its own presence host (see
-     profile-view.js) — the only spot that opts into the elapsed-time
-     badge (.avatar-presence-badge-timed), sized up a notch to read
-     clearly against a 96px photo. Explicit z-[2] here (above
-     .profile-flow-avatar's z-[1] below) — without it the badge has
-     z-index:auto and the avatar's own positive z-index paints on top of
-     it, hiding the dot behind the photo entirely.
-     Border is toned down to a faded green (color-mix at 55%) rather
-     than the full-strength green used on the small list/inbox badge —
-     at this larger size a solid-green outline read as too heavy/loud
-     against the big photo, so it's softened while the fill and text
-     stay the same green. The online (non-timed) dot's own white ring is
-     also a notch thinner here (2px, not 3px) for the same reason.
-     POSITIONING — anchor-point technique (this is what actually fixed
-     the "sometimes floats off the photo" bug): the small list/inbox
-     badges elsewhere position with `right:_;bottom:_`, which anchors by
-     the badge's own *edge*. That's fine as long as every badge sharing
-     that spot is the same size — but here the online dot (16px, fixed)
-     and the offline pill (auto-width: "5m" vs "23h" vs "125h" are all
-     different widths) do NOT share a size, and anchoring by a growing
-     box's *edge* means its *center* — and therefore how it visually
-     sits against the round photo's ring — silently moves depending on
-     the label's length. That's the actual reason the dot and the pill
-     needed two different, separately-tuned `right/bottom` values before:
-     they were never really "the same spot", just two coincidentally-ok
-     approximations for two fixed sizes, and a 3rd size (a wider label)
-     would've needed a 3rd approximation.
-     The fix Messenger-style apps actually use: pick ONE fixed point on
-     the ring (`left:82px; top:82px`, found by rendering the dot at the
-     tuned right:6/bottom:6 spot from an earlier pass and reading off
-     its center in pixels) and center *every* badge on that exact point
-     with `transform: translate(-50%,-50%)`, regardless of that badge's
-     own width or height. A 16px dot and a 34px "5m" pill and a 40px
-     "125h" pill all then share the identical center — the pill just
-     grows outward symmetrically in both directions as its label grows,
-     the way the reference screenshot does, instead of drifting. Combined
-     with `scale()` (the existing pop-in/out animation) in the same
-     `transform` value since a single `transform` declaration wins as a
-     whole, not property-by-property. */
   .profile-flow-avatar-wrap .avatar-presence-badge {
     @apply z-[2]; left:82px; top:82px; right:auto; bottom:auto;
     width:16px; height:16px; border-width:2px; box-sizing:border-box;
@@ -1743,13 +1252,6 @@
     @apply relative z-[1]; width:96px; height:96px; border:4px solid var(--color-paper);
     box-shadow:0 12px 28px rgba(11,25,15,.28), 0 0 0 3px var(--color-gold-500);
   }
-  /* Own-profile-only badge on the avatar corner — tapping it opens the
-     small "View Photo / Change Photo" action sheet (app.js) instead of
-     jumping straight into the Edit Details form, so viewing your own
-     photo full-size doesn't require opening an editable form first.
-     Deliberately a camera icon, never a pencil — a pencil on the photo
-     itself reads as "edit this image" (crop/draw on it), which isn't
-     what tapping it does. */
   .profile-photo-badge {
     @apply absolute z-[2] flex items-center justify-center w-8 h-8 rounded-full text-white;
     right:-2px; bottom:-2px; background: linear-gradient(135deg, var(--color-gold-500), var(--color-gold-600));
@@ -1758,13 +1260,6 @@
   .profile-photo-badge:active { transform:scale(.92); }
   .profile-flow-head h3 { @apply text-xl font-extrabold; }
 
-  /* ---------- Profile meta row — status / session / admin as one line of
-     compact pills under the name, instead of four separate stacked rows.
-     Wraps gracefully on narrow screens; an empty presence pill (own
-     profile, or before presence has resolved) collapses away entirely. ---------- */
-  /* ---------- Meta pills row (session / admin badge) — the presence text
-     chip that used to live here has moved onto the profile photo itself
-     as a badge (see .profile-flow-avatar-wrap above / presence.js). ---------- */
   .profile-meta-row { @apply relative z-[1] flex flex-wrap items-center justify-center gap-1.5; margin-top:9px; }
   .profile-meta-chip {
     @apply inline-flex items-center gap-1.5 text-[.72rem] font-bold rounded-full leading-none whitespace-nowrap;
@@ -1777,7 +1272,6 @@
   }
   .profile-meta-chip.chip-admin svg { width:11px; height:11px; flex-shrink:0; }
 
-  /* Bio — plain centered text under the header, no card/background. */
   .profile-own-bio {
     @apply relative text-[.87rem] leading-relaxed text-center;
     color: var(--color-ink-soft); max-width:360px; margin:14px auto 0;
@@ -1801,13 +1295,6 @@
   .profile-detail-row span:last-child { @apply font-bold text-right break-words; }
   .hidden-field-tag { @apply text-[.66rem] font-extrabold rounded-md ml-1.5 uppercase tracking-wide; background: var(--color-paper-deep); color: var(--color-ink-faint); padding:2px 7px; }
 
-  /* ---------- Profile action row — Facebook-style, sits right under the
-     stat chips (above the Info/Posts/Notes tabs) instead of buried at the
-     bottom of the Info tab. One wide primary pill (Message on a
-     classmate's page, Edit Profile in that exact same slot on your own)
-     plus small circular icon buttons for the secondary actions (Call,
-     and a "more" kebab that now holds Block/Unblock — no permanently
-     visible Block button sitting on the page anymore). ---------- */
   .profile-action-row { @apply relative z-[1] flex items-center gap-2.5; margin:18px 2px 2px; }
   .profile-action-primary {
     @apply flex-1 flex items-center justify-center gap-2 rounded-full text-white text-[.92rem] font-bold transition-transform;
@@ -1820,41 +1307,22 @@
     width:46px; height:46px; background: var(--color-paper-deep); color: var(--color-ink-soft); border:1px solid var(--color-line);
   }
   .profile-action-icon-btn:active { transform:scale(.94); background: var(--color-forest-100); color: var(--color-forest-700); }
-  /* The "more" kebab reuses the shared .kebab-menu/.kebab-dropdown system
-     (see ui-utils.js) — just resized here to match the round action
-     buttons beside it, mirroring how the DM thread header's own
-     three-dot trigger is resized (.dm-thread-more-menu) for its context. */
   .profile-more-menu .kebab-btn { width:46px; height:46px; background: var(--color-paper-deep); color: var(--color-ink-soft); border:1px solid var(--color-line); }
   .profile-more-menu .kebab-btn:active { transform:scale(.94); }
   .profile-more-menu.is-blocking .kebab-btn { color: var(--color-danger-600); background: var(--color-clay-100); border-color:transparent; }
   .profile-more-menu .kebab-dropdown { min-width:200px; }
   .pv-call-disabled { @apply text-center text-[.8rem]; color: var(--color-ink-faint); margin:14px 2px 2px; }
 
-  /* ---------- Avatar action sheet (own profile) — "View Photo" /
-     "Change Photo", opened from the camera badge on the avatar. Reuses
-     the shared bottom-sheet modal, styled as a short icon+label list
-     like a native app's photo-menu sheet. ---------- */
   .avatar-sheet { @apply flex flex-col gap-1 -mx-1; }
   .avatar-sheet-item { @apply flex items-center gap-3 w-full text-left rounded-2xl text-[.92rem] font-bold; padding:13px 12px; color: var(--color-ink); }
   .avatar-sheet-item:active { background: var(--color-paper-deep); }
   .avatar-sheet-icon { @apply flex items-center justify-center rounded-full shrink-0; width:40px; height:40px; background: var(--color-forest-100); color: var(--color-forest-700); }
 
-  /* ---------- Profile page header tabs (Info / Posts) — shared by
-     "My Profile" and any classmate's full profile page. ---------- */
   .profile-tabs { @apply relative z-[1] flex items-center justify-center gap-2 mt-5 mb-1; }
   .profile-tab-btn { @apply px-6 py-2 rounded-full text-sm font-bold transition-colors; background: var(--color-paper-deep); color: var(--color-ink-soft); }
   .profile-tab-btn.active { @apply text-white; background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800)); box-shadow: var(--shadow-btn); }
-  /* Every tab panel (Info/Posts/Notes) gets the same top gap under the
-     tab bar — previously only Info had this margin (on its own inner
-     details card), so switching to Posts/Notes visually "jumped up". */
   .profile-tab-panel { @apply hidden; margin-top:16px; }
   .profile-tab-panel.active { @apply block animate-fade-up; }
-
-  /* ---------- Full-page classmate profile (drill-down, not a modal) ----------
-     The page-local "Back" pill that used to live here has moved into the
-     app bar itself (#topbar-back-btn, near .topbar-left) — see app.js's
-     TOPBAR_BACK_ROUTES — so Search/Profile/Post/Notices/Reports/Settings
-     no longer carry a second header row of their own. */
 
   .privacy-block { @apply mt-0.5 mb-1 pt-1.5 border-t; border-color: var(--color-line); }
   .privacy-block-title { @apply text-xs font-extrabold uppercase tracking-wide; color: var(--color-ink-faint); margin:10px 0 8px; }
@@ -1868,19 +1336,10 @@
   .switch-row input:checked + .switch-track { background: var(--color-forest-600); }
   .switch-row input:checked + .switch-track .switch-thumb { transform:translateX(18px); }
 
-  /* ---------- Kebab z-index fix: elevate the whole card above its
-     siblings while its own dropdown is open. Needed because some cards
-     (notice-row, in particular) use a CSS transform, which creates its
-     own stacking context and traps a plain z-index inside it. ---------- */
   .kebab-stack-top { position:relative; z-index:40; }
 
-  /* ---------- Avatar photo (Cloudinary) — same circular frame as the
-     gender-silhouette fallback, just with a real photo inside. ---------- */
   .avatar-fill img { width:100%; height:100%; object-fit:cover; display:block; }
 
-  /* ---------- Profile photo picker (Edit Profile modal) — circular
-     preview with a Facebook-style camera badge; tapping it opens the
-     move/zoom cropper (see .cropper-* below) before anything uploads. ---------- */
   .pd-photo-picker { @apply flex flex-col items-center gap-2 mb-5; }
   .pd-photo-avatar-wrap { @apply relative shrink-0; }
   .pd-photo-preview.avatar-lg { width:96px; height:96px; }
@@ -1892,9 +1351,6 @@
   .pd-photo-camera-btn:active { transform:scale(.92); background: var(--color-forest-800); }
   .pd-photo-hint { @apply text-xs text-center max-w-[220px]; color: var(--color-ink-faint); }
 
-  /* ---------- Media picker — a square image+ "add" tile sized like a
-     thumbnail, sharing one live grid with every attached photo (existing
-     + newly-picked), used by the post composer and Edit Post modal ---------- */
   .media-picker { @apply mb-1; }
   .media-picker-grid {
     @apply grid gap-2 mt-1; grid-template-columns:repeat(auto-fill, minmax(72px, 1fr));
@@ -1917,9 +1373,6 @@
   }
   .media-thumb-remove:active { background: rgba(23,36,28,.95); transform:scale(.92); }
 
-  /* ---------- Image cropper (profile photo: drag to pan, pinch/slide/
-     scroll to zoom, circular 1:1 frame) — its own full-screen overlay,
-     independent of the bottom-sheet modal system. ---------- */
   .cropper-overlay { @apply fixed inset-0 z-[550] flex flex-col text-white; background: rgba(8,14,9,.97); }
   .cropper-topbar { @apply flex items-center justify-between px-3 shrink-0; height:54px; }
   .cropper-topbar button { @apply text-[.88rem] font-bold px-2.5 py-1.5 rounded-lg; }
@@ -1936,22 +1389,15 @@
   .cropper-zoom-slider { @apply w-full; accent-color: var(--color-gold-500); }
   .cropper-hint { @apply text-center text-xs pb-4 shrink-0; color: rgba(255,255,255,.5); }
 
-  /* ---------- Post image grid (feed card) ---------- */
   .post-image-grid { @apply grid gap-1 rounded-2xl overflow-hidden my-2; }
   .post-image-grid.one { grid-template-columns:1fr; }
   .post-image-grid.two, .post-image-grid.three, .post-image-grid.many { grid-template-columns:1fr 1fr; }
   .post-image-grid.three .post-image-item:first-child,
   .post-image-grid.many .post-image-item:first-child { grid-row: span 2; }
   .post-image-item { @apply relative block w-full h-full p-0 border-0 bg-transparent; aspect-ratio:1/1; }
-  /* Single-photo posts show the photo at (a clamped version of) its own
-     ratio instead of always being force-cropped to a fixed 16:10 box —
-     applyPostImageRatios() in media-picker.js sets the real aspect-ratio
-     inline once the image has loaded; this is just the pre-load fallback. */
   .post-image-grid.one .post-image-item { aspect-ratio:4/3; background: var(--color-paper-deep); }
   .post-image-item img { @apply w-full h-full object-cover block; }
 
-  /* ---------- Wall skeleton loading (shown while the first page of posts
-     is still being fetched) ---------- */
   .skeleton-post { @apply bg-surface rounded-2xl overflow-hidden; padding:14px 16px 16px; box-shadow: var(--shadow-card); border:1px solid var(--color-line); }
   .skeleton-post-head { @apply flex items-center gap-2.5 mb-3.5; }
   .skeleton-line, .skeleton-avatar, .skeleton-block { position:relative; overflow:hidden; background: var(--color-paper-deep); }
@@ -1971,11 +1417,6 @@
   .skeleton-post-text { @apply flex flex-col gap-2 mb-3; }
   .skeleton-block { @apply rounded-xl; height:160px; }
 
-  /* Generic "row" skeleton — an avatar + a couple of lines in a card,
-     reused for anywhere a list of items is still loading (Notice board,
-     Notification tab, Classmate Directory) via skeletonRowsHtml() in
-     ui-utils.js, so every such list gets the same shimmer instead of a
-     plain "Loading…" line. */
   .skeleton-row { @apply flex items-center gap-3 bg-surface rounded-2xl; padding:13px 16px; box-shadow: var(--shadow-card); border:1px solid var(--color-line); }
   .skeleton-row + .skeleton-row { @apply mt-3; }
   .post-image-more {
@@ -1983,7 +1424,6 @@
     background: rgba(11,32,21,.55);
   }
 
-  /* ---------- Full-screen image viewer (tap a post photo to enlarge) ---------- */
   .image-viewer-overlay {
     @apply fixed inset-0 z-[400] flex items-center justify-center p-5;
     background: rgba(8,14,9,.92);
@@ -1994,8 +1434,6 @@
     top:16px; right:16px; width:38px; height:38px; background: rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.24);
   }
 
-  /* ---------- Notices & Notifications page — two header tabs, same
-     visual language as the Profile page's Info/Posts/Notes tabs ---------- */
   .notices-page-tabs { @apply flex items-center gap-2 mb-1; }
   .notices-page-tab-btn { @apply flex-1 px-6 py-2.5 rounded-full text-sm font-bold text-center transition-colors; background: var(--color-paper-deep); color: var(--color-ink-soft); }
   .notices-page-tab-btn.active { @apply text-white; background: linear-gradient(135deg, var(--color-forest-600), var(--color-forest-800)); box-shadow: var(--shadow-btn); }
@@ -2003,9 +1441,6 @@
   #notice-tab-body { @apply flex flex-col gap-3.5; }
   .notices-page-panel.active { @apply flex animate-fade-up; }
 
-  /* Per-tab unread badge — Notice and Notification each count only their
-     own unread items, and (unlike the header bell) only clear once the
-     specific item behind the count has actually been opened/read. */
   .tab-badge {
     @apply inline-flex items-center justify-center text-white font-extrabold rounded-full align-middle;
     min-width:16px; height:16px; font-size:.6rem; padding:0 4px; margin-left:6px; margin-top:-1px;
@@ -2013,10 +1448,6 @@
     box-shadow:0 2px 5px rgba(0,0,0,.2);
   }
 
-  /* ---------- Notification card (Notification tab) — a distinct, flatter
-     "notification" look vs. the torn-paper Notice board card, so the two
-     tabs read as different kinds of content at a glance. Unread entries
-     are tinted, bold, and carry a dot; read ones fade back to plain. ---------- */
   .notif-panel-head { @apply flex items-center justify-between px-1 mb-0.5; }
   .notif-panel-head-title { @apply text-[.7rem] font-extrabold uppercase tracking-wide; color: var(--color-ink-faint); }
   .notif-mark-all-btn {
@@ -2045,7 +1476,6 @@
     box-shadow:0 0 0 2.5px var(--color-surface);
   }
 
-  /* ---------- Settings page (opened via the header gear icon) ---------- */
   .settings-page { @apply flex flex-col; gap:18px; }
   .settings-group { @apply bg-surface rounded-[20px] overflow-hidden; box-shadow: var(--shadow-card); border:1px solid var(--color-line); }
   .settings-group-title { @apply text-[.7rem] font-extrabold uppercase tracking-wide; color: var(--color-ink-faint); padding:14px 16px 4px; }
@@ -2069,7 +1499,6 @@
   .settings-logout-row { @apply mt-1; }
   .settings-version { @apply text-center text-[.72rem] pb-2; color: var(--color-ink-faint); }
 
-  /* ---------- Quick Links (top of Settings page) ---------- */
   .quick-links-block { @apply flex flex-col; gap:10px; }
   .quick-links-title { @apply text-[.7rem] font-extrabold uppercase tracking-wide; color: var(--color-ink-faint); padding:0 2px; }
   .quick-links-grid { @apply grid; grid-template-columns: repeat(4, 1fr); gap:10px; }
@@ -2084,7 +1513,6 @@
   }
   .quick-link-tile small { @apply text-[.72rem] font-bold leading-tight; color: var(--color-ink); }
 
-  /* ---------- Appearance / theme segmented control ---------- */
   .settings-row-theme { @apply border-b-0; padding-bottom:8px; }
   .theme-toggle-wrap { @apply px-4 pb-3.5; }
   .theme-toggle { @apply flex gap-1 p-1 rounded-2xl; background: var(--color-paper-deep); border:1px solid var(--color-line); }
@@ -2100,17 +1528,6 @@
     .settings-page { max-width:520px; }
   }
 
-  /* ---------- Modal / toast ----------
-     .modal-sheet is a fixed-height flex column: the close button and the
-     drag handle sit outside the scrolling area so they never move, and
-     #modal-scroll is the only part that scrolls. If a modal's content
-     starts with an <h3> title, that title sticks to the top of the
-     scrolling area too (see "#modal-scroll > #modal-body > h3:first-child"
-     below) so long modals never scroll their own heading out of view. */
-  /* While a modal is open, lock the page behind it — otherwise scrolling
-     inside the sheet (or over the backdrop) chained into the document
-     underneath once the sheet's own scroll hit its top/bottom. Same
-     body:has() overflow-lock pattern already used for chat-mode above. */
   body:has(#modal-overlay:not(.hidden)) { overflow:hidden; }
   .modal-overlay { @apply fixed inset-0 z-[100] flex items-end justify-center; background: rgba(8,14,9,.55); backdrop-filter:blur(2px); }
   .modal-sheet {
@@ -2125,11 +1542,6 @@
   .modal-close-btn:active { transform:scale(.92); background: rgba(23,36,28,.95); }
   .modal-overlay.no-close .modal-close-btn { @apply hidden; }
 
-  /* Desktop: a proper centered dialog instead of the mobile bottom sheet —
-     the sheet's "slides up from the screen edge, square bottom corners"
-     look only makes sense pinned to a phone viewport; on a wide desktop
-     window it read as an odd floating strip, so it gets its own layout,
-     rounded-all-round card and a simple fade+scale instead of sheet-up. */
   @media (min-width:900px) {
     .modal-overlay { @apply items-center; padding:24px; }
     .modal-sheet {
@@ -2141,8 +1553,6 @@
   }
   .modal-handle { @apply mx-auto rounded shrink-0; width:38px; height:4px; background: var(--color-line); margin:8px auto 16px; }
   .modal-sheet h3 { @apply text-[1.08rem] font-extrabold mb-4; }
-  /* Pin a modal's own title to the top of #modal-scroll while the rest of
-     its content scrolls underneath it. */
   #modal-body > h3:first-child {
     @apply sticky top-0 z-[2] bg-surface;
     margin:0 -22px 14px; padding:4px 22px 12px;
@@ -2161,9 +1571,6 @@
     @apply fixed left-1/2 -translate-x-1/2 text-white rounded-full text-sm font-semibold text-center z-[200];
     bottom:calc(68px + 26px); background:#1c2a1e; padding:11px 22px; box-shadow: var(--shadow-deep); max-width:88%;
   }
-  /* A toast carrying a "Details" expander (see showToast's `details` option
-     in ui-utils.js) switches from a centered pill to a left-aligned card,
-     since it may grow to more than one line once expanded. */
   .toast.has-details { @apply rounded-2xl text-left; padding:12px 16px; max-width:92%; }
   .toast-msg { @apply block; }
   .toast-details-toggle {
@@ -2177,20 +1584,10 @@
   }
   .toast-details.hidden { display:none; }
 
-  /* ---------- Live character counter, shown under post/comment/notice
-     text fields (see wireCharCounter in ui-utils.js). ---------- */
   .char-counter { @apply text-right text-[.7rem] font-semibold; color: var(--color-ink-faint); margin:3px 2px 0; }
   .char-counter-warn { color: var(--color-clay-600); }
-  /* Tucked directly under the comment row (a flex sibling in
-     .comments-block) instead of the default stacked gap, so it reads
-     as part of that one input instead of a separate block. */
   .comment-char-counter { margin-top:-6px; padding-right:44px; }
 
-  /* ---------- Offline banner — fixed strip pinned to the very top of
-     the viewport (outside the app-shell grid) so it shows over the
-     auth screen, the loading screen, and every section alike. Hidden
-     by sliding up out of view rather than display:none, so the
-     slide-down entrance is animated instead of an abrupt pop-in. ---------- */
   .offline-banner {
     @apply fixed top-0 left-0 right-0 z-[250] flex items-center justify-center gap-2 text-white text-[.8rem] font-semibold text-center;
     padding:10px 16px; padding-top:calc(10px + env(safe-area-inset-top));
@@ -2205,19 +1602,11 @@
 </head>
 <body>
 
-  <!-- ============================================================
-       OFFLINE BANNER — global network-status strip, independent of
-       auth/loading state, so a dropped connection is always visible
-       instead of surfacing only as scattered toast errors.
-  ============================================================= -->
   <div id="offline-banner" class="offline-banner" role="status" aria-live="polite">
     <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.58 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
     <span>No internet connection — everything will update once you're back online.</span>
   </div>
 
-  <!-- ============================================================
-       LOADING SCREEN — shown while Firebase checks auth state
-  ============================================================= -->
   <div id="loading-screen" class="loading-screen">
     <div class="loader-mark-wrap">
       <div class="loader-orb-glow"></div>
@@ -2234,13 +1623,9 @@
     </div>
   </div>
 
-  <!-- ============================================================
-       AUTH SCREENS (Login / Sign Up)
-  ============================================================= -->
   <div id="auth-screen" class="auth-screen hidden">
     <div class="auth-split">
 
-      <!-- ---------- BRAND PANEL: map motif, compass, feature list ---------- -->
       <div class="auth-panel-brand">
         <svg class="contour-lines" viewBox="0 0 400 500" preserveAspectRatio="none" aria-hidden="true">
           <path d="M-20,150 C 60,110 110,190 200,140 S 340,90 420,130" />
@@ -2288,7 +1673,6 @@
         </ul>
       </div>
 
-      <!-- ---------- FORM PANEL: pill toggle + login/signup forms ---------- -->
       <div class="auth-panel-form">
         <div class="auth-card">
           <div class="auth-card-head" id="auth-card-head">
@@ -2296,10 +1680,6 @@
             <small>Log in, or create your student account</small>
           </div>
 
-          <!-- ---------- Google sign-in: always shown above the form (on
-               both the Log In and Sign Up tabs), so it's never hidden
-               behind a separate step and no Back button is needed to
-               reach it. ---------- -->
           <button type="button" id="google-signin-btn" class="btn-google full">
             <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
               <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.91c1.7-1.57 2.69-3.88 2.69-6.62z"/>
@@ -2320,7 +1700,6 @@
           </div>
 
           <div class="auth-body">
-            <!-- LOGIN FORM -->
             <form id="login-form" class="auth-form" role="tabpanel" aria-labelledby="auth-tab-login">
           <label class="field-line">
             <span>Email</span>
@@ -2349,7 +1728,6 @@
           <p class="auth-switch-hint">New here? <button type="button" class="link-btn" data-tab="signup">Create an account</button></p>
         </form>
 
-        <!-- SIGN UP FORM -->
         <form id="signup-form" class="auth-form hidden" role="tabpanel" aria-labelledby="auth-tab-signup">
           <label class="field-line">
             <span>Full Name</span>
@@ -2427,12 +1805,8 @@
     </div>
   </div>
 
-  <!-- ============================================================
-       MAIN APP SHELL — shown when logged in
-  ============================================================= -->
   <div id="app-shell" class="app-shell hidden">
 
-    <!-- ---------- DESKTOP SIDEBAR ---------- -->
     <aside class="sidebar">
       <div class="sidebar-brand">
         <div class="logo-mark-small">
@@ -2472,15 +1846,8 @@
       </button>
     </aside>
 
-    <!-- ---------- TOP APP BAR ---------- -->
     <header class="topbar">
       <div class="topbar-left" id="topbar-left">
-        <!-- Android-style app bar back button: swaps in for the brand mark
-             whenever a drill-down page (Search/Profile/Post/Notices/
-             Reports/Settings — see TOPBAR_BACK_ROUTES in app.js) is open,
-             instead of that page carrying its own separate "Back" pill
-             floating below the bar. Icon-only on mobile; gains the
-             "Back" label on desktop via the shared .back-label rule. -->
         <button type="button" id="topbar-back-btn" class="topbar-back-btn hidden" aria-label="Back">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
           <span class="back-label">Back</span>
@@ -2510,10 +1877,8 @@
       </div>
     </header>
 
-    <!-- ---------- MAIN CONTENT ---------- -->
     <main class="content">
 
-      <!-- ===== SECTION 1: STUDENT WALL ===== -->
       <section id="section-wall" class="route-section">
         <button type="button" id="composer-trigger" class="composer-trigger">
           <span class="avatar" id="composer-avatar">…</span>
@@ -2546,7 +1911,6 @@
         </div>
       </section>
 
-      <!-- ===== SECTION 2: NOTES & SHEET HUB ===== -->
       <section id="section-resources" class="route-section">
         <div class="search-bar">
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -2554,7 +1918,6 @@
         </div>
         <div class="chip-scroller">
           <div class="chip-row" id="resource-categories">
-            <!-- category chips injected by JS -->
           </div>
         </div>
 
@@ -2573,7 +1936,6 @@
         </div>
       </section>
 
-      <!-- ===== SECTION 3: CLASSMATE DIRECTORY ===== -->
       <section id="section-directory" class="route-section">
         <div class="search-bar">
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -2584,7 +1946,6 @@
         </div>
       </section>
 
-      <!-- ===== SECTION 3A: GLOBAL SEARCH (own page, reached via the topbar search icon) ===== -->
       <section id="section-search" class="route-section">
         <div class="search-bar">
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -2595,11 +1956,6 @@
         </div>
       </section>
 
-      <!-- ===== SECTION 3B: MESSAGES — Direct Messages (conversation list, shown first) + Class Chat (open room) =====
-           The two inboxes are deliberately styled a little differently (icons here,
-           plus the Class Chat header's "everyone" badge below) so it's obvious at a
-           glance which one a conversation belongs to — a private 1:1 thread vs. the
-           one shared room the whole class reads. -->
       <section id="section-message" class="route-section msg-route">
         <div class="msg-subtabs" role="tablist">
           <button type="button" class="msg-subtab-btn active" data-msgtab="dm" role="tab" aria-selected="true" id="msg-subtab-dm">
@@ -2612,14 +1968,12 @@
           </button>
         </div>
 
-        <!-- ---- Direct Messages: 1:1 conversation list -> tap into its own thread page ---- -->
         <div class="msg-subtab-panel active" data-msgtab-panel="dm">
           <div id="dm-conversation-list" class="dm-list-wrap">
             <p class="empty-state">No conversations yet — message a classmate from the Directory.</p>
           </div>
         </div>
 
-        <!-- ---- Department Chat: one open live chat, everyone can read + post ---- -->
         <div class="msg-subtab-panel" data-msgtab-panel="class">
           <div class="chat-header chat-header-class">
             <button type="button" id="class-chat-back-btn" class="dm-thread-back-btn" aria-label="Back to Private Messages">
@@ -2646,11 +2000,6 @@
         </div>
       </section>
 
-      <!-- ===== SECTION 3C: A DIRECT-MESSAGE THREAD (drill-down page, not a modal) =====
-           The Back button sits as a plain sibling of #dm-thread-header (not inside it) so
-           renderDmThreadHeader()'s innerHTML swap in messages.js — which redraws the
-           avatar/name/presence on every open — never touches or detaches it; its click
-           listener is wired once in initMessages() and stays live for the whole session. -->
       <section id="section-dm-thread" class="route-section dm-thread-route">
         <div class="dm-thread-header-row" id="dm-thread-header-row">
           <button type="button" id="dm-thread-back-btn" class="dm-thread-back-btn" aria-label="Back to conversations">
@@ -2658,11 +2007,6 @@
             <span class="back-label">Back</span>
           </button>
           <div id="dm-thread-header" class="dm-thread-header"></div>
-          <!-- Block/unblock now lives behind this three-dot menu instead of sitting
-               out as its own icon button — one tap less to see, one deliberate tap
-               to actually reach it, matching every other "more options" menu in
-               the app (see kebabMenuHtml in ui-utils.js, whose markup this mirrors
-               by hand since this trigger isn't tied to a single feed item id). -->
           <div class="kebab-menu dm-thread-more-menu" id="dm-thread-more-menu">
             <button type="button" class="kebab-btn" id="dm-thread-more-btn" aria-label="More options" aria-haspopup="true">
               <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor"><circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/></svg>
@@ -2679,16 +2023,12 @@
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
           </button>
         </form>
-        <!-- Swaps in for the composer above whenever either side has blocked
-             the other in this conversation (js/messages.js's paintDmBlockState) —
-             never both shown at once. -->
         <div id="dm-thread-blocked-bar" class="dm-blocked-bar hidden">
           <span id="dm-thread-blocked-text"></span>
           <button type="button" id="dm-thread-unblock-btn" class="link-btn hidden">Unblock</button>
         </div>
       </section>
 
-      <!-- ===== SECTION 4: ROUTINE, DEADLINES & NOTICE BOARD ===== -->
       <section id="section-routine" class="route-section">
         <div class="deadlines-header-row">
           <h3 class="section-heading">Upcoming Deadlines</h3>
@@ -2713,22 +2053,18 @@
         </div>
       </section>
 
-      <!-- ===== SECTION 5: MY PROFILE ===== -->
       <section id="section-profile" class="route-section">
         <div id="profile-card" class="profile-card-panel"></div>
       </section>
 
-      <!-- ===== SECTION 6: A CLASSMATE'S PROFILE (drill-down page, not a modal) ===== -->
       <section id="section-user-profile" class="route-section">
         <div id="user-profile-card" class="profile-card-panel"></div>
       </section>
 
-      <!-- ===== SECTION 7: POST DETAIL (single-post drill-down page, not a modal) ===== -->
       <section id="section-post-detail" class="route-section">
         <div id="post-detail-body" class="flat-list"></div>
       </section>
 
-      <!-- ===== SECTION 8: NOTICES & NOTIFICATIONS (own page, not a modal) ===== -->
       <section id="section-notices" class="route-section">
         <div class="notices-page-tabs" role="tablist">
           <button type="button" class="notices-page-tab-btn active" data-tab="notice" role="tab" id="notices-tab-notice" aria-selected="true" aria-controls="notices-panel-notice">
@@ -2752,11 +2088,6 @@
         </div>
       </section>
 
-      <!-- ===== SECTION 8B: REPORTS — admin-only, reached via the Admin Panel
-           tile on the Settings page (see admin-reports-tile). Replaces the old "Reported Posts"
-           button-inside-a-modal that used to live in the Notice tab: this is
-           its own full page now, live-updating, so an admin doesn't need to
-           dig into Notices to find it. ===== -->
       <section id="section-reports" class="route-section">
         <div class="notif-panel-head">
           <span class="notif-panel-head-title">Reported Posts</span>
@@ -2766,7 +2097,6 @@
         </div>
       </section>
 
-      <!-- ===== SECTION 9: SETTINGS (opened via the header gear icon) ===== -->
       <section id="section-settings" class="route-section">
         <div class="settings-page">
           <div class="quick-links-block">
@@ -2781,10 +2111,6 @@
             </div>
           </div>
 
-          <!-- Admin-only quick links — hidden by default, shown for admins
-               via the same isAdmin check that used to gate the topbar flag
-               icon (see routine.js). Reports moved here from the topbar so
-               it no longer crowds the header. -->
           <div class="quick-links-block hidden" id="admin-panel-block">
             <div class="quick-links-title">Admin Panel</div>
             <div class="quick-links-grid">
@@ -2871,7 +2197,6 @@
 
     </main>
 
-    <!-- ---------- MOBILE BOTTOM NAVIGATION ---------- -->
     <nav class="bottom-nav">
       <button class="nav-item active" data-route="wall" aria-current="page">
         <span class="icon" data-icon="wall"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v10H8l-4 4V4z"/><line x1="8" y1="8.5" x2="16" y2="8.5"/><line x1="8" y1="11.5" x2="13" y2="11.5"/></svg></span><small>Wall</small>
@@ -2891,9 +2216,6 @@
     </nav>
   </div>
 
-  <!-- ============================================================
-       MODAL — used for "Add Resource", profile details, confirms
-  ============================================================= -->
   <div id="modal-overlay" class="modal-overlay hidden">
     <div class="modal-sheet">
       <button type="button" id="modal-close-btn" class="modal-close-btn" aria-label="Close">
@@ -2906,12 +2228,8 @@
     </div>
   </div>
 
-  <!-- Toast for quick feedback messages -->
   <div id="toast" class="toast hidden" role="status" aria-live="polite" aria-atomic="true"></div>
 
-  <!-- ============================================================
-       SCRIPTS (ES Modules — order doesn't matter, app.js is entry)
-  ============================================================= -->
   <script type="module" src="js/app.js"></script>
 </body>
 </html>

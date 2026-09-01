@@ -1,12 +1,5 @@
 rules_version = '2';
 
-// ============================================================
-// FIRESTORE SECURITY RULES for GeoHub
-// Paste this into: Firebase Console -> Firestore Database -> Rules
-//
-// IMPORTANT: replace the emails in isAdmin() below with the same
-// list you put in ADMIN_EMAILS inside js/firebase-config.js.
-// ============================================================
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -21,123 +14,45 @@ service cloud.firestore {
         "in.with.imran@gmail.com"
       ];
     }
-    // True if this update ONLY touches the given set of fields (used to let
-    // "anyone signed in" flip a single narrow field — like a like/vote array —
-    // without opening up the rest of the document to editing by non-owners).
     function onlyChangedFields(fields) {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
     }
-    // A signed-in student may cast/change/retract only THEIR OWN vote inside
-    // a poll post's `poll.votes` map — the question and options stay frozen,
-    // and nobody can touch another student's vote entry. `onlyChangedFields`
-    // only sees the top-level key ("poll") since `poll.votes.<uid>` is a
-    // nested path, so the extra checks here are what actually keeps the
-    // question/options immutable and each voter's entry theirs alone.
     function pollVoteOnly() {
       return onlyChangedFields(["poll"]) &&
         ("poll" in resource.data) &&
         request.resource.data.poll.options == resource.data.poll.options &&
         request.resource.data.poll.votes.diff(resource.data.poll.votes).affectedKeys().hasOnly([request.auth.uid]);
     }
-    // NOTE: the display-name 7-day cooldown used to be enforced here
-    // (nameChangeAllowed()) as a backstop against writing to Firestore
-    // directly. That's now moot for `users/{uid}`: its `update` rule below
-    // only lets the client touch the "lastActive" field at all, so a name
-    // change can only ever happen through api/update-profile.js's Admin
-    // SDK write (which enforces the cooldown itself, and bypasses these
-    // rules entirely). See that route's comment for the fuller reasoning.
-
-    // Server-side backstop for the client's char-limit UI (js/wall.js,
-    // post-detail.js, routine.js) — a client-side maxlength can't stop
-    // someone writing to Firestore directly, so the real cap has to live
-    // here too. Missing field passes through (some other rule already
-    // requires it where it matters); present-but-wrong-type or
-    // over-length is rejected.
     function textWithinLimit(field, maxLen) {
       return !(field in request.resource.data) ||
         (request.resource.data[field] is string && request.resource.data[field].size() <= maxLen);
     }
 
-    // ---- Student profiles (also powers the Classmate Directory) ----
-    // NOTE: real phone/email now live in the users/{uid}/private/contact
-    // subdocument (owner + admin read only, see below). The `phone` and
-    // `email` fields on THIS public document are only ever written as
-    // "visible mirrors" by the app (js/auth.js) — blanked out client-side
-    // whenever the student has hidePhone/hideEmail turned on — because
-    // Firestore rules can't hide individual fields of a document that's
-    // otherwise readable. Anyone editing this document by hand (e.g. via
-    // the Firebase console) should keep that mirroring in mind.
     match /users/{uid} {
-      allow read: if isSignedIn();               // any classmate can view the directory
-      allow create: if isOwner(uid);              // only during signup, by that student
-      // Direct client updates are limited to the "lastActive" presence
-      // heartbeat (js/presence.js) — every other profile field (name,
-      // roll, blood group, bio, privacy toggles, ...) must go through
-      // api/update-profile.js, which validates them properly (enum
-      // checks, phone format, a real Cloudinary avatar URL, the 7-day
-      // name-change cooldown) and writes via the Admin SDK, which
-      // bypasses these rules entirely.
+      allow read: if isSignedIn();               
+      allow create: if isOwner(uid);
       allow update: if isOwner(uid) && onlyChangedFields(["lastActive"]);
       allow delete: if false;
 
-      // Real, unmasked contact details. Only the student themself (to
-      // populate their own edit form) or an admin (for real emergencies —
-      // e.g. reaching a student the CR needs to contact directly) can
-      // read this. Regular classmates never can, even if they know the
-      // uid and try to read it directly — this is what actually enforces
-      // "Hide my phone/email", rather than just hiding it in the UI.
       match /private/{docId} {
         allow read: if isOwner(uid) || isAdmin();
-        // Only the initial signup write (js/auth.js's signUp()) is a
-        // client "create" — every later change comes from
-        // api/update-profile.js's Admin SDK write, same reasoning as
-        // the parent doc's `update` rule above.
         allow create: if isOwner(uid);
         allow update: if false;
       }
 
-      // Push-notification device tokens (js/push.js) — a student can only
-      // register/revoke tokens on their OWN account. The Vercel API route
-      // in /api/send-push.js reads across everyone's tokens via the Admin
-      // SDK, which bypasses these rules entirely, so this stays owner-only.
       match /fcmTokens/{token} {
         allow read, write: if isOwner(uid);
       }
 
-      // Per-item "read"/"deleted" notification state (js/routine.js) — one
-      // doc per kind ("notice", "activity", "activity_dismissed"), each
-      // holding the capped array of ids the owner has already seen/removed.
-      // This is the cloud copy of what's also cached in localStorage for
-      // instant painting; it's what makes read/deleted state survive
-      // clearing the browser's local data, reinstalling the app, or
-      // switching devices. Owner-only, same as everything else about a
-      // student's own account.
       match /readState/{kind} {
         allow read, write: if isOwner(uid);
       }
 
-      // "Save for later" bookmarks (js/resources.js) — a student's own
-      // private shortlist of resources from the Notes & Sheet Hub. One doc
-      // per saved resource, keyed by the resource's own id, holding a small
-      // denormalized copy of its title/category/link/etc. so the Saved list
-      // renders without depending on that resource still being on the
-      // currently-loaded page of the main Hub. Owner-only, same as
-      // everything else about a student's own account — nobody else can
-      // see or tamper with what someone has bookmarked.
       match /bookmarks/{resId} {
         allow read, write: if isOwner(uid);
       }
     }
 
-    // ---- Activity feed (Notices & Notifications -> "Notification" tab) ----
-    // "post" / "resource" / "notice" entries are public announcements, so
-    // everyone signed in may read them. "comment" / "like" entries are a
-    // private "someone interacted with YOUR post" notification and must
-    // only be readable by the post's author (targetUid) — otherwise every
-    // student could read every comment/like notification meant for
-    // someone else. Firestore evaluates this per-document, so a query
-    // over the whole collection silently comes back with only the
-    // documents each reader is allowed to see.
     match /activity/{activityId} {
       allow read: if isSignedIn() && (
         isAdmin() ||
@@ -146,15 +61,7 @@ service cloud.firestore {
         resource.data.actorUid == request.auth.uid
       );
       allow create: if isSignedIn() && request.resource.data.actorUid == request.auth.uid;
-      allow update: if false; // no field may ever be edited after the fact
-      // Activity entries are otherwise an append-only log — the one
-      // exception is cleanup when the thing an entry is ABOUT gets deleted
-      // (a Wall post's "posted"/"liked"/"commented" entries, a resource's
-      // "shared a note" entry, a notice's "posted a notice" entry), so a
-      // deleted post doesn't leave a dangling notification behind. Only the
-      // actor who logged it, the person it was targeted at (a post's
-      // author, for comment/like entries), or an admin (moderation
-      // removals) may delete it.
+      allow update: if false; 
       allow delete: if isSignedIn() && (
         isAdmin() ||
         resource.data.actorUid == request.auth.uid ||
@@ -162,56 +69,24 @@ service cloud.firestore {
       );
     }
 
-    // ---- Student Wall posts ----
     match /posts/{postId} {
       allow read: if isSignedIn();
-      // New posts must go through api/create-post.js, which does
-      // everything this line used to (ownership, the 3000-char cap) PLUS
-      // what rules can't cheaply check: image URLs are really this app's
-      // own Cloudinary uploads, mentions are real classmates, hashtags
-      // match the text, and a poll always starts with zero votes. That
-      // route writes via the Admin SDK, which bypasses this rule entirely.
       allow create: if false;
-      // The author can edit anything on their own post. Anyone else who's
-      // signed in may ONLY flip the "likes" array + "reactions" map (tapping
-      // Like/React) or cast their own poll vote (pollVoteOnly, above) —
-      // every other field is locked to the author. Pinning is a separate,
-      // admin-only lane that touches nothing else on the post, so a
-      // moderator can pin any post to the top of the Wall without gaining
-      // any other edit power over it.
       allow update: if (isOwner(resource.data.authorUid) && textWithinLimit("text", 3000)) ||
         (isSignedIn() && onlyChangedFields(["likes", "reactions"])) ||
-        // commentCount is decremented client-side when a comment is deleted
-        // (js/post-detail.js) — deletion is allowed for the comment's own
-        // author, the post's author, or an admin (see the comments match
-        // below), so any of those three needs to be able to touch this
-        // single field on the parent post. It's only ever incremented
-        // server-side, by api/create-comment.js via the Admin SDK.
-        (isSignedIn() && onlyChangedFields(["commentCount"])) ||
         (isSignedIn() && pollVoteOnly()) ||
         (isAdmin() && onlyChangedFields(["pinned", "pinnedAt"]));
-      // The author can delete their own post; an admin can remove any post
-      // as a moderation action (e.g. after a report).
       allow delete: if isOwner(resource.data.authorUid) || isAdmin();
 
       match /comments/{commentId} {
         allow read: if isSignedIn();
-        // New comments must go through api/create-comment.js, same
-        // reasoning as posts' `create` rule above — plus it checks the
-        // parent post actually still exists.
         allow create: if false;
         allow update: if isOwner(resource.data.authorUid) && textWithinLimit("text", 500);
-        // A comment's own author, an admin, OR the author of the POST it's
-        // on may delete it — that last one lets a post's owner moderate
-        // their own comment thread (remove anyone's comment, not just
-        // their own), same spirit as being able to delete the whole post.
         allow delete: if isOwner(resource.data.authorUid) || isAdmin() ||
           isOwner(get(/databases/$(database)/documents/posts/$(postId)).data.authorUid);
       }
     }
 
-    // ---- Messages: "Class Chat" (one open room, everyone in the
-    // department) ----
     match /classChat/{messageId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.authorUid == request.auth.uid && textWithinLimit("text", 1000);
@@ -219,26 +94,11 @@ service cloud.firestore {
       allow delete: if isOwner(resource.data.authorUid) || isAdmin();
     }
 
-    // ---- Messages: Class Chat read-tracking (powers its own unread
-    // badge, same idea as `conversations.unread` for DMs) — one tiny doc
-    // per student holding only "when did I last look at Class Chat".
-    // Owner-only both ways; nobody needs to read anyone else's. ----
     match /classChatReads/{uid} {
       allow read, write: if isOwner(uid);
     }
 
-    // ---- Messages: Direct Messages (1:1 inbox) ----
-    // Conversation id is the two participant uids, sorted and joined with
-    // "_" (see js/messages.js's dmConversationId()) — deterministic, so
-    // both sides always land on the exact same document instead of
-    // racing to create duplicate threads for the same pair of students.
     match /conversations/{conversationId} {
-      // A participant may add/remove only THEIR OWN uid to/from
-      // `blockedBy` (js/messages.js's Block/Unblock button) — the other
-      // participant's own entry, if any, must come out of the write
-      // unchanged, and the array may never hold anything but the two
-      // real participants. Missing-field cases (never blocked, on either
-      // side of the write) are treated as an empty list.
       function blockedByChangeValid() {
         let before = ("blockedBy" in resource.data) ? resource.data.blockedBy : [];
         let after = ("blockedBy" in request.resource.data) ? request.resource.data.blockedBy : [];
@@ -246,29 +106,11 @@ service cloud.firestore {
           before.removeAll([request.auth.uid]).hasOnly(after.removeAll([request.auth.uid])) &&
           after.hasOnly(resource.data.participants);
       }
-      // Only the two people IN the conversation may ever read/write it —
-      // nobody can browse or tamper with someone else's DMs, even another
-      // signed-in classmate.
-      // NOTE: ensureConversation() in js/messages.js does a getDoc() on this
-      // path *before* the doc necessarily exists (first message to a new
-      // classmate). On a nonexistent doc, `resource` is null, so evaluating
-      // `resource.data.participants` throws — which Firestore denies as
-      // permission-denied instead of "not found". Checking `resource == null`
-      // first lets that first-contact read through; the client then falls
-      // back to `allow create` to actually make the doc.
       allow read: if isSignedIn() &&
         (resource == null || request.auth.uid in resource.data.participants);
       allow create: if isSignedIn() &&
         request.auth.uid in request.resource.data.participants &&
         request.resource.data.participants.size() == 2;
-      // The participant pair itself is frozen after creation. Beyond
-      // that, either participant may only touch the "preview" fields
-      // (last message text/sender/time), the shared unread-counts map —
-      // e.g. opening the thread zeroes only *your own* entry in `unread`,
-      // sending a message updates the preview + bumps the other person's
-      // entry — and their own entry in `blockedBy` (see
-      // blockedByChangeValid() above). Nothing else on the conversation
-      // doc is ever editable.
       allow update: if isSignedIn() &&
         request.auth.uid in resource.data.participants &&
         request.resource.data.participants == resource.data.participants &&
@@ -277,45 +119,29 @@ service cloud.firestore {
       allow delete: if false;
 
       match /messages/{messageId} {
-        // Every read/write here is gated on being one of the two people on
-        // the parent conversation doc — a get() lookup, same pattern this
-        // file already uses for the comment-delete rule below.
         function isDmParticipant() {
           return isSignedIn() &&
             request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
         }
-        // Real enforcement of the Block button: while either participant
-        // has the other blocked (js/messages.js's `blockedBy` on the
-        // parent conversation doc), no new message may be created in
-        // EITHER direction — matches the client, which hides the composer
-        // for both sides the moment blockedBy is non-empty.
         function isDmBlocked() {
           let convo = get(/databases/$(database)/documents/conversations/$(conversationId)).data;
           return ("blockedBy" in convo) && convo.blockedBy.size() > 0;
         }
         allow read: if isDmParticipant();
         allow create: if isDmParticipant() && !isDmBlocked() && request.resource.data.senderUid == request.auth.uid && textWithinLimit("text", 2000);
-        allow update: if false; // messages are never edited, only sent/deleted
+        allow update: if false; 
         allow delete: if isOwner(resource.data.senderUid);
       }
     }
 
-    // ---- Notes & Sheet Hub resources ----
     match /resources/{resId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.contributorUid == request.auth.uid;
-      // The contributor can edit anything on their own resource. Anyone else
-      // who's signed in may ONLY bump the "openCount" field (view/download
-      // tally, incremented client-side when someone taps Open/Download on
-      // resources.js's row) — same narrow-field pattern as posts' likes —
-      // so a classmate opening a note they didn't share can't touch
-      // anything else on the document.
       allow update: if isOwner(resource.data.contributorUid) ||
         (isSignedIn() && onlyChangedFields(["openCount"]));
       allow delete: if isOwner(resource.data.contributorUid) || isAdmin();
     }
 
-    // ---- Notice board: only CR/admin can write, everyone can read ----
     match /notices/{noticeId} {
       allow read: if isSignedIn();
       allow create: if isAdmin() && textWithinLimit("text", 1000);
@@ -323,18 +149,11 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // ---- Weekly class routine: only CR/admin can write, everyone can read ----
     match /routine/{docId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
-    // ---- Assignment / Quiz / Exam deadline tracker ----
-    // Same trust model as notices/routine: only the CR/admin posts official
-    // deadlines, everyone signed in can read them. `remindedAt` is only ever
-    // stamped by the Vercel cron job (api/deadline-reminders.js) via the
-    // Admin SDK, which bypasses these rules entirely — students/admins never
-    // write it from the client, so no special-case is needed here for it.
     match /deadlines/{deadlineId} {
       allow read: if isSignedIn();
       allow create: if isAdmin() && textWithinLimit("title", 200) && textWithinLimit("notes", 1000);
@@ -342,20 +161,12 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // ---- Reports (Wall posts a student flags for the admin/CR to review) ----
-    // Any signed-in student can file a report; only the admin can read the
-    // queue or resolve (delete) a report once it's been handled.
     match /reports/{reportId} {
       allow read: if isAdmin();
       allow create: if isSignedIn() && request.resource.data.reportedByUid == request.auth.uid;
       allow update, delete: if isAdmin();
     }
 
-    // ---- Per-user push-notification rate limiting ----
-    // Written only by the Vercel API route (api/send-push.js) via the Admin
-    // SDK, which bypasses these rules — this match just makes sure no
-    // student can read or tamper with their own cooldown timer from the
-    // client to bypass the spam guard.
     match /pushRateLimits/{uid} {
       allow read, write: if false;
     }

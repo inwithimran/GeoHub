@@ -1,15 +1,3 @@
-// ============================================================
-// FIREBASE-MESSAGING-SW.JS — background push handler + PWA cache.
-// Must live at the SITE ROOT (same folder as index.html) with
-// exactly this filename — Firebase Cloud Messaging looks for it
-// there by default. Handles notifications that arrive while
-// GeoHub isn't open in any tab (app closed / phone locked), and
-// doubles as the app's one and only service worker: it also
-// caches the app shell so GeoHub installs as a PWA and opens
-// instantly (and mostly works offline) on repeat visits. Kept as
-// a single file (rather than a separate sw.js) so there's only
-// ever one service worker controlling the page.
-// ============================================================
 importScripts("https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/10.13.0/firebase-messaging-compat.js");
 
