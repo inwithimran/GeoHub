@@ -24,9 +24,10 @@
 // ============================================================
 import { db, auth, ADMIN_EMAILS } from "./firebase-config.js";
 import {
-  collection, addDoc, updateDoc, deleteDoc, onSnapshot, query, where, orderBy, limit, serverTimestamp,
+  collection, addDoc, updateDoc, deleteDoc, query, where, orderBy, limit, serverTimestamp,
   doc, getDoc, getDocs, setDoc
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import { onSnapshotWithRetry } from "./realtime-retry.js";
 import {
   escapeHtml, timeAgo, fullDate, showToast, setBtnLoading, openModal, closeModal,
   avatarInner, nameWithBadge, getCachedProfile, kebabMenuHtml, wireKebabMenus, confirmDialog,
@@ -238,7 +239,7 @@ function subscribeNotifications() {
   if (unsubscribeNotices || unsubscribeActivityPublic || unsubscribeActivityPrivate) return; // already live
 
   const q = query(collection(db, "notices"), orderBy("createdAt", "desc"));
-  unsubscribeNotices = onSnapshot(q, (snap) => {
+  unsubscribeNotices = onSnapshotWithRetry(q, (snap) => {
     latestNotices = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     noticesLoaded = true;
     updateNoticeBadge();
@@ -279,7 +280,7 @@ function subscribeNotifications() {
     where("type", "in", ["post", "resource", "notice"]),
     limit(200)
   );
-  unsubscribeActivityPublic = onSnapshot(publicQ, (snap) => {
+  unsubscribeActivityPublic = onSnapshotWithRetry(publicQ, (snap) => {
     latestActivityPublic = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     activityPublicLoaded = true;
     activityFeedError = null;
@@ -309,7 +310,7 @@ function subscribeNotifications() {
       where("targetUid", "==", uid),
       limit(200)
     );
-    unsubscribeActivityPrivate = onSnapshot(privateQ, (snap) => {
+    unsubscribeActivityPrivate = onSnapshotWithRetry(privateQ, (snap) => {
       latestActivityPrivate = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       activityPrivateLoaded = true;
       activityFeedError = null;
@@ -525,7 +526,7 @@ function subscribeReports() {
   // drop the orderBy (an equality-only where needs no composite index)
   // and sort client-side instead — same result, no manual index setup.
   const q = query(collection(db, "reports"), where("resolved", "==", false));
-  unsubscribeReports = onSnapshot(q, (snap) => {
+  unsubscribeReports = onSnapshotWithRetry(q, (snap) => {
     openReportCount = snap.size;
     openReports = snap.docs.map(d => ({ id: d.id, ...d.data() }))
       .sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
@@ -938,7 +939,7 @@ let unsubscribeRoutineDoc = null;
 
 function subscribeRoutine() {
   if (unsubscribeRoutineDoc) return;
-  unsubscribeRoutineDoc = onSnapshot(doc(db, "routine", "weekly"), (snap) => {
+  unsubscribeRoutineDoc = onSnapshotWithRetry(doc(db, "routine", "weekly"), (snap) => {
     latestRoutineData = snap.exists() ? snap.data() : null;
     renderRoutineTable();
   }, () => {

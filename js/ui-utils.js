@@ -3,7 +3,8 @@
 // used by wall.js / resources.js / directory.js / routine.js
 // ============================================================
 import { ADMIN_EMAILS, ADMIN_NAME, db } from "./firebase-config.js";
-import { doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import { doc } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import { onSnapshotWithRetry } from "./realtime-retry.js";
 
 const toastEl = document.getElementById("toast");
 let toastTimer = null;
@@ -449,7 +450,7 @@ export function subscribeToProfileUpdates(callback) {
 export function ensureProfileLoaded(uid) {
   if (!uid || subscribedProfiles.has(uid)) return;
   subscribedProfiles.add(uid);
-  onSnapshot(doc(db, "users", uid), (snap) => {
+  onSnapshotWithRetry(doc(db, "users", uid), (snap) => {
     if (snap.exists()) cacheUserProfile(uid, snap.data());
   }, () => { /* best-effort — avatar/presence just falls back to the generic state */ });
 }

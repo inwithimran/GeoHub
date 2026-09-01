@@ -5,7 +5,8 @@
 // Also doubles as the shared profile cache used across the app.
 // ============================================================
 import { auth, db } from "./firebase-config.js";
-import { collection, onSnapshot, query, limit } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import { collection, query, limit } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import { onSnapshotWithRetry } from "./realtime-retry.js";
 import { escapeHtml, showToast, setBtnLoading, cacheUserProfile, avatarInner, nameWithBadge, friendlyError } from "./ui-utils.js";
 import { avatarPresenceDotHtml, isUserOnline, paintPresenceUI } from "./presence.js";
 import { openUserProfilePage } from "./profile-view.js";
@@ -67,7 +68,7 @@ export function initDirectory(onSnapshotReceived) {
 function subscribeDirectory(onSnapshotReceived) {
   if (unsubscribeDirectory) unsubscribeDirectory();
   const q = query(collection(db, "users"), limit(directoryPageLimit));
-  unsubscribeDirectory = onSnapshot(q, (snap) => {
+  unsubscribeDirectory = onSnapshotWithRetry(q, (snap) => {
     lastLoadedCount = snap.size;
     allStudents = snap.docs.map(d => {
       const data = d.data();

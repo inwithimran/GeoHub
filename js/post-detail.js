@@ -14,10 +14,12 @@
 // comment UI.
 // ============================================================
 import { db, auth } from "./firebase-config.js";
+import { onSnapshotWithRetry } from "./realtime-retry.js";
 import {
-  doc, collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, serverTimestamp
+  doc, collection, query, orderBy, updateDoc, deleteDoc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { currentProfile } from "./auth.js";
+import { callApi } from "./api-client.js";
 import {
   showToast, escapeHtml, timeAgo, openModal, closeModal, setBtnLoading,
   clampableRichHtml, richTextHtml, wireRichTextClicks, attachClampToggle, avatarInner, nameWithBadge,
@@ -104,7 +106,7 @@ export function openPostDetailPage(postId, { fromPopstate = false, replace = fal
     shouldFocusComment = false; // only auto-focus right after opening, not on every live update
   };
 
-  unsubscribePost = onSnapshot(doc(db, "posts", postId), (snap) => {
+  unsubscribePost = onSnapshotWithRetry(doc(db, "posts", postId), (snap) => {
     if (postId !== currentPostId) return;
     postLoaded = true;
     if (!snap.exists()) { post = null; render(); return; }
@@ -120,7 +122,7 @@ export function openPostDetailPage(postId, { fromPopstate = false, replace = fal
   });
 
   const commentsQuery = query(collection(db, "posts", postId, "comments"), orderBy("createdAt", "asc"));
-  unsubscribeComments = onSnapshot(commentsQuery, (snap) => {
+  unsubscribeComments = onSnapshotWithRetry(commentsQuery, (snap) => {
     if (postId !== currentPostId) return;
     comments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     commentsLoaded = true;
@@ -390,10 +392,11 @@ async function submitComment(postId, commentsEl, sendBtn, postAuthorUid, getMent
   if (!text) return;
   const mentions = getMentions ? getMentions() : [];
 
-  // Clear the field immediately, BEFORE the write. addDoc()'s optimistic
-  // local write can make the comments onSnapshot fire (and re-render this
-  // whole box, restoring "draftText" — see renderPostDetail) before this
-  // async function ever resumes after `await`. If we only cleared the
+  // Clear the field immediately, BEFORE the write. The server call below
+  // resolves only after the comment is actually written, and the comments
+  // onSnapshot listener can fire (re-rendering this whole box, restoring
+  // "draftText" — see renderPostDetail) the moment that happens, possibly
+  // before this async function ever resumes after `await`. If we only cleared the
   // input afterwards, we'd be clearing a DOM node that re-render had
   // already replaced, so the field visibly kept the typed text. Clearing
   // first means that even if that race happens, the draft it restores is
@@ -403,14 +406,10 @@ async function submitComment(postId, commentsEl, sendBtn, postAuthorUid, getMent
   sendBtn.disabled = true;
   sendBtn.classList.add("is-loading");
   try {
-    await addDoc(collection(db, "posts", postId, "comments"), {
-      authorUid: auth.currentUser.uid,
-      authorName: currentProfile.name,
-      authorEmail: auth.currentUser.email,
-      text,
-      mentions,
-      createdAt: serverTimestamp()
-    });
+    // Validated + written server-side (api/create-comment.js) — checks
+    // postId actually exists and mentions against real profiles, same
+    // reasoning as api/create-post.js.
+    await callApi("create-comment", { postId, text, mentions });
     // Only notify the post's author, and never notify someone that they
     // commented on their own post — that's not a meaningful notification.
     if (postAuthorUid && postAuthorUid !== auth.currentUser.uid) {

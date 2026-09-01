@@ -13,8 +13,9 @@ import {
   fetchSignInMethodsForEmail
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
-  doc, setDoc, updateDoc, getDoc, serverTimestamp
+  doc, setDoc, getDoc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import { callApi } from "./api-client.js";
 
 // ============================================================
 // PRIVACY: the `users/{uid}` document is readable by every signed-in
@@ -165,58 +166,24 @@ export async function signInWithGoogle() {
  * they can call this student).
  */
 export async function updateProfileDetails({ name, roll, blood, phone, bio, session, year, hometown, address, socialLink, gender, hidePhone, hideEmail, photoURL }) {
-  const uid = auth.currentUser.uid;
-  const realPhone = phone.trim();
-  const realEmail = (currentProfile && currentProfile.email) || auth.currentUser.email || "";
-  const nextHidePhone = hidePhone !== undefined ? !!hidePhone : !!(currentProfile && currentProfile.hidePhone);
-  const nextHideEmail = hideEmail !== undefined ? !!hideEmail : !!(currentProfile && currentProfile.hideEmail);
-
-  const updates = {
-    roll: roll.trim(),
-    bloodGroup: blood,
-    profileIncomplete: false,
-    hidePhone: nextHidePhone,
-    hideEmail: nextHideEmail,
-    // Only the masked/visible mirror goes on the public doc — see
-    // visibleContactMirror() above.
-    ...visibleContactMirror({ phone: realPhone, email: realEmail, hidePhone: nextHidePhone, hideEmail: nextHideEmail })
-  };
-  if (bio !== undefined) updates.bio = bio.trim();
-  if (session !== undefined) updates.session = session.trim();
-  if (year !== undefined) updates.year = year;
-  if (hometown !== undefined) updates.hometown = hometown.trim();
-  if (address !== undefined) updates.address = address.trim();
-  if (socialLink !== undefined) updates.socialLink = socialLink.trim();
-  if (gender !== undefined && gender) updates.gender = gender;
-  if (photoURL !== undefined && photoURL) updates.photoURL = photoURL;
-
-  // Name change — gated to once every 7 days (see nameChangeStatus above).
-  // A no-op edit (unchanged, or same text after trimming) never touches
-  // nameChangedAt, so re-saving the rest of the form never starts a fresh
-  // cooldown by accident.
-  if (name !== undefined) {
-    const trimmedName = name.trim();
-    if (trimmedName && trimmedName !== (currentProfile?.name || "")) {
-      const status = nameChangeStatus();
-      if (!status.canChange) {
-        throw new Error(`You can change your name again in ${status.daysRemaining} day${status.daysRemaining === 1 ? "" : "s"}.`);
-      }
-      updates.name = trimmedName;
-      updates.nameChangedAt = serverTimestamp();
-    }
-  }
-
-  await updateDoc(doc(db, "users", uid), updates);
-  // The real, unmasked phone always lives in the private subdocument, so a
-  // hidden number still round-trips correctly the next time this student
-  // opens their own edit form.
-  await setDoc(doc(db, "users", uid, "private", "contact"), { phone: realPhone, email: realEmail }, { merge: true });
-
-  currentProfile = { ...currentProfile, ...updates, phone: realPhone, email: realEmail };
-  // serverTimestamp() above is a write-time sentinel, not a real value —
-  // stand in a local Date so nameChangeStatus() has something to compare
-  // against immediately, until the next fetch replaces it with the real one.
-  if (updates.nameChangedAt) currentProfile.nameChangedAt = new Date();
+  // Validated + written server-side (api/update-profile.js) — enum checks
+  // on blood/gender/year, a real phone-format check, the photoURL actually
+  // being this student's own Cloudinary avatar upload, and the 7-day
+  // name-change cooldown enforced for real (this client-side
+  // nameChangeStatus() disabling the field is just instant UI feedback,
+  // same as before — the API is what a direct-to-Firestore write could
+  // never be trusted to respect).
+  const wasNameChangeAttempt = name !== undefined && name.trim() && name.trim() !== (currentProfile?.name || "");
+  const { profile } = await callApi("update-profile", {
+    name, roll, blood, phone, bio, session, year, hometown, address, socialLink, gender, hidePhone, hideEmail, photoURL
+  });
+  currentProfile = profile;
+  // The API's nameChangedAt (when this call actually changed the name) is a
+  // write-time sentinel that doesn't survive the JSON round-trip as a real
+  // value — stand in a local Date so nameChangeStatus() has something to
+  // compare against immediately, until the next fetch replaces it with the
+  // real one.
+  if (wasNameChangeAttempt) currentProfile.nameChangedAt = new Date();
   return currentProfile;
 }
 

@@ -24,6 +24,9 @@ import { logActivity, deleteActivityForPost } from "./routine.js";
 import { triggerPush } from "./push-trigger.js";
 import { imagePickerHtml, wireImagePicker, postImagesHtml, applyPostImageRatios } from "./media-picker.js";
 import { getAllStudents } from "./directory.js";
+import { callApi } from "./api-client.js";
+import { onSnapshotWithRetry } from "./realtime-retry.js";
+import { enqueueWrite, registerWriteHandler, isNetworkError } from "./write-queue.js";
 
 // ============================================================
 // REACTIONS — a small fixed emoji set (kept small on purpose: a
@@ -158,7 +161,7 @@ export function initWall(onSnapshotReceived) {
 function subscribeWall(onSnapshotReceived) {
   if (unsubscribePosts) unsubscribePosts();
   const q = query(collection(db, "posts"), orderBy("createdAt", "desc"), limit(WALL_PAGE_SIZE));
-  unsubscribePosts = onSnapshot(q, (snap) => {
+  unsubscribePosts = onSnapshotWithRetry(q, (snap) => {
     liveDocs = snap.docs;
     renderWallList();
     if (onSnapshotReceived) onSnapshotReceived(snap);
@@ -370,41 +373,77 @@ async function handleCreatePost(getImageFiles, getMentions, getPoll) {
 
   const poll = getPoll ? getPoll() : null;
   const mentions = getMentions ? getMentions() : [];
-  const hashtags = extractHashtags(text);
+  const files = getImageFiles ? getImageFiles() : [];
+
+  // Already offline — don't even attempt the round trip (which would just
+  // fail the same way a moment later). Queue it now so it's waiting the
+  // instant the connection comes back; see the network-failure branch
+  // below for the mid-attempt version of this same path.
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    await queuePost({ text, images: files, mentions, poll, authorName: currentProfile.name });
+    closeModal();
+    showToast("You're offline — this post will send automatically once you're back online.");
+    return;
+  }
 
   setBtnLoading(btn, true, "Posting…");
   try {
-    const files = getImageFiles ? getImageFiles() : [];
     let images = [];
     if (files.length) {
       setBtnLoading(btn, true, "Uploading photos…");
       images = await uploadImages(files, { maxDim: 1600, quality: 0.78, folder: "geohub/posts" });
       setBtnLoading(btn, true, "Posting…");
     }
-    const postRef = await addDoc(collection(db, "posts"), {
-      authorUid: auth.currentUser.uid,
-      authorName: currentProfile.name,
-      authorEmail: auth.currentUser.email,
-      text,
-      images,
-      likes: [],
-      reactions: {},
-      pinned: false,
-      hashtags,
-      mentions,
-      poll,
-      createdAt: serverTimestamp()
-    });
+    // Validated + written server-side (api/create-post.js) — see that file
+    // for why: it re-derives hashtags from `text` itself, checks each image
+    // URL is really this app's own Cloudinary upload, and checks mentions
+    // against real profiles, none of which firestore.rules alone can do.
+    const { id: postId } = await callApi("create-post", { text, images, mentions, poll });
     closeModal();
     showToast("Posted to the Student Wall.");
-    logActivity({ type: "post", text, postId: postRef.id });
-    triggerPush({ type: "post", text, actorName: currentProfile.name, postId: postRef.id });
-    notifyMentions(mentions, text, postRef.id);
+    logActivity({ type: "post", text, postId });
+    triggerPush({ type: "post", text, actorName: currentProfile.name, postId });
+    notifyMentions(mentions, text, postId);
   } catch (err) {
+    // The upload/API call genuinely couldn't reach the network (dropped
+    // wifi mid-post, etc.) rather than reaching the server and getting a
+    // real answer back — queue the ORIGINAL files/text so nothing typed
+    // (or picked) is lost, instead of showing an error there's nothing the
+    // user can do about right now.
+    if (isNetworkError(err)) {
+      await queuePost({ text, images: files, mentions, poll, authorName: currentProfile.name });
+      closeModal();
+      showToast("Couldn't reach the network — this post is queued and will send automatically once you're back online.");
+      return;
+    }
     errorEl.textContent = "Couldn't publish your post: " + err.message;
     setBtnLoading(btn, false);
   }
 }
+
+/** Persist a post to the offline write queue (see js/write-queue.js). */
+function queuePost({ text, images, mentions, poll, authorName }) {
+  return enqueueWrite("create-post", { text, images, mentions, poll, authorName });
+}
+
+// Performs a previously-queued post the same way handleCreatePost does
+// (upload images, then the validated server call), once the connection is
+// back. Registered once at module load; run by write-queue.js's
+// syncPendingWrites(), which is itself triggered on the browser's 'online'
+// event and once at login (see initWriteQueueSync() in app.js).
+registerWriteHandler("create-post", async (payload) => {
+  let images = [];
+  if (payload.images && payload.images.length) {
+    images = await uploadImages(payload.images, { maxDim: 1600, quality: 0.78, folder: "geohub/posts" });
+  }
+  const { id: postId } = await callApi("create-post", {
+    text: payload.text, images, mentions: payload.mentions, poll: payload.poll
+  }, { skipClientCooldown: true });
+  showToast("A queued post just went out to the Student Wall.");
+  logActivity({ type: "post", text: payload.text, postId });
+  triggerPush({ type: "post", text: payload.text, actorName: payload.authorName, postId });
+  notifyMentions(payload.mentions, payload.text, postId);
+});
 
 /** Fires a "mentioned you" push + activity entry for everyone @mentioned, except the author themself. */
 function notifyMentions(mentions, text, postId) {

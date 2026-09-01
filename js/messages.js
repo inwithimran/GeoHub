@@ -21,10 +21,11 @@
 // ============================================================
 import { auth, db } from "./firebase-config.js";
 import {
-  collection, doc, query, where, orderBy, limitToLast, onSnapshot,
+  collection, doc, query, where, orderBy, limitToLast,
   addDoc, updateDoc, setDoc, getDoc, deleteDoc, serverTimestamp, increment,
   arrayUnion, arrayRemove
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import { onSnapshotWithRetry } from "./realtime-retry.js";
 import { currentProfile } from "./auth.js";
 import {
   escapeHtml, showToast, friendlyError, avatarInner, nameWithBadge,
@@ -392,7 +393,7 @@ function markClassChatRead() {
 function subscribeClassChatRead() {
   const myUid = auth.currentUser?.uid;
   if (!myUid || unsubscribeClassChatRead) return;
-  unsubscribeClassChatRead = onSnapshot(doc(db, "classChatReads", myUid), (snap) => {
+  unsubscribeClassChatRead = onSnapshotWithRetry(doc(db, "classChatReads", myUid), (snap) => {
     const lastReadAt = snap.data()?.lastReadAt;
     // markClassChatRead()'s setDoc(..., serverTimestamp()) fires this listener
     // TWICE for the same write: once immediately with the local/pending
@@ -414,7 +415,7 @@ function subscribeClassChat() {
   // full history loaded on every open, same pagination trade-off the
   // Wall/Directory already make elsewhere in this app.
   const q = query(collection(db, "classChat"), orderBy("createdAt", "asc"), limitToLast(150));
-  unsubscribeClassChat = onSnapshot(q, (snap) => {
+  unsubscribeClassChat = onSnapshotWithRetry(q, (snap) => {
     const wasNearBottom = classChatAtBottom || classChatList.dataset.everLoaded !== "1";
     const msgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     classChatMessages = msgs;
@@ -530,7 +531,7 @@ function subscribeConversations() {
   // side (same trade-off directory.js makes for the classmate list) keeps
   // this working with zero Firestore console setup.
   const q = query(collection(db, "conversations"), where("participants", "array-contains", myUid));
-  unsubscribeConversations = onSnapshot(q, (snap) => {
+  unsubscribeConversations = onSnapshotWithRetry(q, (snap) => {
     allConversations = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderConversationList();
     paintTotalUnreadBadges();
@@ -692,13 +693,13 @@ export async function openDmThread(uid, { fromPopstate = false, replace = false 
   currentDmConversationId = conversationId;
   markConversationRead(conversationId);
 
-  unsubscribeDmConversation = onSnapshot(doc(db, "conversations", conversationId), (snap) => {
+  unsubscribeDmConversation = onSnapshotWithRetry(doc(db, "conversations", conversationId), (snap) => {
     if (conversationId !== currentDmConversationId) return;
     paintDmBlockState(uid, snap.data()?.blockedBy || []);
   });
 
   const q = query(collection(db, "conversations", conversationId, "messages"), orderBy("createdAt", "asc"));
-  unsubscribeDmMessages = onSnapshot(q, (snap) => {
+  unsubscribeDmMessages = onSnapshotWithRetry(q, (snap) => {
     if (conversationId !== currentDmConversationId) return;
     const wasNearBottom = dmThreadAtBottom || dmThreadListEl.dataset.everLoaded !== "1";
     const msgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));

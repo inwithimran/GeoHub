@@ -18,8 +18,9 @@
 // open — a client-side timer can't do that.
 // ============================================================
 import { db, auth, ADMIN_EMAILS } from "./firebase-config.js";
+import { onSnapshotWithRetry } from "./realtime-retry.js";
 import {
-  collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, Timestamp, serverTimestamp
+  collection, addDoc, updateDoc, deleteDoc, doc, query, orderBy, Timestamp, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import {
   escapeHtml, timeAgo, showToast, setBtnLoading, openModal, closeModal,
@@ -54,7 +55,7 @@ export function initDeadlines() {
 
   if (unsubscribeDeadlines) return; // already subscribed
   const q = query(collection(db, "deadlines"), orderBy("dueAt", "asc"));
-  unsubscribeDeadlines = onSnapshot(q, (snap) => {
+  unsubscribeDeadlines = onSnapshotWithRetry(q, (snap) => {
     allDeadlines = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     deadlinesLoaded = true;
     renderDeadlines();

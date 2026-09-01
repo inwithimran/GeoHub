@@ -9,8 +9,9 @@
 // ============================================================
 import { db, auth, RESOURCE_CATEGORIES } from "./firebase-config.js";
 import {
-  collection, addDoc, updateDoc, deleteDoc, doc, setDoc, onSnapshot, query, where, orderBy, limit, getDocs, serverTimestamp, increment
+  collection, addDoc, updateDoc, deleteDoc, doc, setDoc, query, where, orderBy, limit, getDocs, serverTimestamp, increment
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import { onSnapshotWithRetry } from "./realtime-retry.js";
 import { currentProfile } from "./auth.js";
 import {
   showToast, escapeHtml, openModal, closeModal, timeAgo, setBtnLoading,
@@ -88,7 +89,7 @@ function subscribeBookmarks() {
   const uid = auth.currentUser?.uid;
   if (!uid) return;
   const q = query(collection(db, "users", uid, "bookmarks"), orderBy("savedAt", "desc"));
-  unsubscribeBookmarks = onSnapshot(q, (snap) => {
+  unsubscribeBookmarks = onSnapshotWithRetry(q, (snap) => {
     savedResources = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     savedResourceIds = new Set(savedResources.map(r => r.id));
     renderResources();
@@ -137,7 +138,7 @@ function bookmarkBtnHtml(resId, saved) {
 function subscribeResources() {
   if (unsubscribeResources) unsubscribeResources();
   const q = query(collection(db, "resources"), orderBy("createdAt", "desc"), limit(resourcePageLimit));
-  unsubscribeResources = onSnapshot(q, (snap) => {
+  unsubscribeResources = onSnapshotWithRetry(q, (snap) => {
     lastLoadedCount = snap.size;
     allResources = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderResources();

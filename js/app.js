@@ -13,6 +13,7 @@ import {
   sendPasswordResetEmail
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import { initWall, teardownWall } from "./wall.js";
+import { initWriteQueueSync } from "./write-queue.js";
 import { initResources, teardownResources, loadUserResources } from "./resources.js";
 import { initDirectory, teardownDirectory } from "./directory.js";
 import { initRoutine, teardownRoutine, registerNotificationsRouter } from "./routine.js";
@@ -1191,6 +1192,10 @@ watchAuthState(
       initGlobalSearch();
       initPresence();
       initMessages();
+      // After auth is established (a queued write's handler needs a signed-in
+      // user to get an ID token) — drains anything left queued from before a
+      // reload, then keeps draining automatically on every 'online' event.
+      initWriteQueueSync();
       featuresInitialized = true;
     }
     // Land on whatever section/entity the hash URL points to, not always
