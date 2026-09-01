@@ -726,19 +726,27 @@
     box-shadow:0 0 0 2px color-mix(in srgb, var(--color-forest-500) 22%, transparent);
   }
   /* Offline: hidden (opacity:0 above) for every plain badge — no elapsed-
-     time pill. That avoids duplicating text already shown elsewhere (a DM
-     thread's own "Active 5m ago" line, an inbox row's own message
+     time indicator. That avoids duplicating text already shown elsewhere
+     (a DM thread's own "Active 5m ago" line, an inbox row's own message
      timestamp) and keeps small avatars (comments, post authors) from
-     getting a chunk of the photo covered by a text badge. Only badges
-     opted into `.avatar-presence-badge-timed` (Directory rows, the DM
-     inbox list, and the Profile page's big photo — see the respective
-     .js files) show this pill. Height is even (14px) so border-radius
-     can be exactly half (7px) for a true stadium shape at any width,
-     rather than an approximated value that can round oddly per browser. */
+     getting a chunk of the photo covered. Only badges opted into
+     `.avatar-presence-badge-timed` (Directory rows, the DM inbox list,
+     and the Profile page's big photo — see the respective .js files)
+     show this indicator once offline — as a short "5m"/"59m"/"23h" label.
+     Deliberately a FIXED-diameter circle (width === height, no
+     `width:auto`/pill), not a growing pill sized to the text — a pill's
+     border-radius has to be recalculated against its height to keep the
+     ends true semicircles, and any mismatch (or a browser rounding a
+     fractional value differently) reads as an oval. A plain circle sized
+     to comfortably fit the longest real label ("59m", 3 characters) has
+     no such failure mode: it's `border-radius: 9999px` (inherited from
+     `.avatar-presence-badge` above, rounded-full) on a square box, which
+     is unconditionally a perfect circle regardless of content or
+     browser. */
   .avatar-presence-badge-timed.has-label {
-    opacity:1; transform:scale(1); width:auto; min-width:20px; height:14px; padding:0 4px; box-sizing:border-box;
-    border-radius:7px; background: color-mix(in srgb, var(--color-ink-faint) 85%, black 12%);
-    font-size:.56rem; right:0; bottom:0;
+    opacity:1; transform:scale(1); width:22px; height:22px; box-sizing:border-box;
+    background: color-mix(in srgb, var(--color-ink-faint) 85%, black 12%);
+    font-size:.5rem; letter-spacing:-.2px; right:0; bottom:0;
   }
   .avatar-presence-wrap:has(.avatar-sm) .avatar-presence-badge { width:10px; height:10px; border-width:2px; }
   .section-heading { @apply text-xs font-extrabold uppercase tracking-wider pl-0.5; color: var(--color-ink-faint); margin:4px 0 -4px; }
@@ -1587,23 +1595,21 @@
   .profile-flow-avatar-wrap { @apply relative mx-auto; width:96px; height:96px; margin-bottom:18px; }
   /* The big profile-photo header is its own presence host (see
      profile-view.js) — the only spot that opts into the elapsed-time
-     pill (.avatar-presence-badge-timed), sized up a notch to read
+     badge (.avatar-presence-badge-timed), sized up a notch to read
      clearly against a 96px photo. Explicit z-[2] here (above
      .profile-flow-avatar's z-[1] below) — without it the badge has
      z-index:auto and the avatar's own positive z-index paints on top of
      it, hiding the dot behind the photo entirely.
      Same `right:0; bottom:0` + border-box + whole-pixel-only approach as
-     the generic badge above, and for the same reason: fractional values
-     here (the old 3px/1px offsets, 9.5px radius) rounded to the nearest
-     device pixel differently per browser, which is what made the badge
-     look shifted in some browsers and not others. Height is even (20px)
-     so border-radius can be exactly half (10px) — a true stadium shape
-     at any text width, not an approximation. */
+     the generic badge above, and the offline label below is a FIXED
+     32x32 circle (not a growing pill) for the same reason described
+     there — a circle can't render as an oval no matter what text it
+     holds or which browser draws it. */
   .profile-flow-avatar-wrap .avatar-presence-badge {
     @apply z-[2]; right:0; bottom:0; width:16px; height:16px; border-width:3px; box-sizing:border-box;
   }
   .profile-flow-avatar-wrap .avatar-presence-badge-timed.has-label {
-    width:auto; height:20px; min-width:30px; padding:0 7px; border-radius:10px; font-size:.72rem; box-sizing:border-box;
+    width:32px; height:32px; font-size:.66rem; letter-spacing:-.2px; box-sizing:border-box;
     right:0; bottom:0;
   }
   .profile-flow-avatar {
