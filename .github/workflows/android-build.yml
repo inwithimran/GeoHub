@@ -37,6 +37,12 @@ jobs:
             npx cap add android
           fi
 
+      - name: Generate icons and splash screens
+        run: npx capacitor-assets generate --android
+
+      - name: Add google-services.json
+        run: echo "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" | base64 -d > android/app/google-services.json
+
       - name: Decode keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
