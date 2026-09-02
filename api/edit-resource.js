@@ -26,8 +26,6 @@ export default async function handler(req, res) {
     const title = requiredText(body.title, "Title", TITLE_LIMIT);
     const category = enumOrEmpty(body.category, "Category", RESOURCE_CATEGORIES);
 
-    // sourceType is fixed at creation time and never accepted from the
-    // client on edit — the link must still match whichever type it was.
     const sourceType = resSnap.get("sourceType");
     let link;
     if (sourceType === "upload") {

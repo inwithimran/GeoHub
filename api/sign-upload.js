@@ -4,8 +4,6 @@ import { getFirestore } from "firebase-admin/firestore";
 
 const CLOUD_NAME = "s9htrtz2";
 const UPLOAD_PRESET = "GeoHub";
-// Every folder the app is allowed to upload into. Keep this in sync with
-// isOwnCloudinaryUrl()'s callers in validators.js / update-profile.js.
 const ALLOWED_FOLDERS = new Set(["geohub/avatars", "geohub/posts", "geohub/resources"]);
 
 function signParams(params, apiSecret) {

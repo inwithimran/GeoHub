@@ -1,6 +1,7 @@
 import { initializeApp, cert, getApps } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
+import { isDisposableEmailAsync } from "./_lib/disposable-domains.js";
 
 function getAdminApp() {
   if (getApps().length) return getApps()[0];
@@ -45,6 +46,14 @@ export default async function handler(req, res) {
 
     if (!isGoogleUser) {
       return res.status(409).json({ error: "No profile record found for this account." });
+    }
+
+    if (await isDisposableEmailAsync(email, db)) {
+      try { await getAuth(app).deleteUser(uid); } catch { }
+      return res.status(200).json({
+        status: "blocked",
+        message: "Temporary or disposable email addresses aren't allowed on GeoHub. Please use a permanent email address."
+      });
     }
 
     const dupSnap = await db.collection("users").where("email", "==", email).limit(5).get();

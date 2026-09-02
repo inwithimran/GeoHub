@@ -1,6 +1,7 @@
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getAdminApp, verifyCaller, requirePost, sendError, ApiError } from "./_lib/adminApp.js";
 import { requiredText, enumOrEmpty } from "./_lib/validators.js";
+import { isDisposableEmailAsync } from "./_lib/disposable-domains.js";
 
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const GENDERS = ["male", "female", "other"];
@@ -36,6 +37,7 @@ export default async function handler(req, res) {
 
     const email = decoded.email || "";
     if (!email) throw new ApiError(400, "No verified email on this account.");
+    if (await isDisposableEmailAsync(email, db)) throw new ApiError(403, "Temporary or disposable email addresses aren't allowed. Please sign up with a permanent email address.");
 
     const mirror = visibleContactMirror({ phone, email });
 

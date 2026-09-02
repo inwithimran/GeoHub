@@ -43,7 +43,8 @@ export default async function handler(req, res) {
       replyTo = { id: topLevelId, authorUid: parentData.authorUid, authorName: parentData.authorName || "" };
     }
 
-    const commentRef = await db.collection("posts").doc(postId).collection("comments").add({
+    const postRef = db.collection("posts").doc(postId);
+    const commentRef = await postRef.collection("comments").add({
       authorUid: uid,
       authorName: author.name || "",
       authorEmail: author.email || decoded.email || "",
@@ -52,6 +53,13 @@ export default async function handler(req, res) {
       ...(replyTo ? { replyTo } : {}),
       createdAt: FieldValue.serverTimestamp()
     });
+
+    if (typeof postSnap.get("commentCount") === "number") {
+      await postRef.update({ commentCount: FieldValue.increment(1) });
+    } else {
+      const countSnap = await postRef.collection("comments").count().get();
+      await postRef.update({ commentCount: countSnap.data().count });
+    }
 
     return res.status(200).json({
       id: commentRef.id,
