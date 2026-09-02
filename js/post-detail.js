@@ -13,7 +13,7 @@ import {
 } from "./ui-utils.js";
 import {
   authorProfile, openEditPostModal, deletePost, wireMentions,
-  openReactionsModal, wireReactionControl, paintReactionButton, REACTION_EMOJIS, reactionGlyphHtml,
+  openReactionsModal, wireReactionControl, paintReactionButton, REACTION_EMOJIS, reactionGlyphHtml, reactionLabel,
   pollHtml, wirePoll, togglePinPost, setCommentCountCache, paintCommentCountBtn,
   updateStatsRowVisibility, commentCountLabel, wireCommentReactionControl
 } from "./wall.js";
@@ -322,8 +322,6 @@ function renderPostDetail(postId, post, comments, container, { focusComment, com
     const pendingHtml = pendingReplies.map(pendingCommentItemHtml).join("");
 
     if (!replies.length) {
-      // No loaded replies yet — just a reply being sent right now, if any. Show it inline,
-      // there's nothing to collapse behind "View reply" yet.
       return commentItemHtml(c, uid, isOwnPost)
         + (pendingHtml ? `<div class="comment-replies" data-replies-for="${c.id}">${pendingHtml}</div>` : "");
     }
@@ -383,7 +381,7 @@ function renderPostDetail(postId, post, comments, container, { focusComment, com
             <span>Like</span>
           </button>
           <div class="reaction-picker hidden">
-            ${REACTION_EMOJIS.map(e => `<button type="button" class="reaction-option ${e === "leaf" ? "reaction-option-leaf" : ""}" data-emoji="${e}">${reactionGlyphHtml(e)}</button>`).join("")}
+            ${REACTION_EMOJIS.map(e => `<button type="button" class="reaction-option ${e === "leaf" ? "reaction-option-leaf" : ""}" data-emoji="${e}" aria-label="${reactionLabel(e)}" title="${reactionLabel(e)}">${reactionGlyphHtml(e)}</button>`).join("")}
           </div>
         </div>
         <button type="button" class="post-action-btn comment-jump-btn">
@@ -566,10 +564,10 @@ function commentItemHtml(c, uid, isPostOwner, contextTag = "") {
         <div class="comment-foot">
           <div class="comment-reaction-control">
             <button type="button" class="comment-reaction-btn ${myReaction ? "liked" : ""}" data-id="${c.id}" aria-pressed="${!!myReaction}">
-              <span class="reaction-icon" aria-hidden="true">${myReaction ? reactionGlyphHtml(myReaction) : ""}</span><span>${myReaction ? "Reacted" : "Like"}</span>
+              <span class="reaction-icon" aria-hidden="true">${myReaction ? reactionGlyphHtml(myReaction) : ""}</span><span>${reactionLabel(myReaction)}</span>
             </button>
             <div class="reaction-picker hidden">
-              ${REACTION_EMOJIS.map(e => `<button type="button" class="reaction-option ${e === "leaf" ? "reaction-option-leaf" : ""}" data-emoji="${e}">${reactionGlyphHtml(e)}</button>`).join("")}
+              ${REACTION_EMOJIS.map(e => `<button type="button" class="reaction-option ${e === "leaf" ? "reaction-option-leaf" : ""}" data-emoji="${e}" aria-label="${reactionLabel(e)}" title="${reactionLabel(e)}">${reactionGlyphHtml(e)}</button>`).join("")}
             </div>
           </div>
           <button type="button" class="comment-reply-btn" data-id="${c.id}" data-name="${escapeHtml(c.authorName || "Classmate")}" data-author-uid="${c.authorUid || ""}">Reply</button>
@@ -604,10 +602,10 @@ function replyItemHtml(c, uid, isPostOwner, parentComment) {
         <div class="comment-foot">
           <div class="comment-reaction-control">
             <button type="button" class="comment-reaction-btn ${myReaction ? "liked" : ""}" data-id="${c.id}" aria-pressed="${!!myReaction}">
-              <span class="reaction-icon" aria-hidden="true">${myReaction ? reactionGlyphHtml(myReaction) : ""}</span><span>${myReaction ? "Reacted" : "Like"}</span>
+              <span class="reaction-icon" aria-hidden="true">${myReaction ? reactionGlyphHtml(myReaction) : ""}</span><span>${reactionLabel(myReaction)}</span>
             </button>
             <div class="reaction-picker hidden">
-              ${REACTION_EMOJIS.map(e => `<button type="button" class="reaction-option ${e === "leaf" ? "reaction-option-leaf" : ""}" data-emoji="${e}">${reactionGlyphHtml(e)}</button>`).join("")}
+              ${REACTION_EMOJIS.map(e => `<button type="button" class="reaction-option ${e === "leaf" ? "reaction-option-leaf" : ""}" data-emoji="${e}" aria-label="${reactionLabel(e)}" title="${reactionLabel(e)}">${reactionGlyphHtml(e)}</button>`).join("")}
             </div>
           </div>
           <button type="button" class="comment-reply-btn" data-id="${c.replyTo.id}" data-name="${escapeHtml(c.authorName || "Classmate")}" data-author-uid="${c.authorUid || ""}">Reply</button>
