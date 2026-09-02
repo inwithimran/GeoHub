@@ -1,6 +1,9 @@
 import { initializeApp, cert, getApps } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { Timestamp } from "firebase-admin/firestore";
+import { ApiError } from "./errors.js";
+
+export { ApiError };
 
 export function getAdminApp() {
   if (getApps().length) return getApps()[0];
@@ -11,13 +14,6 @@ export function getAdminApp() {
   return initializeApp({ credential: cert(serviceAccount) });
 }
 
-
-export class ApiError extends Error {
-  constructor(status, message) {
-    super(message);
-    this.status = status;
-  }
-}
 
 export async function verifyCaller(req) {
   const authHeader = req.headers.authorization || "";

@@ -1,4 +1,4 @@
-import { ApiError } from "./adminApp.js";
+import { ApiError } from "./errors.js";
 
 const CLOUDINARY_CLOUD = "s9htrtz2"; 
 export function requiredText(value, field, maxLen) {
