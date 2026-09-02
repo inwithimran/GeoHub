@@ -543,6 +543,7 @@ let unsubscribeDmMessages = null;
 let unsubscribeDmConversation = null;
 let dmThreadAtBottom = true;
 const dmMessageCache = new Map();
+const dmReadCache = new Map();
 export function getOpenDmUid() { return currentDmUid; }
 
 export function teardownDmThread() {
@@ -618,7 +619,8 @@ export async function openDmThread(uid, { fromPopstate = false, replace = false 
   if (!uid || !auth.currentUser || uid === auth.currentUser.uid) return;
   teardownDmThread();
   currentDmUid = uid;
-  dmOtherReadAtMs = 0;
+  const likelyConversationId = dmConversationId(auth.currentUser.uid, uid);
+  dmOtherReadAtMs = dmReadCache.get(likelyConversationId) || 0;
   dmOtherTypingUntilMs = 0;
 
   if (goToRouteRef) goToRouteRef("dm-thread", { fromPopstate, replace, state: { dmUid: uid } });
@@ -642,7 +644,6 @@ export async function openDmThread(uid, { fromPopstate = false, replace = false 
     return;
   }
 
-  const likelyConversationId = dmConversationId(auth.currentUser.uid, uid);
   const cachedMsgs = dmMessageCache.get(likelyConversationId);
   if (cachedMsgs) {
     dmThreadListEl.dataset.conversationId = likelyConversationId;
@@ -681,6 +682,7 @@ export async function openDmThread(uid, { fromPopstate = false, replace = false 
     const data = snap.data() || {};
     paintDmBlockState(uid, data.blockedBy || []);
     dmOtherReadAtMs = data.lastReadAt?.[uid]?.toMillis?.() || 0;
+    dmReadCache.set(conversationId, dmOtherReadAtMs);
     const otherTypingMs = data.typing?.[uid]?.toMillis?.() || 0;
     dmOtherTypingUntilMs = otherTypingMs ? otherTypingMs + DM_TYPING_STALE_MS : 0;
     paintDmTypingIndicator();

@@ -230,6 +230,12 @@ export function openPostDetailPage(postId, { fromPopstate = false, replace = fal
     if (postId !== currentPostId) return;
     comments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     commentsLoaded = true;
+    const myUid = auth.currentUser?.uid;
+    pendingComments = pendingComments.filter((p) => !comments.some((c) =>
+      c.authorUid === myUid &&
+      c.text === p.text &&
+      (c.replyTo ? c.replyTo.id : null) === (p.replyTo ? p.replyTo.id : null)
+    ));
     render();
   }, (err) => {
     const { message, technical } = friendlyError(err, "Couldn't load comments.");
