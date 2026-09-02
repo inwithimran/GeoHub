@@ -143,6 +143,10 @@ export function escapeHtml(str = "") {
   return div.innerHTML;
 }
 
+export function escapeAttr(str = "") {
+  return escapeHtml(str).replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
 export function initialsOf(name = "?") {
   return name.trim().split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() || "").join("") || "?";
 }
@@ -197,7 +201,7 @@ export function avatarInner(profile = {}) {
   const seed = profile.uid || profile.name || "?";
   const color = avatarColorFor(seed);
   if (profile.photoURL) {
-    return `<span class="avatar-fill" style="background:${color}"><img src="${escapeHtml(profile.photoURL)}" alt="" loading="lazy" /></span>`;
+    return `<span class="avatar-fill" style="background:${color}"><img src="${escapeAttr(profile.photoURL)}" alt="" loading="lazy" /></span>`;
   }
   return `<span class="avatar-fill" style="background:${color}">${genderIconSvg(profile.gender)}</span>`;
 }

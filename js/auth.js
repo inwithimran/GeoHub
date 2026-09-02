@@ -12,6 +12,7 @@ import {
   doc, getDoc
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { callApi } from "./api-client.js";
+import { isDisposableEmail } from "../shared/blocked-email-domains.js";
 
 export let currentProfile = null;
 
@@ -37,6 +38,11 @@ export function nameChangeStatus() {
 }
 
 export async function signUp(data) {
+  if (isDisposableEmail(data.email)) {
+    const err = new Error("Temporary or disposable email addresses aren't allowed. Please sign up with a permanent email address.");
+    err.code = "auth/disposable-email";
+    throw err;
+  }
   const cred = await createUserWithEmailAndPassword(auth, data.email, data.password);
   try {
     // Profile creation is validated and written server-side (Admin SDK) —
@@ -132,7 +138,7 @@ export function watchAuthState(onLogin, onLogout, onConflict) {
         return;
       }
 
-      if (result.status === "conflict") {
+      if (result.status === "conflict" || result.status === "blocked") {
         await signOut(auth);
         if (onConflict) onConflict(result.message);
         return;

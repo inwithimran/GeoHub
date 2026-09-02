@@ -1,4 +1,4 @@
-import { escapeHtml, showToast } from "./ui-utils.js";
+import { escapeHtml, escapeAttr, showToast } from "./ui-utils.js";
 
 const MAX_RAW_FILE_BYTES = 15 * 1024 * 1024;
 export function isAcceptableImageFile(file) {
@@ -44,7 +44,7 @@ export function wireImagePicker(root, inputId, { max = 6, existingImages = [] } 
       <button type="button" class="media-picker-add${full ? " is-disabled" : ""}" data-picker-trigger aria-label="Add photos" ${full ? "disabled" : ""}>${addTileIcon}</button>
       ${remaining.map((url, i) => `
         <div class="media-thumb">
-          <img src="${escapeHtml(url)}" alt="" />
+          <img src="${escapeAttr(url)}" alt="" />
           <button type="button" class="media-thumb-remove" data-remove-existing-idx="${i}" aria-label="Remove photo">${removeIcon}</button>
         </div>`).join("")}
       ${files.map((f, i) => `
@@ -87,8 +87,8 @@ export function postImagesHtml(images = []) {
   return `
     <div class="post-image-grid ${countClass}">
       ${images.slice(0, 4).map((url, i) => `
-        <button type="button" class="post-image-item" data-view-image="${escapeHtml(url)}" aria-label="View photo full size">
-          <img src="${escapeHtml(url)}" alt="" loading="lazy" />
+        <button type="button" class="post-image-item" data-view-image="${escapeAttr(url)}" aria-label="View photo full size">
+          <img src="${escapeAttr(url)}" alt="" loading="lazy" />
           ${i === 3 && images.length > 4 ? `<span class="post-image-more">+${images.length - 4}</span>` : ""}
         </button>`).join("")}
     </div>`;
@@ -128,7 +128,7 @@ export function openImageViewer(url) {
     <button type="button" class="image-viewer-close" aria-label="Close">
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
     </button>
-    <img src="${escapeHtml(url)}" alt="" />`;
+    <img src="${escapeAttr(url)}" alt="" />`;
   document.body.appendChild(overlay);
   const close = () => overlay.remove();
   overlay.addEventListener("click", (e) => { if (e.target === overlay || e.target.closest(".image-viewer-close")) close(); });

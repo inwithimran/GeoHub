@@ -4,7 +4,7 @@ import {
   collection, addDoc, updateDoc, deleteDoc, doc, query, orderBy, Timestamp, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import {
-  escapeHtml, timeAgo, showToast, setBtnLoading, openModal, closeModal,
+  escapeHtml, escapeAttr, timeAgo, showToast, setBtnLoading, openModal, closeModal,
   kebabMenuHtml, wireKebabMenus, confirmDialog, skeletonRowsHtml, friendlyError
 } from "./ui-utils.js";
 import { currentProfile } from "./auth.js";
@@ -229,7 +229,7 @@ function openEditDeadlineModal(id) {
     <h3>Edit Deadline</h3>
     <label class="field">
       <span>Title</span>
-      <input type="text" id="dl-edit-title" maxlength="${TITLE_LIMIT}" value="${escapeHtml(d.title)}" />
+      <input type="text" id="dl-edit-title" maxlength="${TITLE_LIMIT}" value="${escapeAttr(d.title)}" />
     </label>
     <label class="field">
       <span>Type</span>
@@ -237,7 +237,7 @@ function openEditDeadlineModal(id) {
     </label>
     <label class="field">
       <span>Course / Subject (optional)</span>
-      <input type="text" id="dl-edit-course" value="${escapeHtml(d.course || "")}" />
+      <input type="text" id="dl-edit-course" value="${escapeAttr(d.course || "")}" />
     </label>
     <label class="field">
       <span>Due date &amp; time</span>

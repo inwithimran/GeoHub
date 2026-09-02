@@ -46,6 +46,11 @@ const commentCountCache = new Map();
 
 export function setCommentCountCache(postId, count) {
   commentCountCache.set(postId, count);
+  document.querySelectorAll(`.stats-comment-count[data-id="${postId}"]`).forEach((btn) => {
+    paintCommentCountBtn(btn, count);
+    const root = btn.closest(".feed-post");
+    if (root) updateStatsRowVisibility(root);
+  });
 }
 
 async function fetchCommentCount(postId) {
@@ -146,17 +151,20 @@ export function authorProfile(uid, fallbackName) {
   return cached || { uid, name: fallbackName };
 }
 
-function refreshAuthorAvatars(uid) {
+function refreshAuthorDisplays(uid) {
   const profile = getCachedProfile(uid);
   if (!profile) return;
   document.querySelectorAll(`.avatar[data-author="${uid}"]`).forEach(el => {
     el.innerHTML = avatarInner(profile);
   });
+  document.querySelectorAll(`.post-author-name[data-author="${uid}"]`).forEach(el => {
+    el.innerHTML = nameWithBadge(profile.name, profile.email);
+  });
 }
 
 export function initWall(onSnapshotReceived) {
   composerTrigger.addEventListener("click", openComposerModal);
-  subscribeToProfileUpdates(refreshAuthorAvatars);
+  subscribeToProfileUpdates(refreshAuthorDisplays);
   subscribeWall(onSnapshotReceived);
 }
 
@@ -557,7 +565,7 @@ export function renderPost(postId, post, listEl, { onChanged } = {}) {
     b.addEventListener("click", () => openUserProfilePage(post.authorUid)));
   wireReactionControl(el, postId, post);
   likeCountBtn.addEventListener("click", () => openReactionsModal(reactionsOf(post)));
-  wireStatsCommentCount(el, postId);
+  wireStatsCommentCount(el, postId, typeof post.commentCount === "number" ? post.commentCount : undefined);
   updateStatsRowVisibility(el);
   el.querySelector(".comment-toggle-btn").addEventListener("click", async () => {
     const { openPostDetailPage } = await import("./post-detail.js");

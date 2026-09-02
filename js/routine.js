@@ -5,7 +5,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { onSnapshotWithRetry } from "./realtime-retry.js";
 import {
-  escapeHtml, timeAgo, fullDate, showToast, setBtnLoading, openModal, closeModal,
+  escapeHtml, escapeAttr, timeAgo, fullDate, showToast, setBtnLoading, openModal, closeModal,
   avatarInner, nameWithBadge, getCachedProfile, kebabMenuHtml, wireKebabMenus, confirmDialog,
   resetScrollForTabs, skeletonRowsHtml, wireCharCounter, ensureProfileLoaded, subscribeToProfileUpdates, friendlyError
 } from "./ui-utils.js";
@@ -23,6 +23,9 @@ subscribeToProfileUpdates((uid) => {
   if (!profile) return;
   document.querySelectorAll(`.avatar[data-author="${uid}"]`).forEach(el => {
     el.innerHTML = avatarInner(profile);
+  });
+  document.querySelectorAll(`.notice-row-name[data-author="${uid}"], .notice-detail-name[data-author="${uid}"]`).forEach(el => {
+    el.innerHTML = nameWithBadge(profile.name, profile.email);
   });
 });
 
@@ -420,7 +423,7 @@ function renderNoticesList() {
       <div class="notice-row-top">
         <span class="avatar avatar-sm notice-row-avatar" data-author="${n.postedByUid}">${avatarInner(posterProfile(n.postedByUid, n.postedByName, n.postedBy))}</span>
         <div class="notice-row-byline">
-          <span class="notice-row-name">${nameWithBadge(n.postedByName || "Admin", n.postedBy)}</span>
+          <span class="notice-row-name" data-author="${n.postedByUid}">${nameWithBadge(n.postedByName || "Admin", n.postedBy)}</span>
           <small>${timeAgo(n.createdAt)}</small>
         </div>
         ${n.urgent ? `<span class="urgent-tag"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M10.3 3.9 1.8 18.5a1.8 1.8 0 0 0 1.55 2.7h17.3a1.8 1.8 0 0 0 1.55-2.7L13.7 3.9a1.8 1.8 0 0 0-3.4 0z"/><circle cx="12" cy="16.3" r="1"/></svg>Urgent</span>` : ""}
@@ -468,7 +471,7 @@ function openNoticeDetail(noticeId) {
       <div class="notice-detail-head">
         <span class="avatar avatar-lg" data-author="${n.postedByUid}">${avatarInner(posterProfile(n.postedByUid, n.postedByName, n.postedBy))}</span>
         <div>
-          <div class="notice-detail-name">${nameWithBadge(n.postedByName || "Admin", n.postedBy)}</div>
+          <div class="notice-detail-name" data-author="${n.postedByUid}">${nameWithBadge(n.postedByName || "Admin", n.postedBy)}</div>
           <small>${fullDate(n.createdAt) || "Just now"}</small>
         </div>
       </div>
@@ -624,7 +627,7 @@ function renderActivityList() {
       <div class="notice-row-top">
         <span class="avatar avatar-sm" data-author="${a.actorUid}">${avatarInner(posterProfile(a.actorUid, a.actorName, a.actorEmail))}</span>
         <div class="notice-row-byline">
-          <span class="notice-row-name">${nameWithBadge(a.actorName || "Someone", a.actorEmail)}</span>
+          <span class="notice-row-name" data-author="${a.actorUid}">${nameWithBadge(a.actorName || "Someone", a.actorEmail)}</span>
           <small>${timeAgo(a.createdAt)}</small>
         </div>
         ${kebabMenuHtml(a.id, [{ action: "delete", label: "Delete Notification", danger: true }])}
@@ -739,9 +742,9 @@ function renderRoutineTable() {
 function slotRowHtml(s = {}) {
   return `
     <div class="routine-editor-slot-row">
-      <input type="text" class="routine-editor-input rt-time" placeholder="9:00–10:20" value="${escapeHtml(s.time || "")}" />
-      <input type="text" class="routine-editor-input rt-subject" placeholder="Subject" value="${escapeHtml(s.subject || "")}" />
-      <input type="text" class="routine-editor-input rt-room" placeholder="Room" value="${escapeHtml(s.room || "")}" />
+      <input type="text" class="routine-editor-input rt-time" placeholder="9:00–10:20" value="${escapeAttr(s.time || "")}" />
+      <input type="text" class="routine-editor-input rt-subject" placeholder="Subject" value="${escapeAttr(s.subject || "")}" />
+      <input type="text" class="routine-editor-input rt-room" placeholder="Room" value="${escapeAttr(s.room || "")}" />
       <button type="button" class="routine-editor-remove-btn" data-remove-slot aria-label="Remove this class">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>

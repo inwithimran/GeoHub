@@ -18,7 +18,7 @@ import { initMessages, teardownMessages, registerDmThreadRouter, openDmThread, g
 import { openUserProfilePage, loadUserPosts, registerProfilePageRouter, getOpenProfileUid, teardownProfilePage } from "./profile-view.js";
 import { openPostDetailPage, registerPostDetailRouter, teardownPostDetail, getOpenPostId } from "./post-detail.js";
 import {
-  escapeHtml, openModal, closeModal, showToast, setBtnLoading, fullDate,
+  escapeHtml, escapeAttr, openModal, closeModal, showToast, setBtnLoading, fullDate,
   avatarInner, nameWithBadge, isAdminEmail, adminBadgeHtml, friendlyError
 } from "./ui-utils.js";
 import { uploadImage } from "./cloudinary.js";
@@ -442,7 +442,7 @@ function renderProfile() {
     ["Present Address", escapeHtml(p.address || "Not set")],
     ["Phone", `${escapeHtml(p.phone || "Not set")}${p.hidePhone ? ' <span class="hidden-field-tag">Hidden</span>' : ""}`],
     ["Email", `${escapeHtml(p.email)}${p.hideEmail ? ' <span class="hidden-field-tag">Hidden</span>' : ""}`],
-    ["Social / Facebook", p.socialLink ? `<a href="${escapeHtml(p.socialLink)}" target="_blank" rel="noopener">${escapeHtml(p.socialLink)}</a>` : "Not set"],
+    ["Social / Facebook", p.socialLink ? `<a href="${escapeAttr(p.socialLink)}" target="_blank" rel="noopener">${escapeHtml(p.socialLink)}</a>` : "Not set"],
     ["College", escapeHtml(COLLEGE_NAME)]
   ];
   if (joined) rows.push(["Joined GeoHub", joined]);
@@ -689,14 +689,14 @@ function openProfileDetailsModal(isFirstTime = false) {
 
     <label class="field">
       <span>Full Name</span>
-      <input type="text" id="pd-name" placeholder="Your full name" value="${escapeHtml(currentProfile.name || "")}" ${nameStatus.canChange ? "" : "disabled"} />
+      <input type="text" id="pd-name" placeholder="Your full name" value="${escapeAttr(currentProfile.name || "")}" ${nameStatus.canChange ? "" : "disabled"} />
       <small class="pd-name-hint">${nameStatus.canChange
         ? "You can change your name once every 7 days."
         : `You've already changed your name recently — you can change it again in ${nameStatus.daysRemaining} day${nameStatus.daysRemaining === 1 ? "" : "s"}.`}</small>
     </label>
     <label class="field">
       <span>Class Roll</span>
-      <input type="text" id="pd-roll" placeholder="e.g. 105" value="${escapeHtml(currentProfile.roll || "")}" />
+      <input type="text" id="pd-roll" placeholder="e.g. 105" value="${escapeAttr(currentProfile.roll || "")}" />
     </label>
     <label class="field">
       <span>Blood Group</span>
@@ -717,7 +717,7 @@ function openProfileDetailsModal(isFirstTime = false) {
     </label>
     <label class="field">
       <span>Phone Number</span>
-      <input type="tel" id="pd-phone" placeholder="e.g. 01XXXXXXXXX" value="${escapeHtml(currentProfile.phone || "")}" />
+      <input type="tel" id="pd-phone" placeholder="e.g. 01XXXXXXXXX" value="${escapeAttr(currentProfile.phone || "")}" />
     </label>
     <label class="field">
       <span>Year</span>
@@ -729,23 +729,23 @@ function openProfileDetailsModal(isFirstTime = false) {
     </label>
     <label class="field">
       <span>Session / Batch</span>
-      <input type="text" id="pd-session" placeholder="e.g. 2024–25" value="${escapeHtml(currentProfile.session || "")}" />
+      <input type="text" id="pd-session" placeholder="e.g. 2024–25" value="${escapeAttr(currentProfile.session || "")}" />
     </label>
     <label class="field">
       <span>Hometown</span>
-      <input type="text" id="pd-hometown" placeholder="e.g. Jessore" value="${escapeHtml(currentProfile.hometown || "")}" />
+      <input type="text" id="pd-hometown" placeholder="e.g. Jessore" value="${escapeAttr(currentProfile.hometown || "")}" />
     </label>
     <label class="field">
       <span>Present Address</span>
-      <input type="text" id="pd-address" placeholder="e.g. Hostel / Mess address" value="${escapeHtml(currentProfile.address || "")}" />
+      <input type="text" id="pd-address" placeholder="e.g. Hostel / Mess address" value="${escapeAttr(currentProfile.address || "")}" />
     </label>
     <label class="field">
       <span>Social / Facebook Link</span>
-      <input type="url" id="pd-social" placeholder="https://facebook.com/…" value="${escapeHtml(currentProfile.socialLink || "")}" />
+      <input type="url" id="pd-social" placeholder="https://facebook.com/…" value="${escapeAttr(currentProfile.socialLink || "")}" />
     </label>
     <label class="field">
       <span>About / Bio</span>
-      <input type="text" id="pd-bio" placeholder="A short line about yourself" value="${escapeHtml(currentProfile.bio || "")}" />
+      <input type="text" id="pd-bio" placeholder="A short line about yourself" value="${escapeAttr(currentProfile.bio || "")}" />
     </label>
 
     <div class="privacy-block">

@@ -1,12 +1,12 @@
 import { db, auth } from "./firebase-config.js";
 import { onSnapshotWithRetry } from "./realtime-retry.js";
 import {
-  doc, collection, query, orderBy, deleteDoc
+  doc, collection, query, orderBy
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { currentProfile } from "./auth.js";
 import { callApi } from "./api-client.js";
 import {
-  showToast, escapeHtml, timeAgo, openModal, closeModal, setBtnLoading,
+  showToast, escapeHtml, escapeAttr, timeAgo, openModal, closeModal, setBtnLoading,
   clampableRichHtml, richTextHtml, wireRichTextClicks, attachClampToggle, avatarInner, nameWithBadge,
   kebabMenuHtml, wireKebabMenus, confirmDialog, isAdminEmail, wireCharCounter,
   getCachedProfile, subscribeToProfileUpdates, friendlyError
@@ -39,6 +39,9 @@ const unsubscribeProfileUpdates = subscribeToProfileUpdates((uid) => {
   if (!profile || !bodyEl) return;
   bodyEl.querySelectorAll(`.avatar[data-author="${uid}"]`).forEach(el => {
     el.innerHTML = avatarInner(profile);
+  });
+  bodyEl.querySelectorAll(`.post-author-name[data-author="${uid}"], .comment-author[data-author="${uid}"]`).forEach(el => {
+    el.innerHTML = nameWithBadge(profile.name, profile.email);
   });
 });
 
@@ -330,7 +333,7 @@ function renderPostDetail(postId, post, comments, container, { focusComment, com
     const forceOpen = prevExpandedReplies.has(c.id) || pendingReplies.length > 0;
     const label = replies.length === 1 ? "View 1 reply" : `View ${replies.length} replies`;
     return commentItemHtml(c, uid, isOwnPost) + `
-      <button type="button" class="comment-replies-toggle ${forceOpen ? "is-expanded" : ""}" data-parent-id="${c.id}" data-label="${escapeHtml(label)}">
+      <button type="button" class="comment-replies-toggle ${forceOpen ? "is-expanded" : ""}" data-parent-id="${c.id}" data-label="${escapeAttr(label)}">
         <span class="comment-replies-toggle-line" aria-hidden="true"></span>
         <span class="comment-replies-toggle-label">${forceOpen ? "Hide replies" : escapeHtml(label)}</span>
       </button>
@@ -466,7 +469,14 @@ function renderPostDetail(postId, post, comments, container, { focusComment, com
       title: "Delete this comment?",
       text: "This comment will be removed from the thread. This can't be undone.",
       confirmLabel: "Delete",
-      onConfirm: () => deleteDoc(doc(db, "posts", postId, "comments", commentId))
+      onConfirm: async () => {
+        try {
+          await callApi("delete-comment", { postId, commentId });
+        } catch (err) {
+          const { message, technical } = friendlyError(err, "Couldn't delete that comment.");
+          showToast(message, { details: technical });
+        }
+      }
     })
   });
   wireReplyToggles(commentsEl);
@@ -570,7 +580,7 @@ function commentItemHtml(c, uid, isPostOwner, contextTag = "") {
               ${REACTION_EMOJIS.map(e => `<button type="button" class="reaction-option ${e === "leaf" ? "reaction-option-leaf" : ""}" data-emoji="${e}" aria-label="${reactionLabel(e)}" title="${reactionLabel(e)}">${reactionGlyphHtml(e)}</button>`).join("")}
             </div>
           </div>
-          <button type="button" class="comment-reply-btn" data-id="${c.id}" data-name="${escapeHtml(c.authorName || "Classmate")}" data-author-uid="${c.authorUid || ""}">Reply</button>
+          <button type="button" class="comment-reply-btn" data-id="${c.id}" data-name="${escapeAttr(c.authorName || "Classmate")}" data-author-uid="${c.authorUid || ""}">Reply</button>
           <small>${timeAgo(c.createdAt)}${c.editedAt ? " · edited" : ""}</small>
           <button type="button" class="comment-reaction-count comment-reaction-badge ${reactionCount ? "" : "hidden"}" data-id="${c.id}"></button>
         </div>
@@ -608,7 +618,7 @@ function replyItemHtml(c, uid, isPostOwner, parentComment) {
               ${REACTION_EMOJIS.map(e => `<button type="button" class="reaction-option ${e === "leaf" ? "reaction-option-leaf" : ""}" data-emoji="${e}" aria-label="${reactionLabel(e)}" title="${reactionLabel(e)}">${reactionGlyphHtml(e)}</button>`).join("")}
             </div>
           </div>
-          <button type="button" class="comment-reply-btn" data-id="${c.replyTo.id}" data-name="${escapeHtml(c.authorName || "Classmate")}" data-author-uid="${c.authorUid || ""}">Reply</button>
+          <button type="button" class="comment-reply-btn" data-id="${c.replyTo.id}" data-name="${escapeAttr(c.authorName || "Classmate")}" data-author-uid="${c.authorUid || ""}">Reply</button>
           <small>${timeAgo(c.createdAt)}${c.editedAt ? " · edited" : ""}</small>
           <button type="button" class="comment-reaction-count comment-reaction-badge ${reactionCount ? "" : "hidden"}" data-id="${c.id}"></button>
         </div>

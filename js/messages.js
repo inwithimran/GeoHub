@@ -7,7 +7,7 @@ import {
 import { onSnapshotWithRetry } from "./realtime-retry.js";
 import { currentProfile, fetchProfile } from "./auth.js";
 import {
-  escapeHtml, showToast, friendlyError, avatarInner, nameWithBadge,
+  escapeHtml, escapeAttr, showToast, friendlyError, avatarInner, nameWithBadge,
   getCachedProfile, cacheUserProfile, ensureProfileLoaded, subscribeToProfileUpdates,
   richTextHtml, wireRichTextClicks, wireKebabMenus, confirmDialog,
   timeAgo
@@ -62,6 +62,22 @@ export async function getBlockState(otherUid) {
   return { blockedByMe: blockedBy.includes(myUid), blockedByThem: blockedBy.includes(otherUid) };
 }
 
+function isConversationHiddenForMe(conv) {
+  const myUid = auth.currentUser?.uid;
+  const deletedAt = conv.deletedFor?.[myUid];
+  if (!deletedAt?.toMillis) return false;
+  const lastMs = conv.lastMessageAt?.toMillis ? conv.lastMessageAt.toMillis() : 0;
+  return deletedAt.toMillis() >= lastMs;
+}
+
+function deleteConversationForMe(conversationId) {
+  const myUid = auth.currentUser?.uid;
+  if (!myUid || !conversationId) return Promise.reject(new Error("no-conversation"));
+  return updateDoc(doc(db, "conversations", conversationId), {
+    [`deletedFor.${myUid}`]: serverTimestamp()
+  });
+}
+
 export async function setDmBlocked(otherUid, blocked) {
   const myUid = auth.currentUser?.uid;
   if (!myUid || !otherUid) return;
@@ -106,6 +122,24 @@ function isNearBottom(el, slack = 80) {
   return el.scrollHeight - el.scrollTop - el.clientHeight < slack;
 }
 
+function receiptIconHtml(seen, isLast) {
+  const label = seen ? "Seen" : "Sent";
+  const cls = `chat-receipt${seen ? " seen" : ""}${isLast ? " is-last" : ""}`;
+  if (seen) {
+    return `<span class="${cls}" title="${label}" aria-label="${label}">
+      <svg viewBox="0 0 20 12" width="15" height="9" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M1 6.4L4.6 10L11 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M6.4 6.4L10 10L19 1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </span>`;
+  }
+  return `<span class="${cls}" title="${label}" aria-label="${label}">
+    <svg viewBox="0 0 14 12" width="11" height="9" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M1 6.4L4.6 10L13 1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </span>`;
+}
+
 function renderChatBubbles(listEl, docs, { emptyText, showNames = true, seenUpToMs = null }) {
   if (!docs.length) {
     listEl.innerHTML = `<div class="chat-empty">${escapeHtml(emptyText)}</div>`;
@@ -134,15 +168,17 @@ function renderChatBubbles(listEl, docs, { emptyText, showNames = true, seenUpTo
     const profile = authorProfile(uid, m.authorName);
     const timeLabel = new Date(ms).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
     const canDelete = mine; 
-    const showSeen = idx === docs.length - 1 && mine && seenUpToMs != null && ms <= seenUpToMs;
+    const showReceipt = mine && seenUpToMs != null;
+    const isLastMine = mine && idx === docs.length - 1;
+    const seen = showReceipt && ms <= seenUpToMs;
     messageTextCache.set(m.id, m.text || "");
     html += `
-      <div class="chat-bubble-row ${mine ? "mine" : ""}" data-msg-id="${escapeHtml(m.id)}" data-can-delete="${canDelete ? "1" : "0"}">
-        ${grouped ? `<span style="width:26px" aria-hidden="true"></span>` : `<span class="avatar" data-author="${escapeHtml(uid || "")}">${avatarInner(profile)}</span>`}
+      <div class="chat-bubble-row ${mine ? "mine" : ""}" data-msg-id="${escapeAttr(m.id)}" data-can-delete="${canDelete ? "1" : "0"}">
+        ${grouped ? `<span style="width:26px" aria-hidden="true"></span>` : `<span class="avatar" data-author="${escapeAttr(uid || "")}">${avatarInner(profile)}</span>`}
         <div class="chat-bubble-group">
           ${!mine && !grouped && showNames ? `<span class="chat-bubble-name">${nameWithBadge(profile.name || "Classmate", profile.email)}</span>` : ""}
           <div class="chat-bubble">${richTextHtml(m.text || "", [])}</div>
-          <div class="chat-bubble-meta"><span>${timeLabel}</span>${showSeen ? `<span class="chat-seen-label">Seen</span>` : ""}</div>
+          <div class="chat-bubble-meta"><span>${timeLabel}</span>${showReceipt ? receiptIconHtml(seen, isLastMine) : ""}</div>
         </div>
       </div>`;
   });
@@ -395,7 +431,7 @@ function renderConversationList() {
       ? `${mineLast ? "You: " : ""}${c.lastMessageText}`
       : "Say hello 👋";
     return `
-      <button type="button" class="dm-conv-row" data-uid="${escapeHtml(uid)}">
+      <button type="button" class="dm-conv-row" data-uid="${escapeAttr(uid)}">
         <span class="avatar-presence-wrap">
           <span class="avatar" data-author="${escapeHtml(uid)}">${avatarInner(profile)}</span>
           ${avatarPresenceDotHtml(uid, { label: true })}
@@ -423,7 +459,7 @@ function subscribeConversations() {
   if (!myUid) return;
   const q = query(collection(db, "conversations"), where("participants", "array-contains", myUid));
   unsubscribeConversations = onSnapshotWithRetry(q, (snap) => {
-    allConversations = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    allConversations = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(c => !isConversationHiddenForMe(c));
     renderConversationList();
     paintTotalUnreadBadges();
   }, (err) => {
@@ -749,6 +785,19 @@ export function initMessages() {
         text: `${name} won't be able to send you messages until you unblock them.`,
         confirmLabel: "Block",
         onConfirm: () => setDmBlocked(otherUid, true)
+      });
+    },
+    "delete-conversation": () => {
+      const conversationId = currentDmConversationId;
+      if (!conversationId) return;
+      const name = getCachedProfile(currentDmUid)?.name || "this classmate";
+      confirmDialog({
+        title: "Delete this conversation?",
+        text: `This will remove your conversation with ${name} from your chat list. ${name} will still be able to see it on their side.`,
+        confirmLabel: "Delete",
+        onConfirm: () => deleteConversationForMe(conversationId).then(() => {
+          if (goToRouteRef) goToRouteRef("message", { replace: true });
+        })
       });
     }
   });

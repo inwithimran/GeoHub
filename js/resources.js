@@ -5,7 +5,7 @@ import {
 import { onSnapshotWithRetry } from "./realtime-retry.js";
 import { currentProfile } from "./auth.js";
 import {
-  showToast, escapeHtml, openModal, closeModal, timeAgo, setBtnLoading,
+  showToast, escapeHtml, escapeAttr, openModal, closeModal, timeAgo, setBtnLoading,
   kebabMenuHtml, wireKebabMenus, confirmDialog, friendlyError
 } from "./ui-utils.js";
 import { logActivity, deleteActivityForResource } from "./routine.js";
@@ -196,7 +196,7 @@ function renderResourceRows(resources, listEl, emptyMessage, { savedView = false
         <div class="res-meta">${metaLine}${openCount > 0 ? ` · <span class="res-open-count" title="${openCount} ${openCountLabel}${openCount === 1 ? "" : "s"}">${openCount} ${openCountLabel}${openCount === 1 ? "" : "s"}</span>` : ""}</div>
       </div>
       ${bookmarkBtnHtml(r.id, saved)}
-      <a class="res-link" href="${escapeHtml(r.link)}" target="_blank" rel="noopener" data-res-open-id="${r.id}">
+      <a class="res-link" href="${escapeAttr(r.link)}" target="_blank" rel="noopener" data-res-open-id="${r.id}">
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3h7v7"/><path d="M10 14 21 3"/><path d="M19 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h6"/></svg>
         <span>${r.sourceType === "upload" ? "Download" : "Open"}</span>
       </a>
@@ -378,7 +378,7 @@ function openEditResourceModal(resId) {
     <h3>Edit Note / Sheet</h3>
     <label class="field">
       <span>Title</span>
-      <input type="text" id="res-edit-title" value="${escapeHtml(r.title)}" />
+      <input type="text" id="res-edit-title" value="${escapeAttr(r.title)}" />
     </label>
     <label class="field">
       <span>Category</span>
@@ -386,7 +386,7 @@ function openEditResourceModal(resId) {
     </label>
     <label class="field">
       <span>Link (Google Drive / OneDrive / etc.)</span>
-      <input type="url" id="res-edit-link" value="${escapeHtml(r.link)}" />
+      <input type="url" id="res-edit-link" value="${escapeAttr(r.link)}" />
     </label>
     <button type="button" class="btn-primary full" id="res-edit-save-btn">Save Changes</button>
   `);
