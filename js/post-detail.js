@@ -485,6 +485,13 @@ function renderPostDetail(postId, post, comments, container, { focusComment, com
     if (replyChipNameEl) replyChipNameEl.textContent = name || "";
   };
   replyChip.querySelector(".reply-target-cancel").addEventListener("click", () => setReplyTarget(null, null));
+  input.addEventListener("input", () => {
+    if (replyChip.classList.contains("hidden")) return;
+    const mentionName = replyChip.dataset.name;
+    if (mentionName && !input.value.includes(`@${mentionName}`)) {
+      setReplyTarget(null, null);
+    }
+  });
   commentsEl.querySelectorAll(".comment-reply-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       setReplyTarget(btn.dataset.id, btn.dataset.name);
