@@ -26,8 +26,18 @@ export function isOwnCloudinaryUrl(url, folder) {
   let u;
   try { u = new URL(url); } catch { return false; }
   if (u.protocol !== "https:" || u.hostname !== "res.cloudinary.com") return false;
-  if (!u.pathname.startsWith(`/${CLOUDINARY_CLOUD}/image/upload/`)) return false;
+  if (!u.pathname.startsWith(`/${CLOUDINARY_CLOUD}/image/upload/`) && !u.pathname.startsWith(`/${CLOUDINARY_CLOUD}/raw/upload/`)) return false;
   return u.pathname.includes(`/${folder}/`);
+}
+
+export function requiredUrl(value, field, maxLen = 500) {
+  const s = requiredText(value, field, maxLen);
+  let u;
+  try { u = new URL(s); } catch { throw new ApiError(400, `${field} isn't a valid URL.`); }
+  if (u.protocol !== "https:" && u.protocol !== "http:") {
+    throw new ApiError(400, `${field} must start with http:// or https://.`);
+  }
+  return s;
 }
 
 export function validateImages(raw, folder, max = 6) {
