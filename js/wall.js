@@ -8,17 +8,17 @@ import {
   showToast, escapeHtml, timeAgo, openModal, closeModal,
   setBtnLoading, cacheUserProfile, getCachedProfile, clampableRichHtml, attachClampToggle,
   avatarInner, nameWithBadge, kebabMenuHtml, wireKebabMenus, confirmDialog, isAdminEmail,
-  extractHashtags, wireRichTextClicks, wireMentionAutocomplete, skeletonRowsHtml, wireCharCounter,
+  wireRichTextClicks, wireMentionAutocomplete, skeletonRowsHtml, wireCharCounter,
   ensureProfileLoaded, subscribeToProfileUpdates, friendlyError
 } from "./ui-utils.js";
 import { openUserProfilePage } from "./profile-view.js";
 import { avatarPresenceDotHtml } from "./presence.js";
 import { uploadImages } from "./cloudinary.js";
+import { callApi } from "./api-client.js";
 import { logActivity, deleteActivityForPost } from "./routine.js";
 import { triggerPush } from "./push-trigger.js";
 import { imagePickerHtml, wireImagePicker, postImagesHtml, applyPostImageRatios } from "./media-picker.js";
 import { getAllStudents } from "./directory.js";
-import { callApi } from "./api-client.js";
 import { onSnapshotWithRetry } from "./realtime-retry.js";
 import { enqueueWrite, registerWriteHandler, isNetworkError } from "./write-queue.js";
 
@@ -440,8 +440,7 @@ export function openEditPostModal(postId, currentText, onSaved, currentImages = 
       }
       const images = [...getRemainingUrls(), ...uploaded];
       const mentions = getMentions();
-      const hashtags = extractHashtags(text);
-      await updateDoc(doc(db, "posts", postId), { text, images, mentions, hashtags, editedAt: serverTimestamp() });
+      await callApi("edit-post", { postId, text, images, mentions });
       closeModal();
       showToast("Post updated.");
       onSaved?.();

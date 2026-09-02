@@ -1,6 +1,11 @@
-const CLOUD_NAME = "s9htrtz2";
-const UPLOAD_PRESET = "GeoHub";
-const UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;
+import { callApi } from "./api-client.js";
+
+async function getSignature(folder) {
+  // Every upload requires a fresh, short-lived, server-issued signature —
+  // tied to a signed-in user and a whitelisted folder — so the Cloudinary
+  // preset can no longer be used anonymously from outside the app.
+  return callApi("sign-upload", { folder }, { skipClientCooldown: true });
+}
 
 export function compressImage(file, { maxDim = 1600, quality = 0.8 } = {}) {
   return new Promise((resolve) => {
@@ -41,14 +46,17 @@ export function compressImage(file, { maxDim = 1600, quality = 0.8 } = {}) {
   });
 }
 
-export async function uploadImage(file, { maxDim = 1600, quality = 0.8, folder } = {}) {
-  const compressed = await compressImage(file, { maxDim, quality });
+async function uploadSigned(file, filename, sig, uploadUrl, extraFields = {}) {
   const form = new FormData();
-  form.append("file", compressed, file.name || "upload.jpg");
-  form.append("upload_preset", UPLOAD_PRESET);
-  if (folder) form.append("folder", folder);
+  form.append("file", file, filename);
+  form.append("api_key", sig.apiKey);
+  form.append("timestamp", sig.timestamp);
+  form.append("signature", sig.signature);
+  form.append("upload_preset", sig.uploadPreset);
+  form.append("folder", sig.folder);
+  for (const [k, v] of Object.entries(extraFields)) form.append(k, v);
 
-  const res = await fetch(UPLOAD_URL, { method: "POST", body: form });
+  const res = await fetch(uploadUrl, { method: "POST", body: form });
   if (!res.ok) {
     let msg = "Upload failed.";
     try { msg = (await res.json())?.error?.message || msg; } catch {}
@@ -58,26 +66,34 @@ export async function uploadImage(file, { maxDim = 1600, quality = 0.8, folder }
   return data.secure_url;
 }
 
-export async function uploadImages(files, opts = {}) {
-  return Promise.all(Array.from(files).map((f) => uploadImage(f, opts)));
+export async function uploadImage(file, { maxDim = 1600, quality = 0.8, folder } = {}) {
+  const [compressed, sig] = await Promise.all([
+    compressImage(file, { maxDim, quality }),
+    getSignature(folder)
+  ]);
+  const uploadUrl = `https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`;
+  return uploadSigned(compressed, file.name || "upload.jpg", sig, uploadUrl);
 }
 
-const RAW_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/raw/upload`;
+export async function uploadImages(files, opts = {}) {
+  // One signature covers the whole batch (Cloudinary signatures aren't
+  // per-file), so we avoid hammering the sign-upload rate limit when a post
+  // has several attached photos.
+  const { maxDim = 1600, quality = 0.8, folder } = opts;
+  const fileList = Array.from(files);
+  const sig = await getSignature(folder);
+  const uploadUrl = `https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`;
+  return Promise.all(fileList.map(async (f) => {
+    const compressed = await compressImage(f, { maxDim, quality });
+    return uploadSigned(compressed, f.name || "upload.jpg", sig, uploadUrl);
+  }));
+}
 
 export async function uploadRawFile(file, { folder } = {}) {
-  const form = new FormData();
-  form.append("file", file, file.name || "upload");
-  form.append("upload_preset", UPLOAD_PRESET);
-  form.append("use_filename", "true");
-  form.append("unique_filename", "true");
-  if (folder) form.append("folder", folder);
-
-  const res = await fetch(RAW_UPLOAD_URL, { method: "POST", body: form });
-  if (!res.ok) {
-    let msg = "Upload failed.";
-    try { msg = (await res.json())?.error?.message || msg; } catch {  }
-    throw new Error(msg);
-  }
-  const data = await res.json();
-  return data.secure_url;
+  const sig = await getSignature(folder);
+  const uploadUrl = `https://api.cloudinary.com/v1_1/${sig.cloudName}/raw/upload`;
+  return uploadSigned(file, file.name || "upload", sig, uploadUrl, {
+    use_filename: "true",
+    unique_filename: "true"
+  });
 }

@@ -1,4 +1,4 @@
-import { auth, db, ADMIN_EMAILS } from "./firebase-config.js";
+import { auth, db } from "./firebase-config.js";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -9,19 +9,9 @@ import {
   fetchSignInMethodsForEmail
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
-  doc, setDoc, getDoc, serverTimestamp
+  doc, getDoc
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { callApi } from "./api-client.js";
-
-function isAdminEmailLocal(email) {
-  return !!email && ADMIN_EMAILS.includes(email);
-}
-function visibleContactMirror({ phone, email, hidePhone, hideEmail }) {
-  return {
-    email: (isAdminEmailLocal(email) || !hideEmail) ? (email || "") : "",
-    phone: hidePhone ? "" : (phone || "")
-  };
-}
 
 export let currentProfile = null;
 
@@ -48,36 +38,26 @@ export function nameChangeStatus() {
 
 export async function signUp(data) {
   const cred = await createUserWithEmailAndPassword(auth, data.email, data.password);
-  const name = data.name.trim();
-  const roll = data.roll.trim();
-  const phone = data.phone.trim();
-  const email = data.email.trim();
-  const hidePhone = false;
-  const hideEmail = false;
-
-  const profile = {
-    uid: cred.user.uid,
-    name,
-    roll,
-    bloodGroup: data.blood,
-    gender: data.gender || "",
-    ...visibleContactMirror({ phone, email, hidePhone, hideEmail }),
-    photoURL: "",
-    bio: "",
-    session: "",
-    year: "",
-    hometown: "",
-    address: "",
-    socialLink: "",
-    hidePhone,
-    hideEmail,
-    nameChangedAt: null,
-    createdAt: serverTimestamp()
-  };
-  await setDoc(doc(db, "users", cred.user.uid), profile);
-  await setDoc(doc(db, "users", cred.user.uid, "private", "contact"), { phone, email });
-  currentProfile = { ...profile, phone, email };
-  return cred.user;
+  try {
+    // Profile creation is validated and written server-side (Admin SDK) —
+    // the client never writes the profile document directly. This ensures
+    // the same validation (name/roll length, blood group enum, phone regex)
+    // applies here as in updateProfileDetails().
+    const { profile } = await callApi("create-profile", {
+      name: data.name.trim(),
+      roll: data.roll.trim(),
+      phone: data.phone.trim(),
+      blood: data.blood,
+      gender: data.gender || ""
+    });
+    currentProfile = profile;
+    return cred.user;
+  } catch (err) {
+    // Don't leave behind an Auth account with no profile — clean up so the
+    // person can retry signup instead of getting stuck in a broken state.
+    try { await cred.user.delete(); } catch { /* best effort */ }
+    throw err;
+  }
 }
 
 export async function logIn(email, password) {
@@ -182,5 +162,9 @@ export function friendlyAuthError(err) {
     "auth/account-exists-with-different-credential": "That email is already registered with a password. Log in with your password instead.",
     "auth/google-only-account": "This email was registered with \"Continue with Google\" — it has no password set. Please use the Google button below to log in."
   };
-  return map[err.code] || "Something went wrong. Please try again.";
+  if (err.code && map[err.code]) return map[err.code];
+  // ApiError messages from our own server (e.g. /api/create-profile
+  // validation) are already user-friendly — show them as-is.
+  if (err.message) return err.message;
+  return "Something went wrong. Please try again.";
 }

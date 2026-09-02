@@ -43,16 +43,10 @@ export const VAPID_KEY = "BD9lAKJwaHRwTaSMqD6sYWs40rfsEhUW0rxuyZtOgBsWm4jhdAgMCS
 export const DEPARTMENT_NAME = "Geography & Environment";
 export const COLLEGE_NAME = "Govt. Michael Madhusudan College, Jessore";
 
-export const RESOURCE_CATEGORIES = [
-  "Physical Geography",
-  "Climatology",
-  "Human Geography",
-  "Cartography",
-  "General / Others"
-];
+// Re-exported from the single shared source of truth — see
+// /shared/resource-categories.js (also used by the serverless API routes).
+export { RESOURCE_CATEGORIES } from "../shared/resource-categories.js";
 
-export const ADMIN_EMAILS = [
-  "in.with.imran@gmail.com"
-];
-
-export const ADMIN_NAME = "Tabib Imran";
+// Re-exported from the single shared source of truth — see
+// /shared/admin-config.js (also used by the serverless API routes).
+export { ADMIN_EMAILS, ADMIN_NAME } from "../shared/admin-config.js";

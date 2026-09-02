@@ -1,7 +1,7 @@
 import { db, auth } from "./firebase-config.js";
 import { onSnapshotWithRetry } from "./realtime-retry.js";
 import {
-  doc, collection, query, orderBy, updateDoc, deleteDoc, serverTimestamp
+  doc, collection, query, orderBy, deleteDoc
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { currentProfile } from "./auth.js";
 import { callApi } from "./api-client.js";
@@ -736,7 +736,7 @@ function openEditCommentModal(postId, commentId, currentText, currentMentions = 
     if (!text) { errorEl.textContent = "Comment can't be empty."; return; }
     setBtnLoading(e.currentTarget, true, "Saving…");
     try {
-      await updateDoc(doc(db, "posts", postId, "comments", commentId), { text, mentions: getMentions(), editedAt: serverTimestamp() });
+      await callApi("edit-comment", { postId, commentId, text, mentions: getMentions() });
       closeModal(); 
     } catch (err) {
       errorEl.textContent = "Couldn't save changes: " + err.message;

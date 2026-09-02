@@ -1,6 +1,6 @@
 import { db, auth, RESOURCE_CATEGORIES } from "./firebase-config.js";
 import {
-  collection, addDoc, updateDoc, deleteDoc, doc, setDoc, query, where, orderBy, limit, getDocs, serverTimestamp, increment
+  collection, updateDoc, deleteDoc, doc, setDoc, query, where, orderBy, limit, getDocs, serverTimestamp, increment
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { onSnapshotWithRetry } from "./realtime-retry.js";
 import { currentProfile } from "./auth.js";
@@ -11,6 +11,7 @@ import {
 import { logActivity, deleteActivityForResource } from "./routine.js";
 import { triggerPush } from "./push-trigger.js";
 import { uploadImage, uploadRawFile } from "./cloudinary.js";
+import { callApi } from "./api-client.js";
 
 const MAX_RESOURCE_FILE_BYTES = 20 * 1024 * 1024;
 
@@ -355,17 +356,13 @@ async function submitResource() {
 
   setBtnLoading(btn, true, "Publishing…");
   try {
-    const resRef = await addDoc(collection(db, "resources"), {
-      title, category, link, sourceType, fileExt, fileName,
-      contributorName: currentProfile.name,
-      contributorUid: auth.currentUser.uid,
-      openCount: 0,
-      createdAt: serverTimestamp()
+    const { id } = await callApi("create-resource", {
+      title, category, link, sourceType, fileExt, fileName
     });
     closeModal();
     showToast("Resource shared with the department 🎉");
-    logActivity({ type: "resource", text: title, resourceId: resRef.id });
-    triggerPush({ type: "resource", text: title, actorName: currentProfile.name, resourceId: resRef.id });
+    logActivity({ type: "resource", text: title, resourceId: id });
+    triggerPush({ type: "resource", text: title, actorName: currentProfile.name, resourceId: id });
   } catch (err) {
     const { message, technical } = friendlyError(err, "Couldn't share resource.");
     showToast(message, { details: technical });
@@ -400,7 +397,7 @@ function openEditResourceModal(resId) {
     if (!title || !link) return showToast("Please fill in the title and link.");
     setBtnLoading(e.currentTarget, true, "Saving…");
     try {
-      await updateDoc(doc(db, "resources", resId), { title, category, link });
+      await callApi("edit-resource", { resId, title, category, link });
       closeModal();
       showToast("Resource updated.");
     } catch (err) {
