@@ -118,6 +118,11 @@ service cloud.firestore {
           before.removeAll([request.auth.uid]).hasOnly(after.removeAll([request.auth.uid])) &&
           after.hasOnly(resource.data.participants);
       }
+      function deletedForChangeValid() {
+        let before = ("deletedFor" in resource.data) ? resource.data.deletedFor : {};
+        let after = ("deletedFor" in request.resource.data) ? request.resource.data.deletedFor : {};
+        return after.diff(before).affectedKeys().hasOnly([request.auth.uid]);
+      }
       allow read: if isSignedIn() &&
         (resource == null || request.auth.uid in resource.data.participants);
       allow create: if isSignedIn() &&
@@ -126,8 +131,9 @@ service cloud.firestore {
       allow update: if isSignedIn() &&
         request.auth.uid in resource.data.participants &&
         request.resource.data.participants == resource.data.participants &&
-        onlyChangedFields(["unread", "lastMessageText", "lastMessageAt", "lastSenderUid", "blockedBy", "lastReadAt", "typing"]) &&
-        blockedByChangeValid();
+        onlyChangedFields(["unread", "lastMessageText", "lastMessageAt", "lastSenderUid", "blockedBy", "lastReadAt", "typing", "deletedFor"]) &&
+        blockedByChangeValid() &&
+        deletedForChangeValid();
       allow delete: if false;
 
       match /messages/{messageId} {

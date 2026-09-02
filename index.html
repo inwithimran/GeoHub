@@ -384,8 +384,9 @@
   .app-shell.chat-mode { min-height:0; height:100dvh; overflow:hidden; }
   body:has(.app-shell.chat-mode) { overflow:hidden; }
   @media (max-width:899px) {
-    .app-shell.chat-mode { grid-template-rows:58px 1fr 0; }
+    .app-shell.chat-mode { grid-template-rows:0 1fr 0; }
     .app-shell.chat-mode .bottom-nav { display:none; }
+    .app-shell.chat-mode .topbar { display:none; }
   }
   .topbar {
     @apply sticky top-0 z-20 text-white flex items-center justify-between px-4 min-w-0;
@@ -589,8 +590,8 @@
   }
   @media (max-width:899px) {
     .msg-route { height:calc(100dvh - 58px - 68px); }
-    .app-shell.chat-mode .msg-route { height:calc(100dvh - 58px); }
-    .dm-thread-route { height:calc(100dvh - 58px); }
+    .app-shell.chat-mode .msg-route { height:100dvh; }
+    .dm-thread-route { height:100dvh; }
   }
 
   .msg-subtabs {
@@ -666,7 +667,9 @@
   .chat-bubble:active { transform:scale(.97); }
   .chat-bubble-meta { @apply flex items-center gap-1.5 px-1 text-[.65rem] font-semibold; color: var(--color-ink-faint); }
   .chat-bubble-row.mine .chat-bubble-meta { @apply flex-row-reverse; }
-  .chat-seen-label { color: var(--color-forest-600); }
+  .chat-receipt { @apply inline-flex items-center shrink-0; color: var(--color-ink-faint); transition: color .25s ease; }
+  .chat-receipt.seen { color: var(--color-forest-600); }
+  .chat-receipt svg { display:block; }
   .dm-typing-indicator { @apply flex items-center shrink-0; padding:0 14px 6px; }
   .dm-typing-indicator.hidden { @apply hidden; }
   .dm-typing-bubble {
@@ -2098,6 +2101,7 @@
             </button>
             <div class="kebab-dropdown hidden" id="dm-thread-more-dropdown">
               <button type="button" class="kebab-item danger" id="dm-thread-block-item" data-kebab-action="block">Block this classmate</button>
+              <button type="button" class="kebab-item danger" data-kebab-action="delete-conversation">Delete conversation</button>
             </div>
           </div>
         </div>
