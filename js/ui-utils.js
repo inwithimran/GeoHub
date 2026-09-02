@@ -375,17 +375,26 @@ export function wireMentionAutocomplete(fieldEl, getCandidates, onPick) {
   if (!fieldEl || fieldEl.dataset.mentionWired) return;
   fieldEl.dataset.mentionWired = "1";
 
-  const host = fieldEl.parentElement;
-  if (getComputedStyle(host).position === "static") host.style.position = "relative";
-
   const dropdown = document.createElement("div");
   dropdown.className = "mention-dropdown hidden";
-  host.appendChild(dropdown);
+  document.body.appendChild(dropdown);
 
   function reposition() {
-    dropdown.style.top = `${fieldEl.offsetTop + fieldEl.offsetHeight + 4}px`;
-    dropdown.style.left = `${fieldEl.offsetLeft}px`;
-    dropdown.style.width = `${fieldEl.offsetWidth}px`;
+    const rect = fieldEl.getBoundingClientRect();
+    const bottomClearance = 92;
+    const dropdownHeight = Math.min(dropdown.scrollHeight || 220, 220);
+    const spaceBelow = window.innerHeight - rect.bottom - bottomClearance;
+    const openUpward = spaceBelow < dropdownHeight && rect.top > dropdownHeight + 12;
+
+    dropdown.style.left = `${rect.left}px`;
+    dropdown.style.width = `${rect.width}px`;
+    if (openUpward) {
+      dropdown.style.top = "";
+      dropdown.style.bottom = `${window.innerHeight - rect.top + 4}px`;
+    } else {
+      dropdown.style.bottom = "";
+      dropdown.style.top = `${rect.bottom + 4}px`;
+    }
   }
 
   let activeIndex = -1;
@@ -427,7 +436,6 @@ export function wireMentionAutocomplete(fieldEl, getCandidates, onPick) {
     currentMatches = (getCandidates(query) || []).slice(0, 6);
     if (!currentMatches.length) { close(); return; }
     activeIndex = 0;
-    reposition();
     dropdown.innerHTML = currentMatches.map((m, i) =>
       `<button type="button" class="mention-option ${i === 0 ? "active" : ""}" data-index="${i}">
         <span class="avatar avatar-sm">${avatarInner(m)}</span>
@@ -435,6 +443,7 @@ export function wireMentionAutocomplete(fieldEl, getCandidates, onPick) {
       </button>`
     ).join("");
     dropdown.classList.remove("hidden");
+    reposition();
     dropdown.querySelectorAll(".mention-option").forEach((btn, i) => {
       btn.addEventListener("mousedown", (e) => { e.preventDefault(); pick(currentMatches[i]); });
       btn.addEventListener("mouseenter", () => { activeIndex = i; paintActive(); });
@@ -466,6 +475,15 @@ export function wireMentionAutocomplete(fieldEl, getCandidates, onPick) {
     }
   });
   window.addEventListener("resize", () => { if (!dropdown.classList.contains("hidden")) reposition(); });
+  window.addEventListener("scroll", () => { if (!dropdown.classList.contains("hidden")) reposition(); }, true);
+
+  const cleanupObserver = new MutationObserver(() => {
+    if (!document.body.contains(fieldEl)) {
+      dropdown.remove();
+      cleanupObserver.disconnect();
+    }
+  });
+  cleanupObserver.observe(document.body, { childList: true, subtree: true });
 }
 
 export function kebabMenuHtml(id, actions, extraClass = "") {

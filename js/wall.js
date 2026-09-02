@@ -107,8 +107,16 @@ export function wireMentions(fieldEl, initial = []) {
     fieldEl,
     (query) => {
       const q = query.toLowerCase();
-      return getAllStudents().filter((s) =>
-        s.uid && s.uid !== auth.currentUser?.uid && (s.name || "").toLowerCase().includes(q));
+      return getAllStudents()
+        .filter((s) => s.uid && s.uid !== auth.currentUser?.uid && (s.name || "").toLowerCase().includes(q))
+        .sort((a, b) => {
+          const an = (a.name || "").toLowerCase();
+          const bn = (b.name || "").toLowerCase();
+          const aStarts = an.startsWith(q) ? 0 : 1;
+          const bStarts = bn.startsWith(q) ? 0 : 1;
+          if (aStarts !== bStarts) return aStarts - bStarts;
+          return an.localeCompare(bn);
+        });
     },
     (candidate) => picked.set(candidate.name, { uid: candidate.uid, name: candidate.name })
   );
