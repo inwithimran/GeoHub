@@ -2,8 +2,8 @@ import { initializeApp, cert, getApps } from "firebase-admin/app";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 import { getAuth } from "firebase-admin/auth";
+import { ADMIN_EMAILS } from "../shared/admin-config.js";
 
-const ADMIN_EMAILS = ["in.with.imran@gmail.com"];
 const MIN_MS_BETWEEN_PUSHES = 5000; 
 const MAX_CLAIM_AGE_MS = 2 * 60 * 1000;
 

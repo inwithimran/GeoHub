@@ -55,11 +55,13 @@ function truncate(text = "", max = 120) {
 }
 
 export default async function handler(req, res) {
-  if (process.env.CRON_SECRET) {
-    const authHeader = req.headers.authorization || "";
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-      return res.status(401).json({ error: "Unauthorized." });
-    }
+  if (!process.env.CRON_SECRET) {
+    console.error("deadline-reminders: CRON_SECRET is not set — refusing request.");
+    return res.status(500).json({ error: "Server misconfiguration." });
+  }
+  const authHeader = req.headers.authorization || "";
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return res.status(401).json({ error: "Unauthorized." });
   }
 
   try {

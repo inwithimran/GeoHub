@@ -1,8 +1,8 @@
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getAdminApp, verifyCaller, requirePost, sendError, ApiError } from "./_lib/adminApp.js";
 import { requiredText, optionalText, enumOrEmpty, isOwnCloudinaryUrl } from "./_lib/validators.js";
+import { ADMIN_EMAILS } from "../shared/admin-config.js";
 
-const ADMIN_EMAILS = ["in.with.imran@gmail.com"];
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const GENDERS = ["male", "female", "other"];
 const YEARS = ["1st Year", "2nd Year", "3rd Year", "4th Year", "Honours Completed"];
