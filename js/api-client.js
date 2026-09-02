@@ -2,6 +2,9 @@ import { auth } from "./firebase-config.js";
 
 const CLIENT_COOLDOWN_MS = { "create-post": 3000, "create-comment": 1500 };
 const lastCallAt = new Map();
+export const API_BASE = (typeof Capacitor !== "undefined" && Capacitor.isNativePlatform && Capacitor.isNativePlatform())
+  ? "https://geohubmmc.vercel.app"
+  : "";
 
 export async function callApi(path, payload, { skipClientCooldown = false } = {}) {
   const cooldownMs = CLIENT_COOLDOWN_MS[path];
@@ -14,7 +17,7 @@ export async function callApi(path, payload, { skipClientCooldown = false } = {}
   }
   if (!auth.currentUser) throw new Error("You're not signed in.");
   const idToken = await auth.currentUser.getIdToken();
-  const res = await fetch(`/api/${path}`, {
+  const res = await fetch(`${API_BASE}/api/${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
     body: JSON.stringify(payload)

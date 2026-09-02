@@ -1,4 +1,5 @@
 import { auth, db } from "./firebase-config.js";
+import { API_BASE } from "./api-client.js";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -115,7 +116,7 @@ export async function fetchProfile(uid) {
 
 async function resolveOwnProfile(user) {
   const idToken = await user.getIdToken();
-  const res = await fetch("/api/resolve-profile", {
+  const res = await fetch(`${API_BASE}/api/resolve-profile`, {
     method: "POST",
     headers: { Authorization: `Bearer ${idToken}` }
   });
