@@ -19,13 +19,10 @@ jobs:
           node-version: 22
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
-          java-version: '21'
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+          java-version: '17'
 
       - name: Install & Configure Capacitor
         run: |
@@ -41,7 +38,7 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace
+          ./gradlew assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
