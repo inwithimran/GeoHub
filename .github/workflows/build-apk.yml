@@ -1,0 +1,57 @@
+name: Build GeoHub APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Determine Web Directory and Prepare Package
+        run: |
+          if [ -d "geohub" ]; then
+            WEB_DIR="geohub"
+          else
+            WEB_DIR="."
+          fi
+          echo "WEB_DIR=$WEB_DIR" >> $GITHUB_ENV
+          
+          if [ ! -f package.json ]; then
+            npm init -y
+          fi
+
+      - name: Install & Configure Capacitor
+        run: |
+          npm install @capacitor/core @capacitor/cli @capacitor/android
+          npx cap init "GeoHub" "com.geohub.app" --web-dir "$WEB_DIR"
+          npx cap add android
+          npx cap copy
+
+      - name: Build APK via Gradle
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeoHub-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
