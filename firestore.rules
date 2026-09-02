@@ -9,6 +9,10 @@ service cloud.firestore {
     function isOwner(uid) {
       return isSignedIn() && request.auth.uid == uid;
     }
+    // NOTE: Firestore Security Rules cannot import JS, so this allowlist
+    // cannot be centralized like the server/client copies are (see
+    // /shared/admin-config.js). If you add/change an admin, update BOTH
+    // this list and /shared/admin-config.js, and keep them identical.
     function isAdmin() {
       return isSignedIn() && request.auth.token.email in [
         "in.with.imran@gmail.com"
@@ -29,8 +33,11 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      allow read: if isSignedIn();               
-      allow create: if isOwner(uid);
+      allow read: if isSignedIn();
+      // Profile creation is validated server-side (Admin SDK, which bypasses
+      // these rules) via /api/create-profile and /api/resolve-profile.
+      // Direct client-side creates are never allowed.
+      allow create: if false;
       allow update: if isOwner(uid) && onlyChangedFields(["lastActive"]);
       allow delete: if false;
 
@@ -71,18 +78,22 @@ service cloud.firestore {
 
     match /posts/{postId} {
       allow read: if isSignedIn();
+      // Creates and text/image/mention edits are validated server-side
+      // (Admin SDK, which bypasses these rules) via /api/create-post and
+      // /api/edit-post. Only the narrow, self-contained updates below are
+      // ever allowed as direct client writes.
       allow create: if false;
-      allow update: if (isOwner(resource.data.authorUid) && textWithinLimit("text", 3000)) ||
-        (isSignedIn() && onlyChangedFields(["likes", "reactions"])) ||
+      allow update: if (isSignedIn() && onlyChangedFields(["likes", "reactions"])) ||
         (isSignedIn() && pollVoteOnly()) ||
         (isAdmin() && onlyChangedFields(["pinned", "pinnedAt"]));
       allow delete: if isOwner(resource.data.authorUid) || isAdmin();
 
       match /comments/{commentId} {
         allow read: if isSignedIn();
+        // Same story as posts/{postId} above — see /api/create-comment and
+        // /api/edit-comment.
         allow create: if false;
-        allow update: if (isOwner(resource.data.authorUid) && textWithinLimit("text", 500)) ||
-          (isSignedIn() && onlyChangedFields(["reactions"]));
+        allow update: if isSignedIn() && onlyChangedFields(["reactions"]);
         allow delete: if isOwner(resource.data.authorUid) || isAdmin() ||
           isOwner(get(/databases/$(database)/documents/posts/$(postId)).data.authorUid);
       }
@@ -136,10 +147,19 @@ service cloud.firestore {
     }
 
     match /resources/{resId} {
+      function openCountIncrementValid() {
+        return onlyChangedFields(["openCount"]) &&
+          request.resource.data.openCount is int &&
+          resource.data.openCount is int &&
+          request.resource.data.openCount == resource.data.openCount + 1;
+      }
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.contributorUid == request.auth.uid;
-      allow update: if isOwner(resource.data.contributorUid) ||
-        (isSignedIn() && onlyChangedFields(["openCount"]));
+      // Creates and edits (title/category/link) are validated server-side
+      // (Admin SDK, which bypasses these rules) via /api/create-resource
+      // and /api/edit-resource. Any signed-in reader may still bump the
+      // view/download counter by exactly 1 per write.
+      allow create: if false;
+      allow update: if isSignedIn() && openCountIncrementValid();
       allow delete: if isOwner(resource.data.contributorUid) || isAdmin();
     }
 
