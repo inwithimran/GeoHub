@@ -16,39 +16,32 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
 
-      - name: Determine Web Directory and Prepare Package
-        run: |
-          if [ -d "geohub" ]; then
-            WEB_DIR="geohub"
-          else
-            WEB_DIR="."
-          fi
-          echo "WEB_DIR=$WEB_DIR" >> $GITHUB_ENV
-          
-          if [ ! -f package.json ]; then
-            npm init -y
-          fi
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
 
       - name: Install & Configure Capacitor
         run: |
+          if [ ! -f package.json ]; then
+            npm init -y
+          fi
           npm install @capacitor/core @capacitor/cli @capacitor/android
-          npx cap init "GeoHub" "com.geohub.app" --web-dir "$WEB_DIR"
+          npx cap init "GeoHub" "com.geohub.app" --web-dir "."
           npx cap add android
-          npx cap copy
+          npx cap copy android
 
       - name: Build APK via Gradle
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
