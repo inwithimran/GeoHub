@@ -917,9 +917,13 @@
   }
   .reaction-picker.hidden { @apply hidden; }
   .reaction-option { @apply text-lg leading-none rounded-full transition-transform; padding:4px 5px; }
+  .reaction-option svg { width:1.1em; height:1.1em; display:block; }
+  .reaction-option-leaf svg { color: var(--color-forest-600); }
   .reaction-option:hover, .reaction-option:active { @apply scale-125; background: var(--color-paper-deep); }
   .reaction-summary-emojis { @apply text-[.85rem] tracking-tighter; }
+  .reaction-summary-emojis svg { width:.9em; height:.9em; display:inline-block; vertical-align:-1px; color: var(--color-forest-600); }
   .reaction-emoji-tag { @apply ml-auto text-lg shrink-0; }
+  .reaction-emoji-tag svg { width:1em; height:1em; display:inline-block; vertical-align:-3px; color: var(--color-forest-600); }
 
   .mention-chip, .hashtag-chip { @apply font-bold; color: var(--color-forest-700); }
   .mention-chip:hover, .mention-chip:active, .hashtag-chip:hover, .hashtag-chip:active { @apply underline; }
@@ -992,6 +996,7 @@
     gap:3px; font-size:.68rem; line-height:1; color: var(--color-ink-faint); font-family: var(--font-mono);
     margin-left: auto;
   }
+  .comment-reaction-badge svg { width:1em; height:1em; display:inline-block; color: var(--color-forest-600); }
   .comment-reaction-badge:hover, .comment-reaction-badge:active { color: var(--color-forest-700); }
   .comment-reaction-badge.hidden { @apply hidden; }
 
@@ -1005,8 +1010,16 @@
   .comment-reply-btn { @apply text-[.72rem] font-extrabold bg-transparent p-0 shrink-0; color: var(--color-ink-faint); }
   .comment-reply-btn:hover, .comment-reply-btn:active { color: var(--color-forest-700); }
   .comment-foot small { @apply text-[.68rem] font-semibold shrink-0; color: var(--color-ink-faint); font-family:var(--font-mono); }
-  .comment-replies { @apply flex flex-col gap-4 mt-4; margin-left:38px; padding-left:12px; border-left:2px dashed var(--color-line); }
+  .comment-replies { @apply flex flex-col gap-4 mt-4; position:relative; margin-left:38px; padding-left:20px; }
   .comment-replies-toggle + .comment-replies { margin-top:10px; }
+  .comment-item-reply { position:relative; }
+  .comment-item-reply::before {
+    content:""; position:absolute; left:-20px; top:-16px;
+    width:20px; height:28px;
+    border-left:2px dashed var(--color-line); border-bottom:2px dashed var(--color-line);
+    border-bottom-left-radius:12px;
+  }
+  .comment-item-reply:first-child::before { top:-8px; height:20px; }
   .comment-replies-toggle {
     @apply flex items-center gap-1.5 border-0 bg-transparent cursor-pointer;
     margin:2px 0 0 38px; padding:6px 2px; font-size:.78rem; font-weight:800; color: var(--color-ink-faint);
