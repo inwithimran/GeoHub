@@ -22,13 +22,22 @@ import { callApi } from "./api-client.js";
 import { onSnapshotWithRetry } from "./realtime-retry.js";
 import { enqueueWrite, registerWriteHandler, isNetworkError } from "./write-queue.js";
 
-export const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢"];
-const DEFAULT_REACTION = "👍";
-const OUTLINE_LEAF_SVG = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M20 4c-8 0-16 4-16 13 0 1.5.3 2.6.8 3.4C6 15 11 9 18 6c-6 4-10 10-12.4 13.7.5.2 1 .3 1.4.3C16 20 20 12 20 4z"/></svg>`;
+export const REACTION_EMOJIS = ["leaf", "❤️", "😂", "😮", "😢"];
+const DEFAULT_REACTION = "leaf";
+const LEAF_PATH = "M20 4c-8 0-16 4-16 13 0 1.5.3 2.6.8 3.4C6 15 11 9 18 6c-6 4-10 10-12.4 13.7.5.2 1 .3 1.4.3C16 20 20 12 20 4z";
+const OUTLINE_LEAF_SVG = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="${LEAF_PATH}"/></svg>`;
+const FILLED_LEAF_SVG = `<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none"><path d="${LEAF_PATH}"/></svg>`;
+
+// Renders a reaction value as HTML: the leaf is our own filled icon, every other
+// reaction is stored/shown as its literal emoji character.
+export function reactionGlyphHtml(value) {
+  return value === "leaf" ? FILLED_LEAF_SVG : (value || "");
+}
 
 function reactionsOf(post) {
   return post.reactions || Object.fromEntries((post.likes || []).map((uid) => [uid, DEFAULT_REACTION]));
 }
+
 
 const commentCountCache = new Map();
 
@@ -517,11 +526,11 @@ export function renderPost(postId, post, listEl, { onChanged } = {}) {
     <div class="post-actions">
       <div class="reaction-control">
         <button type="button" class="post-action-btn reaction-btn ${myReaction ? "liked" : ""}" data-id="${postId}" aria-pressed="${!!myReaction}">
-          <span class="reaction-icon" aria-hidden="true">${myReaction || OUTLINE_LEAF_SVG}</span>
+          <span class="reaction-icon" aria-hidden="true">${myReaction ? reactionGlyphHtml(myReaction) : OUTLINE_LEAF_SVG}</span>
           <span>${myReaction ? "Reacted" : "Like"}</span>
         </button>
         <div class="reaction-picker hidden">
-          ${REACTION_EMOJIS.map(e => `<button type="button" class="reaction-option" data-emoji="${e}">${e}</button>`).join("")}
+          ${REACTION_EMOJIS.map(e => `<button type="button" class="reaction-option ${e === "leaf" ? "reaction-option-leaf" : ""}" data-emoji="${e}">${reactionGlyphHtml(e)}</button>`).join("")}
         </div>
       </div>
       <button class="post-action-btn comment-toggle-btn" data-id="${postId}">
@@ -575,7 +584,7 @@ function reactionSummaryHtml(reactions) {
   Object.values(reactions).forEach((e) => { counts[e] = (counts[e] || 0) + 1; });
   const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([e]) => e);
   const total = Object.keys(reactions).length;
-  return `<span class="reaction-summary-emojis">${top.join("")}</span> ${total} ${total === 1 ? "reaction" : "reactions"}`;
+  return `<span class="reaction-summary-emojis">${top.map(reactionGlyphHtml).join("")}</span> ${total} ${total === 1 ? "reaction" : "reactions"}`;
 }
 
 function reactionBadgeHtml(reactions) {
@@ -583,7 +592,7 @@ function reactionBadgeHtml(reactions) {
   Object.values(reactions).forEach((e) => { counts[e] = (counts[e] || 0) + 1; });
   const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
   const total = Object.keys(reactions).length;
-  return `<span aria-hidden="true">${top ? top[0] : ""}</span><span>${total || ""}</span>`;
+  return `<span aria-hidden="true">${top ? reactionGlyphHtml(top[0]) : ""}</span><span>${total || ""}</span>`;
 }
 
 export function paintReactionButton(btnEl, countEl, post) {
@@ -593,7 +602,7 @@ export function paintReactionButton(btnEl, countEl, post) {
   btnEl.classList.toggle("liked", !!mine);
   btnEl.setAttribute("aria-pressed", String(!!mine));
   const iconEl = btnEl.querySelector(".reaction-icon");
-  if (iconEl) iconEl.innerHTML = mine || OUTLINE_LEAF_SVG;
+  if (iconEl) iconEl.innerHTML = mine ? reactionGlyphHtml(mine) : OUTLINE_LEAF_SVG;
   const label = btnEl.querySelectorAll(":scope > span")[1];
   if (label) label.textContent = mine ? "Reacted" : "Like";
   const total = Object.keys(reactions).length;
@@ -700,7 +709,7 @@ export async function openReactionsModal(reactions) {
         <button type="button" class="directory-row likes-row" data-uid="${p.uid}">
           <div class="avatar">${avatarInner(p)}</div>
           <div class="directory-info"><strong>${nameWithBadge(p.name, p.email)}</strong></div>
-          <span class="reaction-emoji-tag">${p.emoji}</span>
+          <span class="reaction-emoji-tag">${reactionGlyphHtml(p.emoji)}</span>
         </button>
       `).join("")}
     </div>
@@ -719,7 +728,7 @@ export function paintCommentReactionButton(btnEl, countEl, comment) {
   btnEl.classList.toggle("liked", !!mine);
   btnEl.setAttribute("aria-pressed", String(!!mine));
   const iconEl = btnEl.querySelector(".reaction-icon");
-  if (iconEl) iconEl.innerHTML = mine || OUTLINE_LEAF_SVG;
+  if (iconEl) iconEl.innerHTML = mine ? reactionGlyphHtml(mine) : OUTLINE_LEAF_SVG;
   const label = btnEl.querySelectorAll(":scope > span")[1];
   if (label) label.textContent = mine ? "Reacted" : "Like";
   const total = Object.keys(reactions).length;
