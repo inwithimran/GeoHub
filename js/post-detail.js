@@ -540,7 +540,6 @@ function commentItemHtml(c, uid, isPostOwner, contextTag = "") {
           ${contextTag}
           <button type="button" class="comment-author" data-author="${c.authorUid}">${nameWithBadge(c.authorName, c.authorEmail)}</button>
           <p>${richTextHtml(c.text, c.mentions)}</p>
-          <button type="button" class="comment-reaction-count comment-reaction-badge ${reactionCount ? "" : "hidden"}" data-id="${c.id}"></button>
         </div>
         <div class="comment-foot">
           <div class="comment-reaction-control">
@@ -553,6 +552,7 @@ function commentItemHtml(c, uid, isPostOwner, contextTag = "") {
           </div>
           <button type="button" class="comment-reply-btn" data-id="${c.id}" data-name="${escapeHtml(c.authorName || "Classmate")}" data-author-uid="${c.authorUid || ""}">Reply</button>
           <small>${timeAgo(c.createdAt)}${c.editedAt ? " · edited" : ""}</small>
+          <button type="button" class="comment-reaction-count comment-reaction-badge ${reactionCount ? "" : "hidden"}" data-id="${c.id}"></button>
         </div>
       </div>
     </div>`;
@@ -578,7 +578,6 @@ function replyItemHtml(c, uid, isPostOwner, parentComment) {
           ${showReplyTag ? `<div class="reply-context">↳ Replying to ${escapeHtml(c.replyTo.authorName || "")}</div>` : ""}
           <button type="button" class="comment-author" data-author="${c.authorUid}">${nameWithBadge(c.authorName, c.authorEmail)}</button>
           <p>${richTextHtml(c.text, c.mentions)}</p>
-          <button type="button" class="comment-reaction-count comment-reaction-badge ${reactionCount ? "" : "hidden"}" data-id="${c.id}"></button>
         </div>
         <div class="comment-foot">
           <div class="comment-reaction-control">
@@ -591,6 +590,7 @@ function replyItemHtml(c, uid, isPostOwner, parentComment) {
           </div>
           <button type="button" class="comment-reply-btn" data-id="${c.replyTo.id}" data-name="${escapeHtml(c.authorName || "Classmate")}" data-author-uid="${c.authorUid || ""}">Reply</button>
           <small>${timeAgo(c.createdAt)}${c.editedAt ? " · edited" : ""}</small>
+          <button type="button" class="comment-reaction-count comment-reaction-badge ${reactionCount ? "" : "hidden"}" data-id="${c.id}"></button>
         </div>
       </div>
     </div>`;
