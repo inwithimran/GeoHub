@@ -1,0 +1,8 @@
+{
+  "appId": "com.geohubmmc.app",
+  "appName": "GeoHub",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  }
+}
