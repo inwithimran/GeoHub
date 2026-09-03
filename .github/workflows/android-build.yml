@@ -46,6 +46,9 @@ jobs:
       - name: Add google-services Gradle plugin
         run: python3 scripts/ci/inject-google-services.py
 
+      - name: Enable Google Sign-In native dependencies
+        run: python3 scripts/ci/inject-android-variables.py
+
       - name: Decode keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
