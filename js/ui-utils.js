@@ -36,15 +36,15 @@ export function showToast(message, { details, duration = 2500 } = {}) {
       toggle.setAttribute("aria-expanded", String(!nowHidden));
       toggle.textContent = nowHidden ? "Details" : "Hide details";
       clearTimeout(toastTimer);
-      if (nowHidden) toastTimer = setTimeout(() => toastEl.classList.add("hidden"), duration);
+      if (nowHidden) toastTimer = setTimeout(() => toastEl.classList.remove("toast-show"), duration);
     });
 
     toastEl.appendChild(toggle);
     toastEl.appendChild(detailsEl);
   }
 
-  toastEl.classList.remove("hidden");
-  toastTimer = setTimeout(() => toastEl.classList.add("hidden"), duration);
+  toastEl.classList.add("toast-show");
+  toastTimer = setTimeout(() => toastEl.classList.remove("toast-show"), duration);
 }
 
 const FRIENDLY_ERROR_MESSAGES = {
