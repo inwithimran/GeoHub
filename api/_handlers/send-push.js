@@ -58,6 +58,7 @@ async function sendToTokens(messaging, db, pairs, data = {}) {
     const res = await messaging.sendEachForMulticast({
       tokens: chunk.map((p) => p.token),
       data,
+      android: { priority: "high", notification: { title: data.title, body: data.body } },
       webpush: { fcmOptions: { link: data.url || "/" } }
     });
     sent += res.successCount;
