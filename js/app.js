@@ -265,6 +265,7 @@ let routeFromMap = {};
 
 const TOPBAR_BACK_ROUTES = new Set(["search", "user-profile", "post-detail", "notices", "reports", "settings"]);
 const FROM_TRACKED_ROUTES = new Set([...TOPBAR_BACK_ROUTES, "dm-thread"]);
+const STACKABLE_CONTENT_ROUTES = new Set(["user-profile", "post-detail", "dm-thread"]);
 
 function buildHash(route, id, from) {
   const params = new URLSearchParams();
@@ -325,9 +326,9 @@ function goToRoute(route, { fromPopstate = false, replace = false, state = {} } 
   currentRoute = route;
   const historyState = { geohubRoute: route, ...state, from };
   const hash = buildHash(route, id, from);
-  if (replace) {
+  if (replace || (!fromPopstate && !STACKABLE_CONTENT_ROUTES.has(route))) {
     history.replaceState(historyState, "", hash);
-  } else if (!fromPopstate && (route !== history.state?.geohubRoute || route === "user-profile" || route === "post-detail")) {
+  } else if (!fromPopstate) {
     history.pushState(historyState, "", hash);
   }
 }
