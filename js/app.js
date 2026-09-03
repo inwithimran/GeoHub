@@ -26,6 +26,7 @@ import { isAcceptableImageFile, openImageViewer } from "./media-picker.js";
 import { openImageCropper } from "./image-cropper.js";
 import { initPush, unregisterPushToken } from "./push.js";
 import { getThemePreference, setThemePreference, initTheme } from "./theme.js";
+import { App as CapApp } from "@capacitor/app";
 
 initTheme();
 
@@ -388,6 +389,34 @@ window.addEventListener("popstate", (e) => {
       goToRoute(e.state.geohubRoute, { fromPopstate: true });
     }
   }
+});
+
+let backPressedOnce = false;
+let backPressTimeout = null;
+
+CapApp.addListener("backButton", ({ canGoBack }) => {
+  if (!document.getElementById("modal-overlay").classList.contains("hidden")) {
+    history.back();
+    return;
+  }
+  if (canGoBack) {
+    history.back();
+    return;
+  }
+  if (currentRoute !== "wall") {
+    goToRoute("wall");
+    return;
+  }
+  if (backPressedOnce) {
+    CapApp.exitApp();
+    return;
+  }
+  backPressedOnce = true;
+  showToast("Press back again to exit");
+  clearTimeout(backPressTimeout);
+  backPressTimeout = setTimeout(() => {
+    backPressedOnce = false;
+  }, 2000);
 });
 
 function confirmLogout() {
