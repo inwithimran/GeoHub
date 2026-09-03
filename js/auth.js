@@ -15,8 +15,6 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { callApi } from "./api-client.js";
 import { isDisposableEmail } from "../shared/blocked-email-domains.js";
-import { Capacitor } from "@capacitor/core";
-import { FirebaseAuthentication } from "@capacitor-firebase/authentication";
 
 export let currentProfile = null;
 
@@ -87,7 +85,9 @@ export async function logIn(email, password) {
 }
 
 export async function signInWithGoogle() {
-  if (Capacitor.isNativePlatform()) {
+  const nativeCapacitor = typeof window !== "undefined" ? window.Capacitor : undefined;
+  if (nativeCapacitor && nativeCapacitor.isNativePlatform && nativeCapacitor.isNativePlatform()) {
+    const FirebaseAuthentication = nativeCapacitor.Plugins.FirebaseAuthentication;
     const result = await FirebaseAuthentication.signInWithGoogle();
     const idToken = result.credential?.idToken;
     if (!idToken) {
