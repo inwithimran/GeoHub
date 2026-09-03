@@ -24,7 +24,7 @@ import {
 import { uploadImage } from "./cloudinary.js";
 import { isAcceptableImageFile, openImageViewer } from "./media-picker.js";
 import { openImageCropper } from "./image-cropper.js";
-import { initPush, unregisterPushToken } from "./push.js";
+import { initPush, unregisterPushToken, registerNotificationTapHandler } from "./push.js";
 import { getThemePreference, setThemePreference, initTheme } from "./theme.js";
 
 const CapApp = window.Capacitor?.Plugins?.App;
@@ -340,6 +340,22 @@ registerNotificationsRouter(goToRoute);
 registerPostDetailRouter(goToRoute);
 registerDmThreadRouter(goToRoute, goBackToRoute);
 registerSearchRouter(goToRoute);
+
+function openDeepLink(url) {
+  if (!url) return;
+  const hashIndex = url.indexOf("#");
+  const hashPart = hashIndex >= 0 ? url.slice(hashIndex + 1) : url.replace(/^\//, "");
+  const parsed = parseHash("#" + hashPart);
+  if (!parsed || !routeTitles[parsed.route]) {
+    goToRoute("wall");
+    return;
+  }
+  if (parsed.route === "user-profile" && parsed.id) openUserProfilePage(parsed.id);
+  else if (parsed.route === "post-detail" && parsed.id) openPostDetailPage(parsed.id);
+  else if (parsed.route === "dm-thread" && parsed.id) openDmThread(parsed.id);
+  else goToRoute(parsed.route);
+}
+registerNotificationTapHandler(openDeepLink);
 
 function restoreRouteFromHash() {
   const parsed = parseHash(location.hash);
