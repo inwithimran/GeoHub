@@ -4,6 +4,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signInWithPopup,
+  signInWithCredential,
   GoogleAuthProvider,
   signOut,
   onAuthStateChanged,
@@ -14,6 +15,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { callApi } from "./api-client.js";
 import { isDisposableEmail } from "../shared/blocked-email-domains.js";
+import { Capacitor } from "@capacitor/core";
+import { FirebaseAuthentication } from "@capacitor-firebase/authentication";
 
 export let currentProfile = null;
 
@@ -46,10 +49,6 @@ export async function signUp(data) {
   }
   const cred = await createUserWithEmailAndPassword(auth, data.email, data.password);
   try {
-    // Profile creation is validated and written server-side (Admin SDK) —
-    // the client never writes the profile document directly. This ensures
-    // the same validation (name/roll length, blood group enum, phone regex)
-    // applies here as in updateProfileDetails().
     const { profile } = await callApi("create-profile", {
       name: data.name.trim(),
       roll: data.roll.trim(),
@@ -60,8 +59,6 @@ export async function signUp(data) {
     currentProfile = profile;
     return cred.user;
   } catch (err) {
-    // Don't leave behind an Auth account with no profile — clean up so the
-    // person can retry signup instead of getting stuck in a broken state.
     try { await cred.user.delete(); } catch { /* best effort */ }
     throw err;
   }
@@ -90,6 +87,18 @@ export async function logIn(email, password) {
 }
 
 export async function signInWithGoogle() {
+  if (Capacitor.isNativePlatform()) {
+    const result = await FirebaseAuthentication.signInWithGoogle();
+    const idToken = result.credential?.idToken;
+    if (!idToken) {
+      const err = new Error("Google sign-in didn't return a valid credential.");
+      err.code = "auth/google-only-account";
+      throw err;
+    }
+    const credential = GoogleAuthProvider.credential(idToken);
+    const cred = await signInWithCredential(auth, credential);
+    return cred.user;
+  }
   const cred = await signInWithPopup(auth, googleProvider);
   return cred.user;
 }
@@ -170,8 +179,6 @@ export function friendlyAuthError(err) {
     "auth/google-only-account": "This email was registered with \"Continue with Google\" — it has no password set. Please use the Google button below to log in."
   };
   if (err.code && map[err.code]) return map[err.code];
-  // ApiError messages from our own server (e.g. /api/create-profile
-  // validation) are already user-friendly — show them as-is.
   if (err.message) return err.message;
   return "Something went wrong. Please try again.";
 }
