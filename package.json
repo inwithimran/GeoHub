@@ -25,6 +25,10 @@
     "@capacitor/app": "^6.0.1",
     "@capacitor-firebase/messaging": "^6.3.0",
     "@capacitor/assets": "^3.0.5",
-    "@capacitor-firebase/authentication": "^6.3.0"
+    "@capacitor-firebase/authentication": "^6.3.0",
+    "@capacitor/status-bar": "^6.0.1",
+    "@capacitor/splash-screen": "^6.0.3",
+    "@capacitor/keyboard": "^6.0.3",
+    "@capacitor/haptics": "^6.0.2"
   }
 }

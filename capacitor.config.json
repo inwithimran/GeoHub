@@ -9,6 +9,18 @@
     "FirebaseAuthentication": {
       "skipNativeAuth": false,
       "providers": ["google.com"]
+    },
+    "SplashScreen": {
+      "launchAutoHide": false,
+      "backgroundColor": "#0f2e1d",
+      "androidSplashResourceName": "splash",
+      "splashFullScreen": true,
+      "splashImmersive": true,
+      "androidScaleType": "CENTER_CROP"
+    },
+    "Keyboard": {
+      "resize": "body",
+      "resizeOnFullScreen": true
     }
   }
 }
