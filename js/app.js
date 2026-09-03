@@ -911,7 +911,7 @@ watchAuthState(
       featuresInitialized = true;
     }
     restoreRouteFromHash();
-    initPush();
+    initPush({ requestPermission: true });
     if (profile && profile.profileIncomplete) {
       openProfileDetailsModal(true);
     }
