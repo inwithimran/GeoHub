@@ -7,21 +7,56 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { showToast } from "./ui-utils.js";
 
+const CapFirebaseMessaging = window.Capacitor?.Plugins?.FirebaseMessaging;
+const isNativeApp = window.Capacitor?.isNativePlatform?.() === true;
+
 let foregroundHandlerWired = false;
 let tokenSavedThisSession = false;
 
-export async function initPush({ requestPermission = false } = {}) {
+async function saveToken(token) {
+  if (!token || !auth.currentUser) return;
+  await setDoc(
+    doc(db, "users", auth.currentUser.uid, "fcmTokens", token),
+    { createdAt: serverTimestamp(), userAgent: navigator.userAgent },
+    { merge: true }
+  );
+  tokenSavedThisSession = true;
+}
+
+async function initNativePush({ requestPermission }) {
+  if (!CapFirebaseMessaging || tokenSavedThisSession) return;
+
+  if (!foregroundHandlerWired) {
+    foregroundHandlerWired = true;
+    CapFirebaseMessaging.addListener("notificationReceived", (event) => {
+      const title = event.notification?.data?.title || event.notification?.title || "GeoHub";
+      const body = event.notification?.data?.body || event.notification?.body || "";
+      showToast(`${title}${body ? " — " + body : ""}`);
+    });
+  }
+
+  let status = await CapFirebaseMessaging.checkPermissions();
+  if (status.receive === "prompt" || status.receive === "prompt-with-rationale") {
+    if (!requestPermission) return;
+    status = await CapFirebaseMessaging.requestPermissions();
+  }
+  if (status.receive !== "granted") return;
+
+  const { token } = await CapFirebaseMessaging.getToken();
+  await saveToken(token);
+}
+
+async function initWebPush({ requestPermission }) {
   if (!("Notification" in window) || !("serviceWorker" in navigator)) return;
-  if (!VAPID_KEY || VAPID_KEY.startsWith("PASTE_")) return; 
+  if (!VAPID_KEY || VAPID_KEY.startsWith("PASTE_")) return;
   if (!(await isSupported().catch(() => false))) return;
-  if (Notification.permission === "denied") return; 
-  if (Notification.permission === "default" && !requestPermission) return; 
+  if (Notification.permission === "denied") return;
+  if (Notification.permission === "default" && !requestPermission) return;
   if (tokenSavedThisSession) return;
 
   try {
     const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
     const messaging = getMessaging(app);
-
 
     if (!foregroundHandlerWired) {
       foregroundHandlerWired = true;
@@ -36,24 +71,33 @@ export async function initPush({ requestPermission = false } = {}) {
     if (permission === "default") {
       permission = await Notification.requestPermission();
     }
-    if (permission !== "granted") return; 
+    if (permission !== "granted") return;
 
     const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: registration });
-    if (token && auth.currentUser) {
-      await setDoc(
-        doc(db, "users", auth.currentUser.uid, "fcmTokens", token),
-        { createdAt: serverTimestamp(), userAgent: navigator.userAgent },
-        { merge: true }
-      );
-      tokenSavedThisSession = true;
-    }
+    await saveToken(token);
   } catch (err) {
     console.warn("Push notifications not available:", err.message);
   }
 }
 
+export async function initPush({ requestPermission = false } = {}) {
+  if (isNativeApp) {
+    await initNativePush({ requestPermission }).catch((err) => console.warn("Native push not available:", err.message));
+  } else {
+    await initWebPush({ requestPermission });
+  }
+}
+
 export async function unregisterPushToken() {
   try {
+    if (isNativeApp) {
+      if (!CapFirebaseMessaging) return;
+      const { token } = await CapFirebaseMessaging.getToken().catch(() => ({ token: null }));
+      if (token && auth.currentUser) {
+        await setDoc(doc(db, "users", auth.currentUser.uid, "fcmTokens", token), { revoked: true, revokedAt: serverTimestamp() }, { merge: true });
+      }
+      return;
+    }
     if (!("serviceWorker" in navigator)) return;
     const registration = await navigator.serviceWorker.getRegistration("/firebase-messaging-sw.js");
     if (!registration) return;
@@ -62,6 +106,6 @@ export async function unregisterPushToken() {
     if (token && auth.currentUser) {
       await setDoc(doc(db, "users", auth.currentUser.uid, "fcmTokens", token), { revoked: true, revokedAt: serverTimestamp() }, { merge: true });
     }
-  } catch { 
-   }
+  } catch {
+  }
 }
