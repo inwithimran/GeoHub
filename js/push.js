@@ -33,6 +33,9 @@ async function initNativePush({ requestPermission }) {
       const body = event.notification?.data?.body || event.notification?.body || "";
       showToast(`${title}${body ? " — " + body : ""}`);
     });
+    CapFirebaseMessaging.addListener("tokenReceived", (event) => {
+      if (event.token) saveToken(event.token);
+    });
   }
 
   let status = await CapFirebaseMessaging.checkPermissions();
