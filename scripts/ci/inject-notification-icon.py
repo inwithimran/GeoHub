@@ -1,3 +1,4 @@
+import os
 import re
 import shutil
 import sys
@@ -9,6 +10,7 @@ densities = ["mdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi"]
 
 for density in densities:
     dest_dir = f"android/app/src/main/res/drawable-{density}"
+    os.makedirs(dest_dir, exist_ok=True)
     shutil.copyfile(f"{source_dir}/{density}.png", f"{dest_dir}/ic_stat_notify.png")
 
 with open(colors_path, "w") as f:
