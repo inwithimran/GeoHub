@@ -23,6 +23,7 @@
     "@capacitor/cli": "^6.1.2",
     "@capacitor/android": "^6.1.2",
     "@capacitor/app": "^6.0.1",
+    "@capacitor-firebase/messaging": "^6.3.0",
     "@capacitor/assets": "^3.0.5",
     "@capacitor-firebase/authentication": "^6.3.0"
   }
