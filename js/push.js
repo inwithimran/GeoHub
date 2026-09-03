@@ -88,6 +88,23 @@ export async function initPush({ requestPermission = false } = {}) {
   }
 }
 
+export function registerNotificationTapHandler(onTap) {
+  if (isNativeApp) {
+    if (!CapFirebaseMessaging) return;
+    CapFirebaseMessaging.addListener("notificationActionPerformed", (event) => {
+      const url = event.notification?.data?.url;
+      if (url) onTap(url);
+    });
+    return;
+  }
+  if (!("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.addEventListener("message", (event) => {
+    if (event.data?.type === "geohub-notification-click" && event.data.url) {
+      onTap(event.data.url);
+    }
+  });
+}
+
 export async function unregisterPushToken() {
   try {
     if (isNativeApp) {
