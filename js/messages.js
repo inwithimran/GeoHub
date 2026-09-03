@@ -9,7 +9,7 @@ import { currentProfile, fetchProfile } from "./auth.js";
 import {
   escapeHtml, escapeAttr, showToast, friendlyError, avatarInner, nameWithBadge,
   getCachedProfile, cacheUserProfile, ensureProfileLoaded, subscribeToProfileUpdates,
-  richTextHtml, wireRichTextClicks, wireKebabMenus, confirmDialog,
+  richTextHtml, wireRichTextClicks, wireKebabMenus, confirmDialog, closeModal,
   timeAgo
 } from "./ui-utils.js";
 import { authorProfile } from "./wall.js";
@@ -798,6 +798,7 @@ export function initMessages() {
         text: `This will remove your conversation with ${name} from your chat list. ${name} will still be able to see it on their side.`,
         confirmLabel: "Delete",
         onConfirm: () => deleteConversationForMe(conversationId).then(() => {
+          closeModal({ keepHistory: true });
           if (goToRouteRef) goToRouteRef("message", { replace: true });
         })
       });
