@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "GeoHub — static site (index.html + js/) plus one Vercel serverless API route (api/send-push.js) that sends FCM push notifications.",
+  "description": "GeoHub — Connect with Department",
   "scripts": {
     "test": "node --test test/validators.test.js",
     "test:rules": "firebase emulators:exec --only firestore \"node --test test/firestore-rules.test.js\"",
