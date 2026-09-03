@@ -114,6 +114,33 @@ function buildNotification(type, { text, actorName, urgent }) {
   }
 }
 
+function buildDeepLink(type, { postId, conversationId, callerUid }) {
+  switch (type) {
+    case "post":
+    case "resource":
+    case "comment":
+    case "reply":
+    case "like":
+    case "comment-like":
+    case "mention":
+      return postId ? `/#post-detail?id=${postId}` : "/";
+    case "notice":
+    case "deadline":
+    case "deadline-reminder":
+      return "/#notices";
+    case "routine":
+      return "/#routine";
+    case "report":
+      return "/#reports";
+    case "dm":
+      return conversationId && callerUid ? `/#dm-thread?id=${callerUid}` : "/#message";
+    case "classChat":
+      return "/#message";
+    default:
+      return "/";
+  }
+}
+
 function isRecent(timestamp) {
   if (!timestamp || typeof timestamp.toMillis !== "function") return false;
   return Date.now() - timestamp.toMillis() < MAX_CLAIM_AGE_MS;
@@ -333,7 +360,8 @@ export async function sendPush(req, res) {
         ? await collectAdminTokens(db, callerUid)
         : await collectAllTokens(db, callerUid);
 
-    const result = await sendToTokens(messaging, db, pairs, { url: "/", type: String(type), title, body });
+    const url = buildDeepLink(type, { postId, conversationId, callerUid });
+    const result = await sendToTokens(messaging, db, pairs, { url, type: String(type), title, body });
     return res.status(200).json({ ok: true, ...result });
   } catch (err) {
     console.error("send-push error:", err);
