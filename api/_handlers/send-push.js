@@ -5,7 +5,7 @@ import { getAuth } from "firebase-admin/auth";
 import { ADMIN_EMAILS } from "../../shared/admin-config.js";
 
 const MIN_MS_BETWEEN_PUSHES = 5000; 
-const MAX_CLAIM_AGE_MS = 2 * 60 * 1000;
+const MAX_CLAIM_AGE_MS = 5 * 60 * 1000;
 
 function getAdminApp() {
   if (getApps().length) return getApps()[0];
@@ -307,8 +307,8 @@ async function verifyClaim(db, callerUid, callerEmail, payload) {
   throw { status: 400, message: `Unknown type '${type}'.` };
 }
 
-async function checkAndBumpRateLimit(db, uid) {
-  const ref = db.collection("pushRateLimits").doc(uid);
+async function checkAndBumpRateLimit(db, uid, type) {
+  const ref = db.collection("pushRateLimits").doc(`${uid}_${type}`);
   return db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     const last = snap.exists ? snap.get("lastSentAt") : null;
@@ -348,7 +348,7 @@ export async function sendPush(req, res) {
       return res.status(status).json({ error: claimErr.message || "Couldn't verify this request." });
     }
 
-    const allowed = await checkAndBumpRateLimit(db, callerUid);
+    const allowed = await checkAndBumpRateLimit(db, callerUid, type);
     if (!allowed) return res.status(429).json({ ok: false, error: "Please wait a few seconds before triggering another notification." });
 
     const messaging = getMessaging(app);
