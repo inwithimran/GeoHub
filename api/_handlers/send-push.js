@@ -108,7 +108,7 @@ function buildNotification(type, { text, actorName, urgent }) {
     case "dm":
       return { title: `${name} sent you a message`, body: truncate(text) || "Tap to view." };
     case "classChat":
-      return { title: `${name} posted in Department Chat`, body: truncate(text) || "Tap to view." };
+      return { title: `${name} sent a message in Department Chat`, body: truncate(text) || "Tap to view." };
     default:
       return { title: "GeoHub", body: truncate(text) };
   }
