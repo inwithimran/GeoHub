@@ -43,6 +43,9 @@ jobs:
       - name: Add google-services.json
         run: echo "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" | base64 -d > android/app/google-services.json
 
+      - name: Add google-services Gradle plugin
+        run: python3 scripts/ci/inject-google-services.py
+
       - name: Decode keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
