@@ -28,6 +28,19 @@ import { initPush, unregisterPushToken, registerNotificationTapHandler } from ".
 import { getThemePreference, setThemePreference, initTheme } from "./theme.js";
 
 const CapApp = window.Capacitor?.Plugins?.App;
+const CapStatusBar = window.Capacitor?.Plugins?.StatusBar;
+const CapSplashScreen = window.Capacitor?.Plugins?.SplashScreen;
+const CapHaptics = window.Capacitor?.Plugins?.Haptics;
+
+if (CapStatusBar) {
+  CapStatusBar.setOverlaysWebView({ overlay: false }).catch(() => {});
+  CapStatusBar.setBackgroundColor({ color: "#0f2e1d" }).catch(() => {});
+  CapStatusBar.setStyle({ style: "DARK" }).catch(() => {});
+}
+
+function hapticTap() {
+  if (CapHaptics) CapHaptics.impact({ style: "LIGHT" }).catch(() => {});
+}
 
 initTheme();
 
@@ -38,6 +51,10 @@ const loadingLabel = document.getElementById("loading-label");
 const loadingBarFill = document.querySelector(".loading-bar-fill");
 const authScreen = document.getElementById("auth-screen");
 const appShell = document.getElementById("app-shell");
+
+if (CapSplashScreen) {
+  CapSplashScreen.hide({ fadeOutDuration: 300 }).catch(() => {});
+}
 
 let loadingProgress = 0;
 function setLoadingProgress(pct) {
@@ -382,7 +399,10 @@ function restoreRouteFromHash() {
 
 document.querySelectorAll(".nav-item[data-route]").forEach(btn => {
   btn.addEventListener("click", () => {
-    if (btn.dataset.route !== currentRoute) goToRoute(btn.dataset.route);
+    if (btn.dataset.route !== currentRoute) {
+      hapticTap();
+      goToRoute(btn.dataset.route);
+    }
   });
 });
 document.getElementById("topbar-notif-btn").addEventListener("click", () => {
@@ -395,6 +415,7 @@ document.getElementById("topbar-settings-btn").addEventListener("click", () => {
   if (currentRoute !== "settings") goToRoute("settings");
 });
 document.getElementById("topbar-back-btn")?.addEventListener("click", () => {
+  hapticTap();
   const from = history.state?.from || parseHash(location.hash)?.from;
   if (from && routeTitles[from]) goBackToRoute(from);
   else history.back();
@@ -433,6 +454,7 @@ if (CapApp) {
       return;
     }
     if (currentRoute !== "wall") {
+      hapticTap();
       goToRoute("wall");
       return;
     }
@@ -441,6 +463,7 @@ if (CapApp) {
       return;
     }
     backPressedOnce = true;
+    if (CapHaptics) CapHaptics.notification({ type: "WARNING" }).catch(() => {});
     showToast("Press back again to exit");
     clearTimeout(backPressTimeout);
     backPressTimeout = setTimeout(() => {
