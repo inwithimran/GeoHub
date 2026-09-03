@@ -260,6 +260,7 @@ const routeTitles = {
 };
 
 let currentRoute = "wall";
+let previousRoute = null;
 
 let routeFromMap = {};
 
@@ -322,12 +323,23 @@ function goToRoute(route, { fromPopstate = false, replace = false, state = {} } 
   if (currentRoute === "user-profile" && route !== "user-profile") teardownProfilePage();
   if (currentRoute === "dm-thread" && route !== "dm-thread") teardownDmThread();
 
+  const priorRoute = currentRoute;
   currentRoute = route;
   const historyState = { geohubRoute: route, ...state, from };
   const hash = buildHash(route, id, from);
   if (!fromPopstate) {
-    if (replace) history.replaceState(historyState, "", hash);
-    else history.pushState(historyState, "", hash);
+    if (!replace && !id && route === previousRoute) {
+      previousRoute = priorRoute;
+      history.back();
+    } else if (replace) {
+      previousRoute = priorRoute;
+      history.replaceState(historyState, "", hash);
+    } else {
+      previousRoute = priorRoute;
+      history.pushState(historyState, "", hash);
+    }
+  } else {
+    previousRoute = priorRoute;
   }
 }
 function goBackToRoute(route) {
