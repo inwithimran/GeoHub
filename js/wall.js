@@ -133,6 +133,16 @@ export function wireMentions(fieldEl, initial = []) {
 
 const wallList = document.getElementById("wall-list");
 const composerTrigger = document.getElementById("composer-trigger");
+const composerTriggerIcon = composerTrigger.querySelector(".composer-trigger-icon");
+const composerTriggerIconIdleHtml = composerTriggerIcon.innerHTML;
+
+function setComposerPosting(posting) {
+  composerTrigger.disabled = posting;
+  composerTrigger.classList.toggle("is-posting", posting);
+  composerTriggerIcon.innerHTML = posting
+    ? `<span class="btn-spinner" aria-hidden="true"></span>`
+    : composerTriggerIconIdleHtml;
+}
 
 let unsubscribePosts = null;
 
@@ -236,7 +246,7 @@ async function refreshStaticPost(postId) {
   } catch {  }
 }
 
-function openComposerModal() {
+function openComposerModal(draft = null) {
   openModal(`
     <div class="composer-modal">
       <div class="composer-modal-head">
@@ -246,7 +256,7 @@ function openComposerModal() {
           <small>Posting to the Student Wall</small>
         </div>
       </div>
-      <textarea id="post-input" class="composer-modal-textarea" placeholder="Ask a question or share something with the department… (@mention a classmate, #tag a topic)" rows="6" maxlength="${POST_TEXT_LIMIT}" autofocus></textarea>
+      <textarea id="post-input" class="composer-modal-textarea" placeholder="Ask a question or share something with the department… (@mention a classmate, #tag a topic)" rows="6" maxlength="${POST_TEXT_LIMIT}" autofocus>${draft ? escapeHtml(draft.text || "") : ""}</textarea>
       ${imagePickerHtml("post-image-input")}
       <button type="button" class="composer-poll-toggle" id="poll-toggle-btn">
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
@@ -266,10 +276,11 @@ function openComposerModal() {
   `);
   const textarea = document.getElementById("post-input");
   textarea.focus();
+  if (draft && draft.text) textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
   wireCharCounter(textarea, POST_TEXT_LIMIT);
-  const { getFiles } = wireImagePicker(document.getElementById("modal-body"), "post-image-input");
-  const { getMentions } = wireMentions(textarea);
-  const { getPoll, pollEnabled } = wirePollBuilder();
+  const { getFiles } = wireImagePicker(document.getElementById("modal-body"), "post-image-input", { initialFiles: draft ? draft.files : [] });
+  const { getMentions } = wireMentions(textarea, draft ? draft.mentions : []);
+  const { getPoll, pollEnabled } = wirePollBuilder(draft ? draft.poll : null);
   document.getElementById("post-submit").addEventListener("click", () => handleCreatePost(getFiles, getMentions, getPoll));
   textarea.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleCreatePost(getFiles, getMentions, getPoll);
@@ -279,14 +290,14 @@ function openComposerModal() {
 const POLL_MIN_OPTIONS = 2;
 const POLL_MAX_OPTIONS = 6;
 
-function wirePollBuilder() {
+function wirePollBuilder(initialPoll = null) {
   const toggleBtn = document.getElementById("poll-toggle-btn");
   const builder = document.getElementById("poll-builder");
   const optionsWrap = document.getElementById("poll-options");
   const addBtn = document.getElementById("poll-add-option");
   let enabled = false;
 
-  function addRow() {
+  function addRow(value = "") {
     const row = document.createElement("div");
     row.className = "poll-option-row";
     row.innerHTML = `
@@ -295,6 +306,7 @@ function wirePollBuilder() {
       <button type="button" class="poll-option-remove-btn" aria-label="Remove this option">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>`;
+    row.querySelector(".poll-option-input").value = value;
     row.querySelector(".poll-option-remove-btn").addEventListener("click", () => {
       if (optionsWrap.children.length <= POLL_MIN_OPTIONS) return;
       row.remove();
@@ -314,7 +326,20 @@ function wirePollBuilder() {
     addBtn.classList.toggle("is-disabled", rows.length >= POLL_MAX_OPTIONS);
   }
 
-  for (let i = 0; i < POLL_MIN_OPTIONS; i++) addRow();
+  const initialOptions = initialPoll && initialPoll.options && initialPoll.options.length ? initialPoll.options : null;
+  if (initialOptions) {
+    initialOptions.forEach((o) => addRow(o.text || ""));
+    while (optionsWrap.children.length < POLL_MIN_OPTIONS) addRow();
+  } else {
+    for (let i = 0; i < POLL_MIN_OPTIONS; i++) addRow();
+  }
+
+  if (initialOptions) {
+    enabled = true;
+    builder.classList.remove("hidden");
+    toggleBtn.classList.add("active");
+    toggleBtn.querySelector("span").textContent = "Remove poll";
+  }
 
   toggleBtn.addEventListener("click", () => {
     enabled = !enabled;
@@ -361,16 +386,14 @@ async function handleCreatePost(getImageFiles, getMentions, getPoll) {
     return;
   }
 
-  setBtnLoading(btn, true, "Posting…");
+  closeModal();
+  setComposerPosting(true);
   try {
     let images = [];
     if (files.length) {
-      setBtnLoading(btn, true, "Uploading photos…");
       images = await uploadImages(files, { maxDim: 1600, quality: 0.78, folder: "geohub/posts" });
-      setBtnLoading(btn, true, "Posting…");
     }
     const { id: postId } = await callApi("create-post", { text, images, mentions, poll });
-    closeModal();
     showToast("Posted to the Student Wall.");
     logActivity({ type: "post", text, postId });
     triggerPush({ type: "post", text, actorName: currentProfile.name, postId });
@@ -378,12 +401,14 @@ async function handleCreatePost(getImageFiles, getMentions, getPoll) {
   } catch (err) {
     if (isNetworkError(err)) {
       await queuePost({ text, images: files, mentions, poll, authorName: currentProfile.name });
-      closeModal();
       showToast("Couldn't reach the network — this post is queued and will send automatically once you're back online.");
-      return;
+    } else {
+      const { message, technical } = friendlyError(err, "Couldn't publish your post.");
+      showToast(message, { details: technical });
+      openComposerModal({ text, mentions, poll, files });
     }
-    errorEl.textContent = "Couldn't publish your post: " + err.message;
-    setBtnLoading(btn, false);
+  } finally {
+    setComposerPosting(false);
   }
 }
 
