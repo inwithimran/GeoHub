@@ -40,6 +40,9 @@ jobs:
       - name: Generate icons and splash screens
         run: npx capacitor-assets generate --android
 
+      - name: Patch splash screen theme
+        run: python3 scripts/ci/inject-splash-theme.py
+
       - name: Inject notification icon
         run: python3 scripts/ci/inject-notification-icon.py
 
