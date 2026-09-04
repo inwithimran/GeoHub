@@ -8,6 +8,18 @@
 <meta name="description" content="GeoHub — student wall, notes &amp; sheets, classmates directory and routine for the Geography &amp; Environment Dept." />
 
 <script>
+  // Buffer native "notification tapped" events fired before js/app.js
+  // (an ES module, so it runs after HTML parsing) has attached its
+  // real listener. Without this, a cold-start tap on Android is lost
+  // because bridge.triggerJSEvent() dispatches immediately in
+  // MainActivity.onCreate(), often before any listener exists yet.
+  window.__geohubPendingDeepLinks = [];
+  window.addEventListener("geohubNotificationTap", function (e) {
+    window.__geohubPendingDeepLinks.push(e.detail);
+  });
+</script>
+
+<script>
   (function () {
     try {
       var stored = localStorage.getItem("geohub-theme") || "system";
