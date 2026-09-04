@@ -87,10 +87,10 @@ if "kotlin-android" not in app_gradle:
         "apply plugin: 'com.android.application'\napply plugin: 'kotlin-android'",
         1
     )
-if "com.google.firebase:firebase-auth" not in app_gradle:
+if "com.google.firebase:firebase-messaging" not in app_gradle:
     app_gradle = app_gradle.replace(
         "dependencies {",
-        "dependencies {\n    implementation platform(\"com.google.firebase:firebase-bom:33.1.2\")\n    implementation \"com.google.firebase:firebase-auth\"\n    implementation \"androidx.work:work-runtime-ktx:2.9.1\"\n    implementation \"org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3\"",
+        "dependencies {\n    implementation platform(\"com.google.firebase:firebase-bom:33.1.2\")\n    implementation \"com.google.firebase:firebase-auth\"\n    implementation \"com.google.firebase:firebase-messaging\"\n    implementation \"androidx.work:work-runtime-ktx:2.9.1\"\n    implementation \"org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3\"",
         1
     )
 with open(app_gradle_path, "w") as f:
