@@ -9,7 +9,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.RemoteInput
 import com.google.firebase.messaging.RemoteMessage
-import dev.robingenz.capacitorjs.plugins.firebase.messaging.MessagingService
+import PLUGIN_MESSAGING_SERVICE_IMPORT
 
 class DmReplyMessagingService : MessagingService() {
 
