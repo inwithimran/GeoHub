@@ -7,23 +7,29 @@ with open(path, "r", encoding="utf-8") as f:
     text = f.read()
 
 pattern = re.compile(
-    r'<style name="AppTheme\.NoActionBarLaunch" parent="@style/Theme\.SplashScreen">.*?</style>',
+    r'<style(?=[^>]*\bname="AppTheme\.NoActionBarLaunch")(?=[^>]*\bparent="([^"]*)")[^>]*>.*?</style>',
     re.DOTALL
 )
 
+match = pattern.search(text)
+
+if not match:
+    print("Could not find AppTheme.NoActionBarLaunch style block", file=sys.stderr)
+    print("---- styles.xml content ----", file=sys.stderr)
+    print(text, file=sys.stderr)
+    sys.exit(1)
+
+parent = match.group(1)
+
 replacement = (
-    '<style name="AppTheme.NoActionBarLaunch" parent="@style/Theme.SplashScreen">'
+    f'<style name="AppTheme.NoActionBarLaunch" parent="{parent}">'
     '<item name="windowSplashScreenBackground">#0f2e1d</item>'
     '<item name="windowSplashScreenAnimatedIcon">@drawable/splash</item>'
     '<item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>'
     '</style>'
 )
 
-text, count = pattern.subn(replacement, text)
-
-if count == 0:
-    print("Could not find AppTheme.NoActionBarLaunch style block", file=sys.stderr)
-    sys.exit(1)
+text = text[:match.start()] + replacement + text[match.end():]
 
 with open(path, "w", encoding="utf-8") as f:
     f.write(text)
