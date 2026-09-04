@@ -694,19 +694,22 @@ async function submitComment(postId, commentsEl, sendBtn, postAuthorUid, getMent
 
   try {
     const result = await callApi("create-comment", { postId, text, mentions, replyTo: replyTo ? { id: replyTo.id } : undefined });
-    if (postAuthorUid && postAuthorUid !== auth.currentUser.uid) {
+    const notifiedUids = new Set([auth.currentUser.uid]);
+    if (postAuthorUid && !notifiedUids.has(postAuthorUid)) {
       logActivity({ type: "comment", text, targetUid: postAuthorUid, postId });
       triggerPush({ type: "comment", text, actorName: currentProfile.name, targetUid: postAuthorUid, postId });
+      notifiedUids.add(postAuthorUid);
     }
-    if (replyTo && result && result.replyTargetUid &&
-        result.replyTargetUid !== auth.currentUser.uid && result.replyTargetUid !== postAuthorUid) {
+    if (replyTo && result && result.replyTargetUid && !notifiedUids.has(result.replyTargetUid)) {
       logActivity({ type: "reply", text, targetUid: result.replyTargetUid, postId });
       triggerPush({ type: "reply", text, actorName: currentProfile.name, targetUid: result.replyTargetUid, postId, commentId: result.id });
+      notifiedUids.add(result.replyTargetUid);
     }
     mentions.forEach((m) => {
-      if (!m.uid || m.uid === auth.currentUser.uid) return;
+      if (!m.uid || notifiedUids.has(m.uid)) return;
       logActivity({ type: "mention", text, targetUid: m.uid, postId });
       triggerPush({ type: "mention", text, actorName: currentProfile.name, targetUid: m.uid, postId });
+      notifiedUids.add(m.uid);
     });
   } catch (err) {
     const liveInput = bodyEl?.querySelector(".comment-input-row input");

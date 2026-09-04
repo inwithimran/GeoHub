@@ -21,6 +21,7 @@ export let currentProfile = null;
 const googleProvider = new GoogleAuthProvider();
 
 const NAME_CHANGE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+const PROFILE_CACHE_PREFIX = "geohub_cached_profile_";
 
 function toMillis(ts) {
   if (!ts) return 0;
@@ -39,6 +40,27 @@ export function nameChangeStatus() {
   return { canChange: false, daysRemaining };
 }
 
+function loadCachedProfile(uid) {
+  try {
+    const raw = localStorage.getItem(PROFILE_CACHE_PREFIX + uid);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveCachedProfile(uid, profile) {
+  try {
+    if (profile) localStorage.setItem(PROFILE_CACHE_PREFIX + uid, JSON.stringify(profile));
+  } catch { /* best effort */ }
+}
+
+function clearCachedProfile(uid) {
+  try {
+    localStorage.removeItem(PROFILE_CACHE_PREFIX + uid);
+  } catch { /* best effort */ }
+}
+
 export async function signUp(data) {
   if (isDisposableEmail(data.email)) {
     const err = new Error("Temporary or disposable email addresses aren't allowed. Please sign up with a permanent email address.");
@@ -55,6 +77,7 @@ export async function signUp(data) {
       gender: data.gender || ""
     });
     currentProfile = profile;
+    saveCachedProfile(cred.user.uid, profile);
     return cred.user;
   } catch (err) {
     try { await cred.user.delete(); } catch { /* best effort */ }
@@ -111,10 +134,12 @@ export async function updateProfileDetails({ name, roll, blood, phone, bio, sess
   });
   currentProfile = profile;
   if (wasNameChangeAttempt) currentProfile.nameChangedAt = new Date();
+  if (auth.currentUser) saveCachedProfile(auth.currentUser.uid, currentProfile);
   return currentProfile;
 }
 
 export function logOut() {
+  if (auth.currentUser) clearCachedProfile(auth.currentUser.uid);
   return signOut(auth);
 }
 
@@ -125,10 +150,17 @@ export async function fetchProfile(uid) {
 
 async function resolveOwnProfile(user) {
   const idToken = await user.getIdToken();
-  const res = await fetch(`${API_BASE}/api/resolve-profile`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${idToken}` }
-  });
+  let res;
+  try {
+    res = await fetch(`${API_BASE}/api/resolve-profile`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${idToken}` }
+    });
+  } catch {
+    const err = new Error("Network request failed");
+    err.isNetworkError = true;
+    throw err;
+  }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error || `resolve-profile failed (${res.status})`);
   return body;
@@ -140,7 +172,13 @@ export function watchAuthState(onLogin, onLogout, onConflict) {
       let result;
       try {
         result = await resolveOwnProfile(user);
-      } catch {
+      } catch (err) {
+        if (err.isNetworkError || (typeof navigator !== "undefined" && !navigator.onLine)) {
+          const cached = loadCachedProfile(user.uid);
+          currentProfile = cached;
+          onLogin(user, cached, { offline: true });
+          return;
+        }
         await signOut(auth);
         if (onConflict) {
           onConflict("Couldn't reach GeoHub's server to load your profile. Please check your connection and try signing in again.");
@@ -149,12 +187,14 @@ export function watchAuthState(onLogin, onLogout, onConflict) {
       }
 
       if (result.status === "conflict" || result.status === "blocked") {
+        clearCachedProfile(user.uid);
         await signOut(auth);
         if (onConflict) onConflict(result.message);
         return;
       }
 
       currentProfile = result.profile || null;
+      saveCachedProfile(user.uid, currentProfile);
       onLogin(user, currentProfile);
     } else {
       currentProfile = null;

@@ -93,10 +93,14 @@ export async function initPush({ requestPermission = false } = {}) {
 
 export function registerNotificationTapHandler(onTap) {
   if (isNativeApp) {
-    if (!CapFirebaseMessaging) return;
-    CapFirebaseMessaging.addListener("notificationActionPerformed", (event) => {
-      const url = event.notification?.data?.url;
-      if (url) onTap(url);
+    if (CapFirebaseMessaging) {
+      CapFirebaseMessaging.addListener("notificationActionPerformed", (event) => {
+        const url = event.notification?.data?.url;
+        if (url) onTap(url);
+      });
+    }
+    window.addEventListener("geohubNotificationTap", (event) => {
+      if (event.detail) onTap(event.detail);
     });
     return;
   }
