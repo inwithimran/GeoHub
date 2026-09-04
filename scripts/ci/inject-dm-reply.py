@@ -4,7 +4,33 @@ import shutil
 import sys
 
 PACKAGE_PATH = "com/geohubmmc/app"
-PLUGIN_SERVICE_NAME = "dev.robingenz.capacitorjs.plugins.firebase.messaging.MessagingService"
+
+PLUGIN_SOURCE_ROOT = "node_modules/@capacitor-firebase/messaging/android/src/main/java"
+CLASS_DECL_RE = re.compile(r"class\s+(\w+)\s*(?:extends|:)\s*FirebaseMessagingService\b")
+PACKAGE_DECL_RE = re.compile(r"^\s*package\s+([\w.]+)\s*;?\s*$", re.MULTILINE)
+
+
+def find_plugin_messaging_service():
+    if not os.path.isdir(PLUGIN_SOURCE_ROOT):
+        print(f"Could not find {PLUGIN_SOURCE_ROOT} (is @capacitor-firebase/messaging installed?)", file=sys.stderr)
+        sys.exit(1)
+    for dirpath, _, filenames in os.walk(PLUGIN_SOURCE_ROOT):
+        for filename in filenames:
+            if not (filename.endswith(".java") or filename.endswith(".kt")):
+                continue
+            path = os.path.join(dirpath, filename)
+            with open(path, "r") as f:
+                content = f.read()
+            class_match = CLASS_DECL_RE.search(content)
+            package_match = PACKAGE_DECL_RE.search(content)
+            if class_match and package_match:
+                return f"{package_match.group(1)}.{class_match.group(1)}"
+    print(f"Could not find a FirebaseMessagingService subclass under {PLUGIN_SOURCE_ROOT}", file=sys.stderr)
+    sys.exit(1)
+
+
+PLUGIN_SERVICE_NAME = find_plugin_messaging_service()
+print(f"Detected plugin messaging service: {PLUGIN_SERVICE_NAME}")
 
 kt_source_dir = "resources/android/native-src"
 kt_dest_dir = f"android/app/src/main/java/{PACKAGE_PATH}"
@@ -17,8 +43,22 @@ old_main_activity = f"{kt_dest_dir}/MainActivity.java"
 if os.path.exists(old_main_activity):
     os.remove(old_main_activity)
 for filename in os.listdir(kt_source_dir):
-    if filename.endswith(".kt"):
-        shutil.copyfile(f"{kt_source_dir}/{filename}", f"{kt_dest_dir}/{filename}")
+    if not filename.endswith(".kt"):
+        continue
+    src_path = f"{kt_source_dir}/{filename}"
+    dest_path = f"{kt_dest_dir}/{filename}"
+    if filename == "DmReplyMessagingService.kt":
+        with open(src_path, "r") as f:
+            content = f.read()
+        content = content.replace(
+            "import PLUGIN_MESSAGING_SERVICE_IMPORT",
+            f"import {PLUGIN_SERVICE_NAME} as MessagingService",
+            1,
+        )
+        with open(dest_path, "w") as f:
+            f.write(content)
+    else:
+        shutil.copyfile(src_path, dest_path)
 
 with open(project_gradle_path, "r") as f:
     project_gradle = f.read()
