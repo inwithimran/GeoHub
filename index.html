@@ -1665,14 +1665,15 @@
   .confirm-text { @apply text-[.87rem] leading-relaxed mb-5; color: var(--color-ink-soft); }
   .confirm-actions { @apply flex gap-2.5; }
   .toast {
-    @apply fixed left-1/2 text-white rounded-2xl text-sm font-semibold text-center z-[200];
-    bottom:calc(68px + 26px); background:#1c2a1e; padding:12px 16px; box-shadow: var(--shadow-deep); max-width:94%;
+    @apply fixed text-white rounded-2xl text-sm font-semibold text-center z-[200];
+    left:16px; right:16px; width:auto; max-width:460px; margin:0 auto;
+    bottom:calc(68px + 26px); background:#1c2a1e; padding:14px 18px; box-shadow: var(--shadow-deep);
     opacity:0; pointer-events:none;
-    transform: translate(-50%, 10px) scale(.96);
+    transform: translateY(10px) scale(.98);
     transition: opacity .22s ease, transform .22s ease;
   }
-  .toast.toast-show { opacity:1; pointer-events:auto; transform: translate(-50%, 0) scale(1); }
-  .toast.has-details { @apply rounded-2xl text-left; padding:12px 16px; max-width:96%; }
+  .toast.toast-show { opacity:1; pointer-events:auto; transform: translateY(0) scale(1); }
+  .toast.has-details { @apply rounded-2xl text-left; padding:14px 18px; }
   .toast-msg { @apply block; }
   .toast-details-toggle {
     @apply block mt-1.5 text-[.72rem] font-bold underline bg-transparent border-0 cursor-pointer p-0;
