@@ -112,6 +112,11 @@ export function registerNotificationTapHandler(onTap) {
     window.addEventListener("geohubNotificationTap", (event) => {
       if (event.detail) onTap(event.detail);
     });
+    // Flush any tap that arrived before this listener was attached
+    // (cold start on Android — see the buffering script in index.html).
+    if (window.__geohubPendingDeepLinks?.length) {
+      window.__geohubPendingDeepLinks.splice(0).forEach(onTap);
+    }
     return;
   }
   if (!("serviceWorker" in navigator)) return;
