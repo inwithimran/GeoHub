@@ -11,7 +11,7 @@
       "providers": ["google.com"]
     },
     "SplashScreen": {
-      "launchAutoHide": true,
+      "launchAutoHide": false,
       "backgroundColor": "#0f2e1d",
       "androidSplashResourceName": "splash",
       "splashFullScreen": true,

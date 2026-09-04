@@ -10,7 +10,7 @@
     "test:all": "npm run test && npm run test:rules",
     "build:www": "node scripts/build-www.mjs",
     "android:add": "npx cap add android",
-    "android:sync": "npm run build:www && npx cap sync android"
+    "android:sync": "npm run build:www && npx cap sync android && npx capacitor-assets generate --android && python3 scripts/ci/inject-splash-theme.py"
   },
   "dependencies": {
     "firebase-admin": "^12.3.0"

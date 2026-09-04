@@ -520,6 +520,19 @@
   .wall-load-sentinel { @apply flex items-center justify-center; padding:18px 0 6px; }
   .wall-feed-end { @apply text-center; padding:20px 0 8px; color: var(--color-ink-faint); font-size:.82rem; font-weight:600; }
 
+  .ptr-indicator {
+    position: fixed; top:60px; left:50%; transform: translate(-50%, -60px);
+    width:38px; height:38px; display:flex; align-items:center; justify-content:center;
+    background: var(--color-surface); border-radius:50%; box-shadow: var(--shadow-cardhover);
+    z-index:30; opacity:0; pointer-events:none; transition: opacity .15s ease;
+  }
+  .ptr-indicator.visible { opacity:1; }
+  .ptr-indicator .ptr-ring {
+    width:16px; height:16px; border-radius:50%;
+    border:2.5px solid var(--color-forest-200); border-top-color: var(--color-forest-700);
+    animation: var(--animate-ring);
+  }
+
   .presence-dot {
     @apply inline-block rounded-full align-middle shrink-0;
     width:8px; height:8px; margin-left:5px; margin-bottom:1px;
@@ -1994,6 +2007,7 @@
     <main class="content">
 
       <section id="section-wall" class="route-section">
+        <div class="ptr-indicator" id="wall-ptr-indicator"><span class="ptr-ring"></span></div>
         <button type="button" id="composer-trigger" class="composer-trigger">
           <span class="avatar" id="composer-avatar">…</span>
           <span class="composer-trigger-text">
