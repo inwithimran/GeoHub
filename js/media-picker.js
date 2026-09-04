@@ -29,11 +29,11 @@ export function imagePickerHtml(inputId) {
     </div>`;
 }
 
-export function wireImagePicker(root, inputId, { max = 6, existingImages = [] } = {}) {
+export function wireImagePicker(root, inputId, { max = 6, existingImages = [], initialFiles = [] } = {}) {
   const input = root.querySelector(`#${inputId}`);
   const grid = root.querySelector(`[data-picker-grid="${inputId}"]`);
   let remaining = [...(existingImages || [])];
-  let files = [];
+  let files = [...(initialFiles || [])];
   if (!input || !grid) return { getRemainingUrls: () => remaining, getFiles: () => files };
 
   const total = () => remaining.length + files.length;
