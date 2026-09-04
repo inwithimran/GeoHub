@@ -4,7 +4,7 @@ import shutil
 import sys
 
 PACKAGE_PATH = "com/geohubmmc/app"
-PLUGIN_SERVICE_NAME = "io.capawesome.capacitorjs.plugins.firebase.messaging.MessagingService"
+PLUGIN_SERVICE_NAME = "dev.robingenz.capacitorjs.plugins.firebase.messaging.MessagingService"
 
 kt_source_dir = "resources/android/native-src"
 kt_dest_dir = f"android/app/src/main/java/{PACKAGE_PATH}"
