@@ -6,7 +6,8 @@ import {
 import {
   sendPasswordResetEmail
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
-import { initWall, teardownWall } from "./wall.js";
+import { initWall, teardownWall, refreshWall } from "./wall.js";
+import { initPullToRefresh } from "./pull-to-refresh.js";
 import { initWriteQueueSync } from "./write-queue.js";
 import { initResources, teardownResources, loadUserResources } from "./resources.js";
 import { initDirectory, teardownDirectory } from "./directory.js";
@@ -43,6 +44,12 @@ function hapticTap() {
 }
 
 initTheme();
+
+initPullToRefresh({
+  indicatorId: "wall-ptr-indicator",
+  isActive: () => currentRoute === "wall" && !appShell.classList.contains("hidden"),
+  onRefresh: refreshWall
+});
 
 if ("scrollRestoration" in history) history.scrollRestoration = "manual";
 

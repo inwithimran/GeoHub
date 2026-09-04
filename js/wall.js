@@ -216,6 +216,20 @@ function renderWallList() {
   }
 }
 
+export async function refreshWall() {
+  try {
+    const q = query(collection(db, "posts"), orderBy("createdAt", "desc"), limit(WALL_PAGE_SIZE));
+    const snap = await getDocs(q);
+    liveDocs = snap.docs;
+    olderDocs = [];
+    hasMoreOlder = snap.size === WALL_PAGE_SIZE;
+    renderWallList();
+  } catch (err) {
+    const { message, technical } = friendlyError(err, "Couldn't refresh the wall.");
+    showToast(message, { details: technical });
+  }
+}
+
 async function loadOlderPosts() {
   if (loadingOlder || !hasMoreOlder) return;
   const cursor = olderDocs.length ? olderDocs[olderDocs.length - 1] : liveDocs[liveDocs.length - 1];
