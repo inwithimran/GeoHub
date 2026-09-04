@@ -43,6 +43,9 @@ jobs:
       - name: Inject notification icon
         run: python3 scripts/ci/inject-notification-icon.py
 
+      - name: Inject DM notification reply
+        run: python3 scripts/ci/inject-dm-reply.py
+
       - name: Add google-services.json
         run: echo "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" | base64 -d > android/app/google-services.json
 
