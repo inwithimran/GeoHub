@@ -533,8 +533,9 @@ function renderProfile() {
     <div class="profile-flow">
       <div class="profile-flow-banner" aria-hidden="true"></div>
       <div class="profile-flow-head">
-        <div class="profile-flow-avatar-wrap">
+        <div class="profile-flow-avatar-wrap" id="profile-avatar-wrap">
           <span class="avatar avatar-lg profile-flow-avatar">${avatarInner(p)}</span>
+          <span class="avatar-upload-ring hidden" id="profile-avatar-ring" aria-hidden="true"></span>
           <button type="button" id="profile-photo-badge" class="profile-photo-badge" aria-label="Profile photo options">
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.5-2.5h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.4"/></svg>
           </button>
@@ -722,6 +723,14 @@ function openAvatarActionSheet(p) {
   });
 }
 
+function setProfileAvatarUploading(uploading) {
+  const wrap = document.getElementById("profile-avatar-wrap");
+  const ring = document.getElementById("profile-avatar-ring");
+  if (!wrap || !ring) return;
+  wrap.classList.toggle("is-uploading", uploading);
+  ring.classList.toggle("hidden", !uploading);
+}
+
 function changeProfilePhotoQuick() {
   const input = document.createElement("input");
   input.type = "file";
@@ -732,6 +741,7 @@ function changeProfilePhotoQuick() {
     const cropped = await openImageCropper(file);
     if (!cropped) return;
     const photoFile = new File([cropped], "avatar.jpg", { type: "image/jpeg" });
+    setProfileAvatarUploading(true);
     try {
       const photoURL = await uploadImage(photoFile, { maxDim: 600, quality: 0.85, folder: "geohub/avatars" });
       await updateProfileDetails({
@@ -747,6 +757,7 @@ function changeProfilePhotoQuick() {
     } catch (err) {
       const { message, technical } = friendlyError(err, "Couldn't update your photo.");
       showToast(message, { details: technical });
+      setProfileAvatarUploading(false);
     }
   });
   input.click();
