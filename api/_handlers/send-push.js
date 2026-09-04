@@ -49,6 +49,11 @@ async function collectAdminTokens(db, excludeUid) {
   return pairs;
 }
 
+function androidPayloadFor(data) {
+  if (data.type === "dm") return { priority: "high" };
+  return { priority: "high", notification: { title: data.title, body: data.body } };
+}
+
 async function sendToTokens(messaging, db, pairs, data = {}) {
   if (!pairs.length) return { sent: 0, pruned: 0 };
   let sent = 0;
@@ -58,7 +63,7 @@ async function sendToTokens(messaging, db, pairs, data = {}) {
     const res = await messaging.sendEachForMulticast({
       tokens: chunk.map((p) => p.token),
       data,
-      android: { priority: "high", notification: { title: data.title, body: data.body } },
+      android: androidPayloadFor(data),
       webpush: { fcmOptions: { link: data.url || "/" } }
     });
     sent += res.successCount;
@@ -361,7 +366,10 @@ export async function sendPush(req, res) {
         : await collectAllTokens(db, callerUid);
 
     const url = buildDeepLink(type, { postId, conversationId, callerUid });
-    const result = await sendToTokens(messaging, db, pairs, { url, type: String(type), title, body });
+    const extra = type === "dm"
+      ? { conversationId: String(conversationId), messageId: String(messageId), senderUid: callerUid, senderName: actorName || "" }
+      : {};
+    const result = await sendToTokens(messaging, db, pairs, { url, type: String(type), title, body, ...extra });
     return res.status(200).json({ ok: true, ...result });
   } catch (err) {
     console.error("send-push error:", err);
