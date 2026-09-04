@@ -8,6 +8,7 @@ import { editComment } from "./_handlers/edit-comment.js";
 import { editPost } from "./_handlers/edit-post.js";
 import { editResource } from "./_handlers/edit-resource.js";
 import { resolveProfile } from "./_handlers/resolve-profile.js";
+import { sendDmMessage } from "./_handlers/send-dm-message.js";
 import { sendPush } from "./_handlers/send-push.js";
 import { signUpload } from "./_handlers/sign-upload.js";
 import { updateDisposableDomains } from "./_handlers/update-disposable-domains.js";
@@ -24,6 +25,7 @@ const routes = {
   "edit-post": editPost,
   "edit-resource": editResource,
   "resolve-profile": resolveProfile,
+  "send-dm-message": sendDmMessage,
   "send-push": sendPush,
   "sign-upload": signUpload,
   "update-disposable-domains": updateDisposableDomains,
