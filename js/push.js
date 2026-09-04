@@ -6,12 +6,20 @@ import {
   doc, setDoc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { showToast } from "./ui-utils.js";
+import { isDmThreadOpenWith, isClassChatOpen } from "./messages.js";
 
 const CapFirebaseMessaging = window.Capacitor?.Plugins?.FirebaseMessaging;
 const isNativeApp = window.Capacitor?.isNativePlatform?.() === true;
 
 let foregroundHandlerWired = false;
 let tokenSavedThisSession = false;
+
+function isAlreadyViewingThread(data) {
+  if (document.visibilityState !== "visible") return false;
+  if (data?.type === "dm") return isDmThreadOpenWith(data.senderUid);
+  if (data?.type === "classChat") return isClassChatOpen();
+  return false;
+}
 
 async function saveToken(token) {
   if (!token || !auth.currentUser) return;
@@ -29,6 +37,7 @@ async function initNativePush({ requestPermission }) {
   if (!foregroundHandlerWired) {
     foregroundHandlerWired = true;
     CapFirebaseMessaging.addListener("notificationReceived", (event) => {
+      if (isAlreadyViewingThread(event.notification?.data)) return;
       const title = event.notification?.data?.title || event.notification?.title || "GeoHub";
       const body = event.notification?.data?.body || event.notification?.body || "";
       showToast(`${title}${body ? " — " + body : ""}`);
@@ -64,6 +73,7 @@ async function initWebPush({ requestPermission }) {
     if (!foregroundHandlerWired) {
       foregroundHandlerWired = true;
       onMessage(messaging, (payload) => {
+        if (isAlreadyViewingThread(payload.data)) return;
         const title = payload.data?.title || "GeoHub";
         const body = payload.data?.body || "";
         showToast(`${title}${body ? " — " + body : ""}`);

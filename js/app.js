@@ -389,12 +389,16 @@ function restoreRouteFromHash() {
   const parsed = parseHash(location.hash);
   if (!parsed || !routeTitles[parsed.route]) {
     goToRoute("wall", { replace: true });
-    return;
+  } else if (parsed.route === "user-profile" && parsed.id) {
+    openUserProfilePage(parsed.id, { replace: true });
+  } else if (parsed.route === "post-detail" && parsed.id) {
+    openPostDetailPage(parsed.id, { replace: true });
+  } else if (parsed.route === "dm-thread" && parsed.id) {
+    openDmThread(parsed.id, { replace: true });
+  } else {
+    goToRoute(parsed.route, { replace: true });
   }
-  if (parsed.route === "user-profile" && parsed.id) openUserProfilePage(parsed.id, { replace: true });
-  else if (parsed.route === "post-detail" && parsed.id) openPostDetailPage(parsed.id, { replace: true });
-  else if (parsed.route === "dm-thread" && parsed.id) openDmThread(parsed.id, { replace: true });
-  else goToRoute(parsed.route, { replace: true });
+  previousRoute = null;
 }
 
 document.querySelectorAll(".nav-item[data-route]").forEach(btn => {

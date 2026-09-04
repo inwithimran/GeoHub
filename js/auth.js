@@ -17,6 +17,7 @@ import { callApi } from "./api-client.js";
 import { isDisposableEmail } from "../shared/blocked-email-domains.js";
 
 export let currentProfile = null;
+let pendingSignUp = null;
 
 const googleProvider = new GoogleAuthProvider();
 
@@ -67,21 +68,34 @@ export async function signUp(data) {
     err.code = "auth/disposable-email";
     throw err;
   }
-  const cred = await createUserWithEmailAndPassword(auth, data.email, data.password);
+  let resolvePending, rejectPending;
+  pendingSignUp = new Promise((resolve, reject) => {
+    resolvePending = resolve;
+    rejectPending = reject;
+  });
   try {
-    const { profile } = await callApi("create-profile", {
-      name: data.name.trim(),
-      roll: data.roll.trim(),
-      phone: data.phone.trim(),
-      blood: data.blood,
-      gender: data.gender || ""
-    });
-    currentProfile = profile;
-    saveCachedProfile(cred.user.uid, profile);
-    return cred.user;
+    const cred = await createUserWithEmailAndPassword(auth, data.email, data.password);
+    try {
+      const { profile } = await callApi("create-profile", {
+        name: data.name.trim(),
+        roll: data.roll.trim(),
+        phone: data.phone.trim(),
+        blood: data.blood,
+        gender: data.gender || ""
+      });
+      currentProfile = profile;
+      saveCachedProfile(cred.user.uid, profile);
+      resolvePending();
+      return cred.user;
+    } catch (err) {
+      try { await cred.user.delete(); } catch { /* best effort */ }
+      throw err;
+    }
   } catch (err) {
-    try { await cred.user.delete(); } catch { /* best effort */ }
+    rejectPending(err);
     throw err;
+  } finally {
+    pendingSignUp = null;
   }
 }
 
@@ -169,6 +183,13 @@ async function resolveOwnProfile(user) {
 export function watchAuthState(onLogin, onLogout, onConflict) {
   onAuthStateChanged(auth, async (user) => {
     if (user) {
+      if (pendingSignUp) {
+        try {
+          await pendingSignUp;
+        } catch {
+          return;
+        }
+      }
       let result;
       try {
         result = await resolveOwnProfile(user);

@@ -546,6 +546,16 @@ const dmMessageCache = new Map();
 const dmReadCache = new Map();
 export function getOpenDmUid() { return currentDmUid; }
 
+export function isDmThreadOpenWith(otherUid) {
+  if (!otherUid || currentDmUid !== otherUid) return false;
+  return !document.getElementById("section-dm-thread")?.classList.contains("hidden");
+}
+
+export function isClassChatOpen() {
+  if (!isClassChatSubtabActive()) return false;
+  return !document.getElementById("section-message")?.classList.contains("hidden");
+}
+
 export function teardownDmThread() {
   const conversationId = currentDmConversationId;
   if (unsubscribeDmMessages) unsubscribeDmMessages();
