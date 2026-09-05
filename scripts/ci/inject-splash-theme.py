@@ -1,3 +1,4 @@
+import os
 import re
 import shutil
 import sys
@@ -10,13 +11,16 @@ layer_list_dest = "android/app/src/main/res/drawable/launch_background.xml"
 
 shutil.copyfile(asset_source, asset_dest)
 
-with open(colors_path, "r", encoding="utf-8") as f:
-    colors_text = f.read()
+if os.path.exists(colors_path):
+    with open(colors_path, "r", encoding="utf-8") as f:
+        colors_text = f.read()
+else:
+    colors_text = '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n</resources>\n'
 
-if "leafmash_splash_background" not in colors_text:
+if "geohuh_splash_background" not in colors_text:
     colors_text = colors_text.replace(
         "</resources>",
-        '    <color name="leafmash_splash_background">#0f2e1d</color>\n</resources>',
+        '    <color name="geohuh_splash_background">#0f2e1d</color>\n</resources>',
         1
     )
     with open(colors_path, "w", encoding="utf-8") as f:
@@ -26,7 +30,7 @@ with open(layer_list_dest, "w", encoding="utf-8") as f:
     f.write(
         '<?xml version="1.0" encoding="utf-8"?>\n'
         '<layer-list xmlns:android="http://schemas.android.com/apk/res/android">\n'
-        '    <item android:drawable="@color/leafmash_splash_background" />\n'
+        '    <item android:drawable="@color/geohuh_splash_background" />\n'
         '    <item\n'
         '        android:width="140dp"\n'
         '        android:height="140dp"\n'
