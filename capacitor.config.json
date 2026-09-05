@@ -1,6 +1,6 @@
 {
-  "appId": "com.geohubmmc.app",
-  "appName": "GeoHub",
+  "appId": "com.leafmashmmc.app",
+  "appName": "LeafMash",
   "webDir": "www",
   "server": {
     "androidScheme": "https"
@@ -16,7 +16,7 @@
       "androidSplashResourceName": "splash",
       "splashFullScreen": true,
       "splashImmersive": true,
-      "androidScaleType": "CENTER_CROP"
+      "androidScaleType": "FIT_CENTER"
     },
     "Keyboard": {
       "resize": "body",
