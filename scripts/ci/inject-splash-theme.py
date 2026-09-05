@@ -3,17 +3,30 @@ import shutil
 import sys
 
 styles_path = "android/app/src/main/res/values/styles.xml"
+colors_path = "android/app/src/main/res/values/colors.xml"
 asset_source = "resources/android/splash_icon.png"
 asset_dest = "android/app/src/main/res/drawable/splash_icon.png"
 layer_list_dest = "android/app/src/main/res/drawable/launch_background.xml"
 
 shutil.copyfile(asset_source, asset_dest)
 
+with open(colors_path, "r", encoding="utf-8") as f:
+    colors_text = f.read()
+
+if "leafmash_splash_background" not in colors_text:
+    colors_text = colors_text.replace(
+        "</resources>",
+        '    <color name="leafmash_splash_background">#0f2e1d</color>\n</resources>',
+        1
+    )
+    with open(colors_path, "w", encoding="utf-8") as f:
+        f.write(colors_text)
+
 with open(layer_list_dest, "w", encoding="utf-8") as f:
     f.write(
         '<?xml version="1.0" encoding="utf-8"?>\n'
         '<layer-list xmlns:android="http://schemas.android.com/apk/res/android">\n'
-        '    <item android:drawable="#0f2e1d" />\n'
+        '    <item android:drawable="@color/leafmash_splash_background" />\n'
         '    <item\n'
         '        android:width="140dp"\n'
         '        android:height="140dp"\n'
