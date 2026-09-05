@@ -7,7 +7,7 @@ with open(path, "r", encoding="utf-8") as f:
     text = f.read()
 
 pattern = re.compile(
-    r'<style(?=[^>]*\bname="AppTheme\.NoActionBarLaunch")(?=[^>]*\bparent="([^"]*)")[^>]*>.*?</style>',
+    r'<style(?=[^>]*\bname="AppTheme\.NoActionBarLaunch")[^>]*>.*?</style>',
     re.DOTALL
 )
 
@@ -19,12 +19,11 @@ if not match:
     print(text, file=sys.stderr)
     sys.exit(1)
 
-parent = match.group(1)
-
 replacement = (
-    f'<style name="AppTheme.NoActionBarLaunch" parent="{parent}">'
+    '<style name="AppTheme.NoActionBarLaunch" parent="@style/Theme.SplashScreen.IconBackground">'
     '<item name="windowSplashScreenBackground">#0f2e1d</item>'
     '<item name="windowSplashScreenAnimatedIcon">@drawable/splash</item>'
+    '<item name="windowSplashScreenIconBackgroundColor">#0f2e1d</item>'
     '<item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>'
     '</style>'
 )
