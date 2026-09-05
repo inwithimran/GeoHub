@@ -22,8 +22,8 @@ if not match:
 replacement = (
     '<style name="AppTheme.NoActionBarLaunch" parent="@style/Theme.SplashScreen.IconBackground">'
     '<item name="windowSplashScreenBackground">#0f2e1d</item>'
-    '<item name="windowSplashScreenAnimatedIcon">@drawable/splash</item>'
-    '<item name="windowSplashScreenIconBackgroundColor">#0f2e1d</item>'
+    '<item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>'
+    '<item name="windowSplashScreenIconBackgroundColor">#ffffff</item>'
     '<item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>'
     '</style>'
 )
