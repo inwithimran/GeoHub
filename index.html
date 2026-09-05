@@ -1691,13 +1691,13 @@
   .confirm-actions { @apply flex gap-2.5; }
   .toast {
     @apply fixed text-white rounded-2xl text-sm font-semibold text-center z-[200];
-    left:16px; right:16px; width:auto; max-width:460px; margin:0 auto;
+    left:50%; width:max-content; max-width:min(460px, calc(100% - 32px));
     bottom:calc(68px + 26px); background:#1c2a1e; padding:14px 18px; box-shadow: var(--shadow-deep);
     opacity:0; pointer-events:none;
-    transform: translateY(10px) scale(.98);
+    transform: translateX(-50%) translateY(10px) scale(.98);
     transition: opacity .22s ease, transform .22s ease;
   }
-  .toast.toast-show { opacity:1; pointer-events:auto; transform: translateY(0) scale(1); }
+  .toast.toast-show { opacity:1; pointer-events:auto; transform: translateX(-50%) translateY(0) scale(1); }
   .toast.has-details { @apply rounded-2xl text-left; padding:14px 18px; }
   .toast-msg { @apply block; }
   .toast-details-toggle {
